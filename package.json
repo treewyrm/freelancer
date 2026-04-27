@@ -1,0 +1,66 @@
+{
+  "name": "@treewyrm/utf2json",
+  "version": "0.1.0",
+  "description": "UTF (bespoke format used in Freelancer PC game from 2003) processing library.",
+  "keywords": [
+    "freelancer",
+    "utf",
+    "game",
+    "digital anvil"
+  ],
+  "author": "Yuriy Alexeev",
+  "license": "MIT",
+  "type": "module",
+  "imports": {
+    "#/*": [
+      "./dist/*"
+    ]
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./utility": {
+      "import": "./dist/utility/index.js",
+      "types": "./dist/utility/index.d.ts"
+    },
+    "./math": {
+      "import": "./dist/math/index.js",
+      "types": "./dist/math/index.d.ts"
+    },
+    "./alchemy": {
+      "import": "./dist/alchemy/index.js",
+      "types": "./dist/alchemy/index.d.ts"
+    },
+    "./vmesh": {
+      "import": "./dist/vmesh/index.js",
+      "types": "./dist/vmesh/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsdown": "^0.21.10",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=18.19.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/treewyrm/utf.git"
+  }
+}
