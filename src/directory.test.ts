@@ -304,15 +304,13 @@ describe('Directory.read error handling', () => {
     const view = BufferView.allocate(8)
     view.writeUint32(0xdeadbeef) // wrong signature
     view.writeUint32(0x00000000)
-    view.rewind()
-    assert.throws(() => Directory.read(view), Error)
+    assert.throws(() => Directory.read(new Uint8Array(view.buffer)), Error)
   })
 
   it('throws on an invalid version', () => {
     const view = BufferView.allocate(8)
     view.writeUint32(Directory.SIGNATURE)
     view.writeUint32(0x00000000) // wrong version
-    view.rewind()
-    assert.throws(() => Directory.read(view), RangeError)
+    assert.throws(() => Directory.read(new Uint8Array(view.buffer)), RangeError)
   })
 })

@@ -21,21 +21,21 @@ Defines the foundational types and I/O helpers used throughout the module.
 
 ### Types
 
-| Type | Description |
-|------|-------------|
-| `Read<T>` | `(view: BufferView) => T` — deserializer signature |
-| `Write<T>` | `(value: T) => BufferView` — serializer signature |
-| `Vector` | `{ x, y, z: number }` — 3-component float vector |
+| Type       | Description                                        |
+| ---------- | -------------------------------------------------- |
+| `Read<T>`  | `(view: BufferView) => T` — deserializer signature |
+| `Write<T>` | `(value: T) => BufferView` — serializer signature  |
+| `Vector`   | `{ x, y, z: number }` — 3-component float vector   |
 
 ### Primitives
 
-| Function | Description |
-|----------|-------------|
-| `readInteger` / `writeInteger` | Signed 32-bit integer |
-| `readFloat` / `writeFloat` | 32-bit IEEE float |
-| `readString` / `writeString` | Length-prefixed, NUL-terminated, word-aligned string |
-| `readArray` / `writeArray` | Generic array helpers |
-| `readBlending` / `writeBlending` | Source/target `BlendingMode` pair |
+| Function                         | Description                                          |
+| -------------------------------- | ---------------------------------------------------- |
+| `readInteger` / `writeInteger`   | Signed 32-bit integer                                |
+| `readFloat` / `writeFloat`       | 32-bit IEEE float                                    |
+| `readString` / `writeString`     | Length-prefixed, NUL-terminated, word-aligned string |
+| `readArray` / `writeArray`       | Generic array helpers                                |
+| `readBlending` / `writeBlending` | Source/target `BlendingMode` pair                    |
 
 ### String encoding
 
@@ -67,15 +67,15 @@ A discriminated union keyed by `PropertyType`, with an additional `name: Propert
 
 ```ts
 type Property = { name: PropertyName } & (
-  | { type: PropertyType.Boolean;       value: boolean }
-  | { type: PropertyType.Integer;       value: number }
-  | { type: PropertyType.Float;         value: number }
-  | { type: PropertyType.String;        value: string }
-  | { type: PropertyType.Blending }   & Blending
-  | { type: PropertyType.Transform }  & Transform
-  | { type: PropertyType.AnimatedFloat } & AnimatedFloat
-  | { type: PropertyType.AnimatedColor } & AnimatedColor
-  | { type: PropertyType.AnimatedCurve } & AnimatedCurve
+  | { type: PropertyType.Boolean; value: boolean }
+  | { type: PropertyType.Integer; value: number }
+  | { type: PropertyType.Float; value: number }
+  | { type: PropertyType.String; value: string }
+  | ({ type: PropertyType.Blending } & Blending)
+  | ({ type: PropertyType.Transform } & Transform)
+  | ({ type: PropertyType.AnimatedFloat } & AnimatedFloat)
+  | ({ type: PropertyType.AnimatedColor } & AnimatedColor)
+  | ({ type: PropertyType.AnimatedCurve } & AnimatedCurve)
 )
 ```
 
@@ -89,14 +89,14 @@ A property list is terminated by a `uint16` of zero.
 
 Properties are grouped by node role:
 
-| Prefix | Role |
-|--------|------|
-| `Node_` | Common (name, lifespan, transform) |
-| `Emitter_` | Shared emitter parameters |
-| `CubeEmitter_`, `SphereEmitter_`, `ConeEmitter_` | Emitter geometry |
-| `BasicApp_` | Basic particle appearance |
-| `OrientedApp_`, `ParticleApp_`, `MeshApp_`, `RectApp_`, `BeamApp_` | Appearance variants |
-| `RadialField_`, `GravityField_`, `CollideField_`, `TurbulenceField_`, `AirField_` | Force fields |
+| Prefix                                                                            | Role                               |
+| --------------------------------------------------------------------------------- | ---------------------------------- |
+| `Node_`                                                                           | Common (name, lifespan, transform) |
+| `Emitter_`                                                                        | Shared emitter parameters          |
+| `CubeEmitter_`, `SphereEmitter_`, `ConeEmitter_`                                  | Emitter geometry                   |
+| `BasicApp_`                                                                       | Basic particle appearance          |
+| `OrientedApp_`, `ParticleApp_`, `MeshApp_`, `RectApp_`, `BeamApp_`                | Appearance variants                |
+| `RadialField_`, `GravityField_`, `CollideField_`, `TurbulenceField_`, `AirField_` | Force fields                       |
 
 ---
 
@@ -106,7 +106,7 @@ Properties are grouped by node role:
 
 ```ts
 interface Node {
-  type: NodeType     // e.g. "FxCubeEmitter"
+  type: NodeType // e.g. "FxCubeEmitter"
   properties: Property[]
 }
 ```
@@ -117,7 +117,7 @@ interface Node {
 
 ```ts
 interface NodeLibrary {
-  version: number    // float32
+  version: number // float32
   nodes: Node[]
 }
 ```
@@ -126,22 +126,22 @@ Binary layout: `float32` version, `uint32` count, then each node as a type strin
 
 ### Known node types
 
-| Category | Types |
-|----------|-------|
-| Base | `FxNode` |
-| Emitters | `FxCubeEmitter`, `FxSphereEmitter`, `FxConeEmitter` |
+| Category   | Types                                                                                                                                                                   |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base       | `FxNode`                                                                                                                                                                |
+| Emitters   | `FxCubeEmitter`, `FxSphereEmitter`, `FxConeEmitter`                                                                                                                     |
 | Appearance | `FxBasicAppearance`, `FLDustAppearance`, `FxOrientedAppearance`, `FxParticleAppearance`, `FxMeshAppearance`, `FxRectAppearance`, `FxPerpAppearance`, `FLBeamAppearance` |
-| Fields | `FxRadialField`, `FxCollideField`, `FxTurbulenceField`, `FxAirField`, `FxGravityField`, `FLDustField`, `FLBeamField` |
+| Fields     | `FxRadialField`, `FxCollideField`, `FxTurbulenceField`, `FxAirField`, `FxGravityField`, `FLDustField`, `FLBeamField`                                                    |
 
 ### Helper functions
 
-| Function | Description |
-|----------|-------------|
-| `readNodeLibrary` / `writeNodeLibrary` | Deserialize / serialize a `NodeLibrary` |
-| `getNodeName(node)` | Returns value of `Node_Name` property, or `undefined` |
-| `setNodeName(node, value)` | Sets or adds the `Node_Name` property |
-| `getNodeByName(nodes, name)` | Finds node by name string |
-| `getNodeByCRC(nodes, crc)` | Finds node by CRC of its name |
+| Function                               | Description                                           |
+| -------------------------------------- | ----------------------------------------------------- |
+| `readNodeLibrary` / `writeNodeLibrary` | Deserialize / serialize a `NodeLibrary`               |
+| `getNodeName(node)`                    | Returns value of `Node_Name` property, or `undefined` |
+| `setNodeName(node, value)`             | Sets or adds the `Node_Name` property                 |
+| `getNodeByName(nodes, name)`           | Finds node by name string                             |
+| `getNodeByCRC(nodes, crc)`             | Finds node by CRC of its name                         |
 
 ---
 
@@ -153,24 +153,24 @@ Defines the keyframe animation structures used by animated property types.
 
 Controls interpolation between keyframes.
 
-| Value | Behavior |
-|-------|----------|
-| `Step` | No interpolation — hold previous value |
-| `Linear` | Linear interpolation |
-| `QuadIn` | Ease in (quadratic) |
-| `QuadOut` | Ease out (quadratic) |
-| `Smooth` | Smooth step |
-| `Auto` | QuadIn if `a < b`, QuadOut otherwise |
+| Value     | Behavior                               |
+| --------- | -------------------------------------- |
+| `Step`    | No interpolation — hold previous value |
+| `Linear`  | Linear interpolation                   |
+| `QuadIn`  | Ease in (quadratic)                    |
+| `QuadOut` | Ease out (quadratic)                   |
+| `Smooth`  | Smooth step                            |
+| `Auto`    | QuadIn if `a < b`, QuadOut otherwise   |
 
 ### `WrapFlags` enum
 
 Bitfield controlling out-of-range behavior for looped animations. Independent before/after flags:
 
-| Flag | Effect |
-|------|--------|
-| `BeforeRepeat` / `AfterRepeat` | Wrap via `fract` |
-| `BeforeMirror` / `AfterMirror` | Wrap via `pingPong` |
-| `BeforeClamp` / `AfterClamp` | Clamp to range |
+| Flag                               | Effect                        |
+| ---------------------------------- | ----------------------------- |
+| `BeforeRepeat` / `AfterRepeat`     | Wrap via `fract`              |
+| `BeforeMirror` / `AfterMirror`     | Wrap via `pingPong`           |
+| `BeforeClamp` / `AfterClamp`       | Clamp to range                |
 | `BeforeContinue` / `AfterContinue` | Extrapolate with accumulation |
 
 ### Keyframe types
@@ -180,17 +180,17 @@ Bitfield controlling out-of-range behavior for looped animations. Independent be
 
 ### Animation containers
 
-| Type | Structure |
-|------|-----------|
-| `EaseAnimation<T>` | `{ easing: EaseType, keyframes: T[] }` |
+| Type               | Structure                                               |
+| ------------------ | ------------------------------------------------------- |
+| `EaseAnimation<T>` | `{ easing: EaseType, keyframes: T[] }`                  |
 | `LoopAnimation<T>` | `{ default: number, flags: WrapFlags, keyframes: T[] }` |
 
 ### Composite animated types
 
-| Type | Description |
-|------|-------------|
-| `AnimatedFloat` | Nested two-level ease animation: outer keyframes index into inner `EaseAnimation<FloatKeyframe>` |
-| `AnimatedColor` | Same structure but inner keyframes are `VectorKeyframe` (RGB) |
+| Type            | Description                                                                                                                                                 |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AnimatedFloat` | Nested two-level ease animation: outer keyframes index into inner `EaseAnimation<FloatKeyframe>`                                                            |
+| `AnimatedColor` | Same structure but inner keyframes are `VectorKeyframe` (RGB)                                                                                               |
 | `AnimatedCurve` | Outer ease animation; inner keyframes are `LoopAnimation<VectorKeyframe>` evaluated as Hermite splines. `x` = position, `y` = out-tangent, `z` = in-tangent |
 
 ### `Transform` / `TransformPoint`
@@ -198,7 +198,7 @@ Bitfield controlling out-of-range behavior for looped animations. Independent be
 ```ts
 interface Transform {
   flags: TransformFlags
-  position?: TransformPoint  // x, y, z as AnimatedCurve
+  position?: TransformPoint // x, y, z as AnimatedCurve
   rotation?: TransformPoint
   scale?: TransformPoint
 }
@@ -208,15 +208,15 @@ Data is only present when `TransformFlags.Enable` (bit 31) is set. `TransformFla
 
 ### Evaluation functions
 
-| Function | Description |
-|----------|-------------|
-| `at(keyframes, key)` | Binary search returning `{ before, ahead, span }` for interpolation |
-| `ease(type, a, b, t)` | Scalar interpolation by easing type |
-| `limit(flags, start, end, key)` | Applies `WrapFlags` to remap a key, returns `{ key, count }` |
-| `floatAt(animation, p, t)` | Evaluates `AnimatedFloat` at sparam `p` and time `t` |
-| `colorAt(animation, p, t)` | Evaluates `AnimatedColor` at `p` and `t`, returns `Vector` |
-| `curveAt(animation, p, t)` | Evaluates `AnimatedCurve` via Hermite spline at `p` and `t` |
-| `transformAt(transform, p, t)` | Evaluates a `Transform` at `p` and `t`; returns `{ flags, position, rotation, scale }` as `Vector` each; missing components default to zero-vector (scale defaults to `{1,1,1}`) |
+| Function                        | Description                                                                                                                                                                      |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `at(keyframes, key)`            | Binary search returning `{ before, ahead, span }` for interpolation                                                                                                              |
+| `ease(type, a, b, t)`           | Scalar interpolation by easing type                                                                                                                                              |
+| `limit(flags, start, end, key)` | Applies `WrapFlags` to remap a key, returns `{ key, count }`                                                                                                                     |
+| `floatAt(animation, p, t)`      | Evaluates `AnimatedFloat` at sparam `p` and time `t`                                                                                                                             |
+| `colorAt(animation, p, t)`      | Evaluates `AnimatedColor` at `p` and `t`, returns `Vector`                                                                                                                       |
+| `curveAt(animation, p, t)`      | Evaluates `AnimatedCurve` via Hermite spline at `p` and `t`                                                                                                                      |
+| `transformAt(transform, p, t)`  | Evaluates a `Transform` at `p` and `t`; returns `{ flags, position, rotation, scale }` as `Vector` each; missing components default to zero-vector (scale defaults to `{1,1,1}`) |
 
 The two-axis evaluation (`p`, `t`) allows properties to vary both over a particle's lifespan (`t`) and over an external control value `p` (referred to in-game as **sparam**). `sparam` is supplied by the game engine to blend between animation states — for example, transitioning an engine thruster effect between idle and full throttle.
 
@@ -228,9 +228,9 @@ The two-axis evaluation (`p`, `t`) allows properties to vary both over a particl
 
 ```ts
 interface NodeInstance {
-  crc: number           // CRC of the referenced node name
-  flags: number         // display flags
-  sort: number          // serialization order
+  crc: number // CRC of the referenced node name
+  flags: number // display flags
+  sort: number // serialization order
   children: NodeInstance[]
   targets: NodeInstance[]
 }
@@ -243,7 +243,7 @@ Instances form a tree via `children`. Cross-tree links (e.g. appearance→emitte
 ```ts
 interface Effect {
   name: string
-  unknown1?: number   // float32, version > 1 only
+  unknown1?: number // float32, version > 1 only
   unknown2?: number
   unknown3?: number
   unknown4?: number
@@ -255,7 +255,7 @@ interface Effect {
 
 ```ts
 interface EffectLibrary {
-  version: number   // float32, controls Effect serialization variant
+  version: number // float32, controls Effect serialization variant
   effects: Effect[]
 }
 ```
@@ -263,6 +263,7 @@ interface EffectLibrary {
 ### Binary layout
 
 Each effect is serialized as:
+
 1. Name string
 2. Four `float32` unknowns (version > 1 only)
 3. `int32` entry count + flat `Entry[]` array
@@ -272,15 +273,15 @@ The flat `Entry` structure `{ flags, crc, parentId, childId }` is reassembled in
 
 ### Constants
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `WorldId` | `0x8000` | Parent ID indicating a root-level instance |
-| `DefaultId` | `0xee223b51` | Default/sentinel node instance identifier |
+| Constant    | Value        | Description                                |
+| ----------- | ------------ | ------------------------------------------ |
+| `WorldId`   | `0x8000`     | Parent ID indicating a root-level instance |
+| `DefaultId` | `0xee223b51` | Default/sentinel node instance identifier  |
 
 ### Functions
 
-| Function | Description |
-|----------|-------------|
+| Function                                   | Description                                |
+| ------------------------------------------ | ------------------------------------------ |
 | `readEffectLibrary` / `writeEffectLibrary` | Deserialize / serialize an `EffectLibrary` |
 
 ---
@@ -291,20 +292,20 @@ Re-exports the public surface of the module:
 
 ```ts
 // Types
-PropertyType, PropertyName, Property
-NodeType, Node, NodeLibrary
-NodeInstance, Effect, EffectLibrary
-AnimatedFloat, AnimatedColor, AnimatedCurve, Transform
+;(PropertyType, PropertyName, Property)
+;(NodeType, Node, NodeLibrary)
+;(NodeInstance, Effect, EffectLibrary)
+;(AnimatedFloat, AnimatedColor, AnimatedCurve, Transform)
 
 // Node library
-readNodeLibrary, writeNodeLibrary
-getNodeByCRC, getNodeByName, getNodeName, setNodeName
+;(readNodeLibrary, writeNodeLibrary)
+;(getNodeByCRC, getNodeByName, getNodeName, setNodeName)
 
 // Effect library
-readEffectLibrary, writeEffectLibrary
-DefaultId, WorldId
+;(readEffectLibrary, writeEffectLibrary)
+;(DefaultId, WorldId)
 
 // Animation
-EaseType, WrapFlags
-floatAt, colorAt, curveAt, transformAt
+;(EaseType, WrapFlags)
+;(floatAt, colorAt, curveAt, transformAt)
 ```

@@ -167,11 +167,12 @@ export default class Directory {
   }
 
   /**
-   * Reads directory hierarchy from ArrayBuffer.
+   * Reads directory hierarchy from Uint8Array.
    * @param buffer Input buffer
    * @returns Root directory
    */
-  static read(view: BufferView): Directory {
+  static read(input: Uint8Array): Directory {
+    const view = BufferView.from(input)
     const signature = view.readUint32()
     const version = view.readUint32()
 
@@ -263,10 +264,10 @@ export default class Directory {
   }
 
   /**
-   * Outputs directory as array buffer.
+   * Outputs directory as Uint8Array.
    * @returns
    */
-  write(): BufferView {
+  write(): Uint8Array {
     const entrySize = Directory.ENTRY_BYTE_LENGTH
 
     const now = new Date()
@@ -394,6 +395,7 @@ export default class Directory {
           .writeUint32(toDOSTimestamp(modifyTime)),
     )
 
-    return BufferView.join(version, header, ...tree, names, ...files)
+    const result = BufferView.join(version, header, ...tree, names, ...files)
+    return new Uint8Array(result.buffer, result.byteOffset, result.byteLength)
   }
 }
