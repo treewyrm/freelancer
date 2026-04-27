@@ -27,7 +27,7 @@ export interface VMeshRef {
 
 const byteLength = 60
 
-export const readVMeshRef = (parent: Directory) => {
+export function readVMeshRef(parent: Directory) {
   const file = parent.getFile('VMeshRef')
   if (!file) throw new Error('Missing VMeshRef')
 
@@ -75,26 +75,27 @@ export const readVMeshRef = (parent: Directory) => {
   } satisfies VMeshRef
 }
 
-export const writeVMeshRef = (ref: VMeshRef): File =>
-  new File(
-    'VMeshRef',
-    BufferView.allocate(byteLength)
-      .writeUint32(byteLength)
-      .writeInt32(ref.meshId)
-      .writeUint16(ref.vertexStart)
-      .writeUint16(ref.vertexCount)
-      .writeUint16(ref.indexStart)
-      .writeUint16(ref.indexCount)
-      .writeUint16(ref.groupStart)
-      .writeUint16(ref.groupCount)
-      .writeFloat32(ref.boundingBox.a.x)
-      .writeFloat32(ref.boundingBox.a.y)
-      .writeFloat32(ref.boundingBox.a.z)
-      .writeFloat32(ref.boundingBox.b.x)
-      .writeFloat32(ref.boundingBox.b.y)
-      .writeFloat32(ref.boundingBox.b.z)
-      .writeFloat32(ref.boundingSphere.center.x)
-      .writeFloat32(ref.boundingSphere.center.y)
-      .writeFloat32(ref.boundingSphere.center.z)
-      .writeFloat32(ref.boundingSphere.radius),
-  )
+export function writeVMeshRef(ref: VMeshRef): File {
+  const view = BufferView.allocate(byteLength)
+
+  view.writeUint32(byteLength)
+  view.writeInt32(ref.meshId)
+  view.writeUint16(ref.vertexStart)
+  view.writeUint16(ref.vertexCount)
+  view.writeUint16(ref.indexStart)
+  view.writeUint16(ref.indexCount)
+  view.writeUint16(ref.groupStart)
+  view.writeUint16(ref.groupCount)
+  view.writeFloat32(ref.boundingBox.a.x)
+  view.writeFloat32(ref.boundingBox.a.y)
+  view.writeFloat32(ref.boundingBox.a.z)
+  view.writeFloat32(ref.boundingBox.b.x)
+  view.writeFloat32(ref.boundingBox.b.y)
+  view.writeFloat32(ref.boundingBox.b.z)
+  view.writeFloat32(ref.boundingSphere.center.x)
+  view.writeFloat32(ref.boundingSphere.center.y)
+  view.writeFloat32(ref.boundingSphere.center.z)
+  view.writeFloat32(ref.boundingSphere.radius)
+
+  return new File('VMeshRef', view)
+}

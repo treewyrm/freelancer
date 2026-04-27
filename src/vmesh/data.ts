@@ -109,7 +109,7 @@ export const getMapCount = (format: Format) =>
  * @param format FVF bitmask
  * @returns
  */
-export const vertexByteLength = (format: Format): number => {
+export function vertexByteLength(format: Format): number {
   let size = 0
 
   if (format & Format.Position) size += Float32Array.BYTES_PER_ELEMENT * 3
@@ -123,7 +123,7 @@ export const vertexByteLength = (format: Format): number => {
   return size
 }
 
-export const readVMeshData = (parent: Directory): VMeshData => {
+export function readVMeshData(parent: Directory): VMeshData {
   const name = parent.name
   const file = parent.getFile('VMeshData')
   if (!file) throw new Error(`Missing VMeshData in ${parent.name}`)
@@ -151,21 +151,20 @@ export const readVMeshData = (parent: Directory): VMeshData => {
   return { name, type: 1, primitive, format, groups, indices, vertices }
 }
 
-export const writeVMeshData = (data: VMeshData): Directory =>
-  new Directory(data.name, [
-    new File(
-      'VMeshData',
-      BufferView.join(
-        BufferView.allocate(Uint32Array.BYTES_PER_ELEMENT * 4)
-          .writeUint32(data.type)
-          .writeUint32(data.primitive)
-          .writeUint16(data.groups.length)
-          .writeUint16(data.indices.length)
-          .writeUint16(data.format)
-          .writeUint16(data.vertices.byteLength / vertexByteLength(data.format)),
-        ...data.groups.map((group) => writeVMeshGroup(group)),
-        BufferView.allocate(data.indices.byteLength).writeBuffer(data.indices),
-        BufferView.allocate(data.vertices.byteLength).writeBuffer(data.vertices),
-      ),
-    ),
-  ])
+export function writeVMeshData(data: VMeshData): Directory {
+  const view = BufferView.join(
+    BufferView.allocate(Uint32Array.BYTES_PER_ELEMENT * 4)
+      .writeUint32(data.type)
+      .writeUint32(data.primitive)
+      .writeUint16(data.groups.length)
+      .writeUint16(data.indices.length)
+      .writeUint16(data.format)
+      .writeUint16(data.vertices.byteLength / vertexByteLength(data.format)),
+    ...data.groups.map((group) => writeVMeshGroup(group)),
+    BufferView.allocate(data.indices.byteLength).writeBuffer(data.indices),
+    BufferView.allocate(data.vertices.byteLength).writeBuffer(data.vertices),
+  )
+
+  const file = new File('VMeshData', view)
+  return new Directory(data.name, [file])
+}

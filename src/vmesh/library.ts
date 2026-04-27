@@ -1,26 +1,27 @@
 import Directory from '#/directory.js'
-import { getResourceId, type Hashable } from '#/hash.js'
+import { getResource } from '#/hash.js'
 import { readVMeshData, vertexByteLength, writeVMeshData, type VMeshData } from './data.js'
 import type { VMeshRef } from './ref.js'
 
-export type VMeshLibrary = Map<number, VMeshData>
+export type VMeshLibrary = VMeshData[]
 
-export const getMesh = (library: VMeshLibrary, name: Hashable): VMeshData | undefined =>
-  library.get(getResourceId(name))
+export function readVMeshLibrary(parent: Directory): VMeshLibrary {
+  const library: VMeshLibrary = []
 
-export function* readVMeshLibrary(parent: Directory): Generator<VMeshData> {
   const directory = parent.getDirectory('VMeshLibrary')
-  if (!directory) return
+  if (!directory) return library
 
   for (const subdirectory of directory.directories) {
     const data = readVMeshData(subdirectory)
     if (!data) continue
 
-    yield data
+    library.push(data)
   }
+
+  return library
 }
 
-export const writeVMeshLibrary = (values: Iterable<VMeshData>): Directory => {
+export function writeVMeshLibrary(values: Iterable<VMeshData>): Directory {
   const directory = new Directory('VMeshLibrary')
 
   for (const data of values) directory.children.push(writeVMeshData(data))
@@ -31,7 +32,7 @@ export const writeVMeshLibrary = (values: Iterable<VMeshData>): Directory => {
 export function* getMeshDraw(library: VMeshLibrary, reference: VMeshRef) {
   const { meshId, groupStart, groupCount, indexStart } = reference
 
-  const data = getMesh(library, meshId)
+  const data = getResource(library, ({ name }) => name, reference.meshId)
   if (!data) throw new RangeError(`Mesh ${meshId} not found.`)
 
   const { primitive, format } = data

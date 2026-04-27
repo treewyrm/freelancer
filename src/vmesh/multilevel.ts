@@ -7,7 +7,7 @@ export interface MultiLevel {
   levels: VMeshPart[]
 }
 
-export const atRange = ({ ranges, levels }: MultiLevel, value: number): VMeshPart | undefined => {
+export function atRange({ ranges, levels }: MultiLevel, value: number): VMeshPart | undefined {
   for (let i = 0, l = ranges.length - 1, min: number, max: number; i < l; i++) {
     min = ranges[i] ?? 0
     max = ranges[i + 1] ?? Infinity
@@ -18,7 +18,7 @@ export const atRange = ({ ranges, levels }: MultiLevel, value: number): VMeshPar
   return
 }
 
-export const readMultiLevel = (parent: Directory): MultiLevel | undefined => {
+export function readMultiLevel(parent: Directory): MultiLevel | undefined {
   const directory = parent.getDirectory('MultiLevel')
   if (!directory) return
 
@@ -38,7 +38,7 @@ export const readMultiLevel = (parent: Directory): MultiLevel | undefined => {
   return { type: 'multilevel', ranges, levels }
 }
 
-export const writeMultiLevel = ({ ranges, levels }: MultiLevel): Directory => {
+export function writeMultiLevel({ ranges, levels }: MultiLevel): Directory {
   const directory = new Directory('MultiLevel')
 
   directory.setFile('Switch2').writeFloats(...ranges)

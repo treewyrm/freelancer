@@ -3,25 +3,28 @@ import BufferView from '#/utility/bufferview.js'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
-export type Read<T> = (view: BufferView) => T
-export type Write<T> = (value: T) => BufferView
-
 /** Reads signed 32-bit integer. */
-export const readInteger: Read<number> = (view) => view.readInt32()
+export function readInteger(view: BufferView): number {
+  return view.readInt32()
+}
 
 /** Writes signed 32-bit integer. */
-export const writeInteger: Write<number> = (value) =>
-  BufferView.allocate(Int32Array.BYTES_PER_ELEMENT).writeInt32(value)
+export function writeInteger(value: number): BufferView {
+  return BufferView.allocate(Int32Array.BYTES_PER_ELEMENT).writeInt32(value)
+}
 
 /** Reads 32-bit float point number. */
-export const readFloat: Read<number> = (view) => view.readFloat32()
+export function readFloat(view: BufferView): number {
+  return view.readFloat32()
+}
 
 /** Writes 32-bit float point number. */
-export const writeFloat: Write<number> = (value) =>
-  BufferView.allocate(Float32Array.BYTES_PER_ELEMENT).writeFloat32(value)
+export function writeFloat(value: number): BufferView {
+  return BufferView.allocate(Float32Array.BYTES_PER_ELEMENT).writeFloat32(value)
+}
 
 /** Reads prefixed NUL-terminated string. */
-export const readString: Read<string> = (view) => {
+export function readString(view: BufferView): string {
   // String length in prefix includes NUL termination byte.
   const length = view.readUint16()
 
@@ -33,9 +36,10 @@ export const readString: Read<string> = (view) => {
 }
 
 /** Writes prefixed NUL-terminated string. */
-export const writeString: Write<string> = (value) => {
+export function writeString(value: string): BufferView {
   const buffer = encoder.encode(value)
   const length = buffer.byteLength + 1
+
   return BufferView.allocate(2 + length + (length & 1))
     .writeUint16(length)
     .writeBuffer(buffer)
@@ -62,24 +66,32 @@ export interface Blending {
 }
 
 /** Reads blending mode. */
-export const readBlending: Read<Blending> = (view) => ({
-  source: view.readUint32(),
-  target: view.readUint32(),
-})
+export function readBlending(view: BufferView): Blending {
+  return {
+    source: view.readUint32(),
+    target: view.readUint32(),
+  }
+}
 
 /** Writes blending mode. */
-export const writeBlending: Write<Blending> = ({ source, target }) =>
-  BufferView.allocate(Uint32Array.BYTES_PER_ELEMENT * 2)
+export function writeBlending({ source, target }: Blending): BufferView {
+  return BufferView.allocate(Uint32Array.BYTES_PER_ELEMENT * 2)
     .writeUint32(source)
     .writeUint32(target)
+}
 
 /** Reads array of elements. */
-export const readArray = <T>(view: BufferView, read: Read<T>, count = Infinity) => {
+export function readArray<T>(
+  view: BufferView,
+  read: (view: BufferView) => T,
+  count = Infinity,
+): T[] {
   const array: T[] = []
   while (count--) array.push(read(view))
   return array
 }
 
 /** Writes array of elements. */
-export const writeArray = <T>(array: T[], write: Write<T>) =>
-  BufferView.join(...array.map((value) => write(value)))
+export function writeArray<T>(array: T[], write: (value: T) => BufferView): BufferView {
+  return BufferView.join(...array.map((value) => write(value)))
+}

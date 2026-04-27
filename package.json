@@ -36,6 +36,10 @@
     "./vmesh": {
       "import": "./dist/vmesh/index.js",
       "types": "./dist/vmesh/index.d.ts"
+    },
+    "./model": {
+      "import": "./dist/model/index.js",
+      "types": "./dist/model/index.d.ts"
     }
   },
   "main": "./dist/index.js",

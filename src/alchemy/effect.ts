@@ -1,6 +1,6 @@
 import BufferView from '#/utility/bufferview.js'
 import { assemble, flatten } from '#/utility/hierarchy.js'
-import { type Read, type Write, readArray, readString, writeArray, writeString } from './misc.js'
+import { readArray, readString, writeArray, writeString } from './misc.js'
 
 /** Effect node instance raw entry. */
 export interface Entry {
@@ -11,20 +11,23 @@ export interface Entry {
 }
 
 /** Reads node instance raw entry. */
-export const readEntry: Read<Entry> = (view) => ({
-  flags: view.readInt32(),
-  crc: view.readInt32(),
-  parentId: view.readInt32(),
-  childId: view.readInt32(),
-})
+export function readEntry(view: BufferView) {
+  return {
+    flags: view.readInt32(),
+    crc: view.readInt32(),
+    parentId: view.readInt32(),
+    childId: view.readInt32(),
+  }
+}
 
 /** Writes node instance raw entry. */
-export const writeEntry: Write<Entry> = ({ flags, crc, parentId, childId }) =>
-  BufferView.allocate(Int32Array.BYTES_PER_ELEMENT * 4)
+export function writeEntry({ flags, crc, parentId, childId }: Entry) {
+  return BufferView.allocate(Int32Array.BYTES_PER_ELEMENT * 4)
     .writeInt32(flags)
     .writeInt32(crc)
     .writeInt32(parentId)
     .writeInt32(childId)
+}
 
 /** Effect node instance pair references. */
 export interface Pair {
@@ -32,15 +35,18 @@ export interface Pair {
   targetId: number
 }
 
-export const readPair: Read<Pair> = (view) => ({
-  sourceId: view.readInt32(),
-  targetId: view.readInt32(),
-})
+export function readPair(view: BufferView): Pair {
+  return {
+    sourceId: view.readInt32(),
+    targetId: view.readInt32(),
+  }
+}
 
-export const writePair: Write<Pair> = ({ sourceId, targetId }) =>
-  BufferView.allocate(Int32Array.BYTES_PER_ELEMENT * 2)
+export function writePair({ sourceId, targetId }: Pair): BufferView {
+  return BufferView.allocate(Int32Array.BYTES_PER_ELEMENT * 2)
     .writeInt32(sourceId)
     .writeInt32(targetId)
+}
 
 export const WorldId = 0x8000
 
@@ -72,7 +78,7 @@ export interface Effect {
   children: NodeInstance[]
 }
 
-export const readEffect = (view: BufferView, version = 1): Effect => {
+export function readEffect(view: BufferView, version = 1): Effect {
   const name = readString(view)
   let unknown1 = 0
   let unknown2 = 0
@@ -179,7 +185,7 @@ export interface EffectLibrary {
 }
 
 /** Reads effect library. */
-export const readEffectLibrary: Read<EffectLibrary> = (view) => {
+export function readEffectLibrary(view: BufferView): EffectLibrary {
   const version = view.readFloat32()
   const effects = readArray(view, (view) => readEffect(view, version), view.readUint32())
 
@@ -187,10 +193,13 @@ export const readEffectLibrary: Read<EffectLibrary> = (view) => {
 }
 
 /** Writes effect library. */
-export const writeEffectLibrary: Write<EffectLibrary> = ({ version, effects }) =>
-  BufferView.join(
-    BufferView.allocate(Float32Array.BYTES_PER_ELEMENT + Uint32Array.BYTES_PER_ELEMENT)
-      .writeFloat32(version)
-      .writeUint32(effects.length),
+export function writeEffectLibrary({ version, effects }: EffectLibrary): BufferView {
+  const view = BufferView.allocate(Float32Array.BYTES_PER_ELEMENT + Uint32Array.BYTES_PER_ELEMENT)
+    .writeFloat32(version)
+    .writeUint32(effects.length)
+
+  return BufferView.join(
+    view,
     writeArray(effects, (effect) => writeEffect(effect, version)),
   )
+}

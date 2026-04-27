@@ -21,15 +21,15 @@ describe('Dictionary.push', () => {
 
   it('grows byteLength by string length plus NUL terminator', () => {
     const dict = new Dictionary()
-    dict.push('Root')  // 4 chars + NUL = 5 bytes
+    dict.push('Root') // 4 chars + NUL = 5 bytes
     assert.equal(dict.byteLength, 5)
   })
 
   it('returns sequential byte offsets for successive distinct strings', () => {
     const dict = new Dictionary()
-    const off0 = dict.push('Root')    // 0, 5 bytes
-    const off1 = dict.push('Child')   // 5, 6 bytes
-    const off2 = dict.push('Leaf')    // 11, 5 bytes
+    const off0 = dict.push('Root') // 0, 5 bytes
+    const off1 = dict.push('Child') // 5, 6 bytes
+    const off2 = dict.push('Leaf') // 11, 5 bytes
     assert.equal(off0, 0)
     assert.equal(off1, 5)
     assert.equal(off2, 11)
@@ -41,7 +41,7 @@ describe('Dictionary.push', () => {
     const first = dict.push('Root')
     const second = dict.push('Root')
     assert.equal(first, second)
-    assert.equal(dict.byteLength, 5)  // no growth
+    assert.equal(dict.byteLength, 5) // no growth
   })
 
   it('deduplicates case-insensitively', () => {
@@ -49,7 +49,7 @@ describe('Dictionary.push', () => {
     const lower = dict.push('root')
     const upper = dict.push('ROOT')
     assert.equal(lower, upper)
-    assert.equal(dict.byteLength, 5)  // only one entry stored
+    assert.equal(dict.byteLength, 5) // only one entry stored
   })
 })
 
@@ -59,7 +59,7 @@ describe('Dictionary buffer contents', () => {
     dict.push('Hi')
 
     const bytes = new Uint8Array(dict.buffer, dict.byteOffset, dict.byteLength)
-    assert.deepEqual([...bytes], [0x48, 0x69, 0x00])  // 'H', 'i', NUL
+    assert.deepEqual([...bytes], [0x48, 0x69, 0x00]) // 'H', 'i', NUL
   })
 
   it('stores multiple strings contiguously', () => {

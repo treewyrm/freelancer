@@ -10,18 +10,24 @@ export interface VMeshGroup {
 
 export const byteLength = 12
 
-export const readVMeshGroup = (view: BufferView): VMeshGroup => ({
-  materialId: view.readInt32(),
-  vertexStart: view.readUint16(),
-  vertexEnd: view.readUint16(),
-  elementCount: view.readUint16(),
-  padding: view.readUint16(),
-})
+export function readVMeshGroup(view: BufferView): VMeshGroup {
+  return {
+    materialId: view.readInt32(),
+    vertexStart: view.readUint16(),
+    vertexEnd: view.readUint16(),
+    elementCount: view.readUint16(),
+    padding: view.readUint16(),
+  }
+}
 
-export const writeVMeshGroup = (group: VMeshGroup): BufferView =>
-  BufferView.allocate(byteLength)
-    .writeInt32(group.materialId)
-    .writeUint16(group.vertexStart)
-    .writeUint16(group.vertexEnd)
-    .writeUint16(group.elementCount)
-    .writeUint16(group.padding)
+export function writeVMeshGroup(group: VMeshGroup): BufferView {
+  const view = BufferView.allocate(byteLength)
+
+  view.writeInt32(group.materialId)
+  view.writeUint16(group.vertexStart)
+  view.writeUint16(group.vertexEnd)
+  view.writeUint16(group.elementCount)
+  view.writeUint16(group.padding)
+
+  return view
+}

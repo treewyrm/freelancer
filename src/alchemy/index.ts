@@ -29,8 +29,6 @@ export {
   type Transform,
   EaseType,
   WrapFlags,
-  floatAt,
-  colorAt,
-  curveAt,
-  transformAt,
 } from './animation.js'
+
+export { floatAt, colorAt, curveAt, transformAt } from './evaluation.js'

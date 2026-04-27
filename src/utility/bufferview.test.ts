@@ -423,12 +423,7 @@ describe('readHex / writeHex', () => {
 describe('method chaining', () => {
   it('write methods return the same instance', () => {
     const view = BufferView.allocate(16)
-    const result = view
-      .writeUint8(1)
-      .writeUint16(2)
-      .writeUint32(3)
-      .writeString('ok')
-      .writeUint8(0)
+    const result = view.writeUint8(1).writeUint16(2).writeUint32(3).writeString('ok').writeUint8(0)
     assert.equal(result, view)
   })
 })

@@ -1,6 +1,6 @@
 import BufferView from '#/utility/bufferview.js'
 import { getResourceId } from '#/hash.js'
-import { type Read, type Write, readArray, readString, writeString } from './misc.js'
+import { readArray, readString, writeString } from './misc.js'
 import { type Property, PropertyType, readProperty, writeProperty } from './property.js'
 
 const knownNodeTypes = [
@@ -35,7 +35,7 @@ export interface Node {
 }
 
 /** Reads alchemy node. */
-export const readNode: Read<Node> = (view) => {
+export function readNode(view: BufferView): Node {
   const type = readString(view)
   const properties: Property[] = []
   let property
@@ -45,12 +45,13 @@ export const readNode: Read<Node> = (view) => {
 }
 
 /** Writes alchemy node. */
-export const writeNode: Write<Node> = ({ type, properties }) =>
-  BufferView.join(
+export function writeNode({ type, properties }: Node): BufferView {
+  return BufferView.join(
     writeString(type),
     ...properties.map(writeProperty),
     BufferView.allocate(Uint16Array.BYTES_PER_ELEMENT),
   )
+}
 
 /** Alchemy node library. */
 export interface NodeLibrary {
@@ -59,7 +60,7 @@ export interface NodeLibrary {
 }
 
 /** Reads node library. */
-export const readNodeLibrary: Read<NodeLibrary> = (view) => {
+export function readNodeLibrary(view: BufferView): NodeLibrary {
   const version = view.readFloat32()
   const nodes = readArray(view, readNode, view.readUint32())
 
@@ -67,13 +68,13 @@ export const readNodeLibrary: Read<NodeLibrary> = (view) => {
 }
 
 /** Writes node library. */
-export const writeNodeLibrary: Write<NodeLibrary> = ({ version, nodes }) =>
-  BufferView.join(
-    BufferView.allocate(Float32Array.BYTES_PER_ELEMENT + Uint32Array.BYTES_PER_ELEMENT)
-      .writeFloat32(version)
-      .writeUint32(nodes.length),
-    ...nodes.map(writeNode),
-  )
+export function writeNodeLibrary({ version, nodes }: NodeLibrary): BufferView {
+  const view = BufferView.allocate(Float32Array.BYTES_PER_ELEMENT + Uint32Array.BYTES_PER_ELEMENT)
+    .writeFloat32(version)
+    .writeUint32(nodes.length)
+
+  return BufferView.join(view, ...nodes.map(writeNode))
+}
 
 /** Retrieves alchemy node name from property Node_Name. */
 export const getNodeName = ({ properties }: Node) => {

@@ -1,7 +1,5 @@
 import { getResourceId } from '#/hash.js'
 import {
-  type Read,
-  type Write,
   readInteger,
   writeInteger,
   readFloat,
@@ -137,7 +135,7 @@ export type Property = (
 }
 
 /** Reads alchem node property. */
-export const readProperty: Read<Property | null> = (view) => {
+export function readProperty(view: BufferView): Property | null {
   const type: PropertyType = view.readUint16()
   if (!(type & 0x7ffff)) return null
 
@@ -214,7 +212,7 @@ export const readProperty: Read<Property | null> = (view) => {
 }
 
 /** Writes alchemy node property. */
-export const writeProperty: Write<Property> = (property) => {
+export function writeProperty(property: Property): BufferView {
   let type = property.type
   const crc = isHex(property.name) ? parseHex(property.name) : getResourceId(property.name, true)
   const value: BufferView[] = []
