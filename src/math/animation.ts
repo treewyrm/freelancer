@@ -7,32 +7,32 @@ export interface Keyframe {
 /** Animation query result. */
 export interface AnimationRange<T> {
   /** Value before. */
-  before: T
+  start: T
 
   /** Value ahead. */
-  ahead: T
+  end: T
 
   /** Relative position in range [0, 1]. */
   span: number
 }
 
 export function at<T extends Keyframe>(keyframes: Iterable<T>, key: number): AnimationRange<T> {
-  let ahead
-  let before
+  let end
+  let start
   let span = Infinity
 
-  for (ahead of keyframes) {
-    span = before ? ahead.key - before.key : Infinity
-    if (key <= ahead.key && span > 0) break
+  for (end of keyframes) {
+    span = start ? end.key - start.key : Infinity
+    if (key <= end.key && span > 0) break
 
-    before = ahead
+    start = end
     span = Infinity
   }
 
-  if (!ahead) throw new Error('Missing keyframe data')
+  if (!end) throw new Error('Missing keyframe data')
 
-  before ??= ahead
-  span = key > ahead.key ? 1 : clamp((key - before.key) / span, 0, 1)
+  start ??= end
+  span = key > end.key ? 1 : clamp((key - start.key) / span, 0, 1)
 
-  return { before, ahead, span }
+  return { start, end, span }
 }

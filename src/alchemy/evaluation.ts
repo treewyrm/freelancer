@@ -82,13 +82,13 @@ export function limit(flags: WrapFlags, start: number, end: number, key: number)
 }
 
 export function floatWhen(animation: EaseAnimation<FloatKeyframe>, key: number): number {
-  const { before, ahead, span } = at(animation.keyframes, key)
-  return ease(animation.easing, before.value, ahead.value, span)
+  const { start, end, span } = at(animation.keyframes, key)
+  return ease(animation.easing, start.value, end.value, span)
 }
 
 export function floatAt(animation: AnimatedFloat, p: number, t: number): number {
-  const { before, ahead, span } = at(animation.keyframes, p)
-  return ease(animation.easing, floatWhen(before, t), floatWhen(ahead, t), span)
+  const { start, end, span } = at(animation.keyframes, p)
+  return ease(animation.easing, floatWhen(start, t), floatWhen(end, t), span)
 }
 
 export function easeVector(type: EaseType, a: Vector3, b: Vector3, t: number): Vector3 {
@@ -100,13 +100,13 @@ export function easeVector(type: EaseType, a: Vector3, b: Vector3, t: number): V
 }
 
 export function vectorWhen(animation: EaseAnimation<VectorKeyframe>, key: number): Vector3 {
-  const { before, ahead, span } = at(animation.keyframes, key)
-  return easeVector(animation.easing, before.value, ahead.value, span)
+  const { start, end, span } = at(animation.keyframes, key)
+  return easeVector(animation.easing, start.value, end.value, span)
 }
 
 export function colorAt(animation: AnimatedColor, p: number, t: number): Vector3 {
-  const { before, ahead, span } = at(animation.keyframes, p)
-  return easeVector(animation.easing, vectorWhen(before, t), vectorWhen(ahead, t), span)
+  const { start, end, span } = at(animation.keyframes, p)
+  return easeVector(animation.easing, vectorWhen(start, t), vectorWhen(end, t), span)
 }
 
 export function hermiteAt(animation: LoopAnimation<VectorKeyframe>, key: number): number {
@@ -122,18 +122,18 @@ export function hermiteAt(animation: LoopAnimation<VectorKeyframe>, key: number)
     // Limit key to position.
   ;({ key, count } = limit(animation.flags, first.key, last.key, key))
 
-  const { before, ahead, span } = at(animation.keyframes, key)
+  const { start, end, span } = at(animation.keyframes, key)
 
   // Add loop distance for accumulative result.
   return (
-    hermite(before.value.x, before.value.z, ahead.value.x, ahead.value.y, span) +
+    hermite(start.value.x, start.value.z, end.value.x, end.value.y, span) +
     (last.value.x - first.value.x) * count
   )
 }
 
 export function curveAt(animation: AnimatedCurve, p: number, t: number): number {
-  const { before, ahead, span } = at(animation.keyframes, p)
-  return ease(animation.easing, hermiteAt(before, t), hermiteAt(ahead, t), span)
+  const { start, end, span } = at(animation.keyframes, p)
+  return ease(animation.easing, hermiteAt(start, t), hermiteAt(end, t), span)
 }
 
 export function transformPointAt(point: TransformPoint, p: number, t: number): Vector3 {

@@ -1,4 +1,5 @@
 import type Matrix3 from './matrix3.js'
+import type { AxisAngle } from './misc.js'
 import Vector3 from './vector3.js'
 import Vector4 from './vector4.js'
 
@@ -8,15 +9,17 @@ type Quat = Vector4
 const Quat = {
   identity: { x: 0, y: 0, z: 0, w: 1 } as const,
 
-  conjugate: (q: Vector4): Vector4 => ({
-    x: -q.x,
-    y: -q.y,
-    z: -q.z,
-    w: q.w,
-  }),
+  conjugate(quat: Vector4): Vector4 {
+    return {
+      x: -quat.x,
+      y: -quat.y,
+      z: -quat.z,
+      w: quat.w,
+    }
+  },
 
   /** Multiplies two quaternions. */
-  multiply: (a: Vector4, b: Vector4): Vector4 => {
+  multiply(a: Vector4, b: Vector4): Vector4 {
     const { x: ax, y: ay, z: az, w: aw } = a
     const { x: bx, y: by, z: bz, w: bw } = b
 
@@ -29,38 +32,41 @@ const Quat = {
   },
 
   /** Generates quaternion from axis and angle. */
-  axisAngle: (v: Vector3, angle: number): Vector4 => {
+  axisAngle(axisAngle: AxisAngle): Vector4 {
+    let { axis, angle } = axisAngle
+
     angle *= 0.5
     const s = Math.sin(angle)
 
     return {
-      x: v.x * s,
-      y: v.y * s,
-      z: v.z * s,
+      x: axis.x * s,
+      y: axis.y * s,
+      z: axis.z * s,
       w: Math.cos(angle),
     }
   },
 
   /** Calculates rotation axis and angle from quaternion.  */
-  getAxisAngle: (q: Vector4, epsilon = 0.0001): [axis: Vector3, angle: number] => {
-    const r = Math.acos(q.w) * 2.0
+  getAxisAngle(quat: Vector4, e = 0.0001): AxisAngle {
+    const r = Math.acos(quat.w) * 2.0
     const s = Math.sin(r / 2.0)
 
-    if (s > epsilon)
-      return [
-        {
-          x: q.x / s,
-          y: q.y / s,
-          z: q.z / s,
+    if (s > e)
+      return {
+        axis: {
+          x: quat.x / s,
+          y: quat.y / s,
+          z: quat.z / s,
         },
-        r,
-      ]
+        angle: r,
+      }
 
-    return [{ ...Vector3.copy(Vector3.x) }, r]
+    return { axis: Vector3.copy(Vector3.x), angle: r }
   },
 
   /** Generates quaternion from a matrix. */
-  fromMatrix: ({ x, y, z }: Matrix3): Vector4 => {
+  fromMatrix(matrix: Matrix3): Vector4 {
+    const { x, y, z } = matrix
     const t = x.x + y.y + z.z
     let s = 0
 
@@ -108,20 +114,20 @@ const Quat = {
   },
 
   /** Transforms vector by quaternion. */
-  transform: (v: Vector3, q: Vector4): Vector3 => {
-    const u = Vector3.cross(q, v)
+  transform(vector: Vector3, quat: Vector4): Vector3 {
+    const u = Vector3.cross(quat, vector)
 
     return Vector3.add(
-      v,
+      vector,
       Vector3.add(
-        Vector3.multiplyScalar(u, 2 * q.w),
-        Vector3.multiplyScalar(Vector3.cross(q, u), 2),
+        Vector3.multiplyScalar(u, 2 * quat.w),
+        Vector3.multiplyScalar(Vector3.cross(quat, u), 2),
       ),
     )
   },
 
   /** Calculate quaternion spherical interpolation. */
-  slerp: (a: Vector4, b: Vector4, t: number, epsilon = 0.0001): Vector4 => {
+  slerp(a: Vector4, b: Vector4, t: number, e = 0.0001): Vector4 {
     let d = Vector4.dot(a, b)
 
     if (d < 0) {
@@ -132,7 +138,7 @@ const Quat = {
     let u = 1.0 - t
     let v = t
 
-    if (1.0 - d > epsilon) {
+    if (1.0 - d > e) {
       const o = Math.acos(d)
       const s = Math.sin(o)
 

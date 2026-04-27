@@ -2,119 +2,162 @@ import BufferView from '#/utility/bufferview.js'
 import { equal, lerp, random } from './scalar.js'
 
 /** 3D vector. */
-type Vector3 = { x: number; y: number; z: number }
+interface Vector3 {
+  x: number
+  y: number
+  z: number
+}
 
 const Vector3 = {
   x: { x: 1, y: 0, z: 0 } as const,
   y: { x: 0, y: 1, z: 0 } as const,
   z: { x: 0, y: 0, z: 1 } as const,
 
-  is: (value: unknown): value is Vector3 =>
-    value !== null &&
-    typeof value === 'object' &&
-    'x' in value &&
-    'y' in value &&
-    'z' in value &&
-    typeof value.x === 'number' &&
-    typeof value.y === 'number' &&
-    typeof value.z === 'number',
+  is(value: unknown): value is Vector3 {
+    return (
+      value !== null &&
+      typeof value === 'object' &&
+      'x' in value &&
+      'y' in value &&
+      'z' in value &&
+      typeof value.x === 'number' &&
+      typeof value.y === 'number' &&
+      typeof value.z === 'number'
+    )
+  },
 
-  isNaN: ({ x, y, z }: Vector3): boolean => Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(z),
+  isNaN(vector: Vector3): boolean {
+    return Number.isNaN(vector.x) || Number.isNaN(vector.y) || Number.isNaN(vector.z)
+  },
 
-  isFinite: ({ x, y, z }: Vector3): boolean =>
-    Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z),
+  isFinite(vector: Vector3): boolean {
+    return Number.isFinite(vector.x) && Number.isFinite(vector.y) && Number.isFinite(vector.z)
+  },
 
-  equal: (a: Vector3, b: Vector3, epsilon?: number): boolean =>
-    equal(a.x, b.x, epsilon) && equal(a.y, b.y, epsilon) && equal(a.z, b.z, epsilon),
+  equal(a: Vector3, b: Vector3, e?: number): boolean {
+    return equal(a.x, b.x, e) && equal(a.y, b.y, e) && equal(a.z, b.z, e)
+  },
 
-  dot: (a: Vector3, b: Vector3): number => a.x * b.x + a.y * b.y + a.z * b.z,
+  dot(a: Vector3, b: Vector3): number {
+    return a.x * b.x + a.y * b.y + a.z * b.z
+  },
 
-  magnitude: (a: Vector3): number => Math.sqrt(Vector3.dot(a, a)),
+  magnitude(vector: Vector3): number {
+    return Math.sqrt(Vector3.dot(vector, vector))
+  },
 
-  normalize: (a: Vector3): Vector3 => Vector3.divideScalar(a, Vector3.magnitude(a)),
+  normalize(vector: Vector3): Vector3 {
+    return Vector3.divideScalar(vector, Vector3.magnitude(vector))
+  },
 
   /** Calculates angle between two vectors. */
-  angle: (a: Vector3, b: Vector3): number =>
-    Math.acos(Vector3.dot(a, b) / (Vector3.magnitude(a) * Vector3.magnitude(b))),
+  angle(a: Vector3, b: Vector3): number {
+    return Math.acos(Vector3.dot(a, b) / (Vector3.magnitude(a) * Vector3.magnitude(b)))
+  },
 
   /** Calculates distance between two vectors. */
-  distance: (a: Vector3, b: Vector3): number => Vector3.magnitude(Vector3.subtract(a, b)),
+  distance(a: Vector3, b: Vector3): number {
+    return Vector3.magnitude(Vector3.subtract(a, b))
+  },
 
   /** Creates a copy of vector. */
-  copy: ({ x = 0, y = 0, z = 0 }: Partial<Vector3>): Vector3 => ({ x, y, z }),
+  copy(vector: Partial<Vector3>): Vector3 {
+    const { x = 0, y = 0, z = 0 } = vector
+    return { x, y, z }
+  },
 
   /** Adds two vectors. */
-  add: (a: Vector3, b: Vector3): Vector3 => ({
-    x: a.x + b.x,
-    y: a.y + b.y,
-    z: a.z + b.z,
-  }),
+  add(a: Vector3, b: Vector3): Vector3 {
+    return {
+      x: a.x + b.x,
+      y: a.y + b.y,
+      z: a.z + b.z,
+    }
+  },
 
   /** Adds scalar value to a vector. */
-  addScalar: (a: Vector3, b: number): Vector3 => ({
-    x: a.x + b,
-    y: a.y + b,
-    z: a.z + b,
-  }),
+  addScalar(a: Vector3, b: number): Vector3 {
+    return {
+      x: a.x + b,
+      y: a.y + b,
+      z: a.z + b,
+    }
+  },
 
   /** Subtracts vector from a vector. */
-  subtract: (a: Vector3, b: Vector3): Vector3 => ({
-    x: a.x - b.x,
-    y: a.y - b.y,
-    z: a.z - b.z,
-  }),
+  subtract(a: Vector3, b: Vector3): Vector3 {
+    return {
+      x: a.x - b.x,
+      y: a.y - b.y,
+      z: a.z - b.z,
+    }
+  },
 
   /** Subtracts scalar value from a vector. */
-  subtractScalar: (a: Vector3, b: number): Vector3 => ({
-    x: a.x - b,
-    y: a.y - b,
-    z: a.z - b,
-  }),
+  subtractScalar(a: Vector3, b: number): Vector3 {
+    return {
+      x: a.x - b,
+      y: a.y - b,
+      z: a.z - b,
+    }
+  },
 
   /** Multiplies two vectors. */
-  multiply: (a: Vector3, b: Vector3): Vector3 => ({
-    x: a.x * b.x,
-    y: a.y * b.y,
-    z: a.z * b.z,
-  }),
+  multiply(a: Vector3, b: Vector3): Vector3 {
+    return {
+      x: a.x * b.x,
+      y: a.y * b.y,
+      z: a.z * b.z,
+    }
+  },
 
   /** Multiplies vector by a scalar value. */
-  multiplyScalar: (a: Vector3, b: number): Vector3 => ({
-    x: a.x * b,
-    y: a.y * b,
-    z: a.z * b,
-  }),
+  multiplyScalar(a: Vector3, b: number): Vector3 {
+    return {
+      x: a.x * b,
+      y: a.y * b,
+      z: a.z * b,
+    }
+  },
 
   /** Divides vector by a vector. */
-  divide: (a: Vector3, b: Vector3): Vector3 => ({
-    x: a.x / b.x,
-    y: a.y / b.y,
-    z: a.z / b.z,
-  }),
+  divide(a: Vector3, b: Vector3): Vector3 {
+    return {
+      x: a.x / b.x,
+      y: a.y / b.y,
+      z: a.z / b.z,
+    }
+  },
 
   /** Divides vector by a scalar value. */
-  divideScalar: (a: Vector3, b: number): Vector3 => ({
-    x: a.x / b,
-    y: a.y / b,
-    z: a.z / b,
-  }),
+  divideScalar(a: Vector3, b: number): Vector3 {
+    return {
+      x: a.x / b,
+      y: a.y / b,
+      z: a.z / b,
+    }
+  },
 
   /** Calculates cross (vector) product. */
-  cross: (a: Vector3, b: Vector3): Vector3 => ({
-    x: a.y * b.z - a.z * b.y,
-    y: a.z * b.x - a.x * b.z,
-    z: a.x * b.y - a.y * b.x,
-  }),
+  cross(a: Vector3, b: Vector3): Vector3 {
+    return {
+      x: a.y * b.z - a.z * b.y,
+      y: a.z * b.x - a.x * b.z,
+      z: a.x * b.y - a.y * b.x,
+    }
+  },
 
   /** Calculates linear interpolation between two vectors. */
-  lerp: (a: Vector3, b: Vector3, t: number): Vector3 => ({
-    x: lerp(a.x, b.x, t),
-    y: lerp(a.y, b.y, t),
-    z: lerp(a.z, b.z, t),
-  }),
+  lerp(a: Vector3, b: Vector3, t: number): Vector3 {
+    return {
+      x: lerp(a.x, b.x, t),
+      y: lerp(a.y, b.y, t),
+      z: lerp(a.z, b.z, t),
+    }
+  },
 
   /** Calculates arc linear interpolation between two vectors. */
-  slerp: (a: Vector3, b: Vector3, t: number): Vector3 => {
+  slerp(a: Vector3, b: Vector3, t: number): Vector3 {
     if (t < 0.01) return Vector3.lerp(a, b, t)
 
     a = Vector3.normalize(a)
@@ -134,7 +177,7 @@ const Vector3 = {
   },
 
   /** Generates uniformly distributed random unit vector. */
-  random: (): Vector3 => {
+  random(): Vector3 {
     const a = Math.acos(random(-1, 1))
     const b = random(0, 1) * Math.PI * 2
 
@@ -146,23 +189,28 @@ const Vector3 = {
   },
 
   /** Point on unit sphere. */
-  sphere: (phi: number, theta: number): Vector3 => ({
-    x: Math.cos(phi) * Math.sin(theta),
-    y: Math.cos(theta),
-    z: Math.sin(phi) * Math.sin(theta),
-  }),
+  sphere(phi: number, theta: number): Vector3 {
+    return {
+      x: Math.cos(phi) * Math.sin(theta),
+      y: Math.cos(theta),
+      z: Math.sin(phi) * Math.sin(theta),
+    }
+  },
 
-  read: (view: BufferView): Vector3 => ({
-    x: view.readFloat32(),
-    y: view.readFloat32(),
-    z: view.readFloat32(),
-  }),
+  read(view: BufferView): Vector3 {
+    return {
+      x: view.readFloat32(),
+      y: view.readFloat32(),
+      z: view.readFloat32(),
+    }
+  },
 
-  write: ({ x, y, z }: Vector3) =>
-    BufferView.allocate(Float32Array.BYTES_PER_ELEMENT * 3)
-      .writeFloat32(x)
-      .writeFloat32(y)
-      .writeFloat32(z),
+  write(vector: Vector3) {
+    return BufferView.allocate(Float32Array.BYTES_PER_ELEMENT * 3)
+      .writeFloat32(vector.x)
+      .writeFloat32(vector.y)
+      .writeFloat32(vector.z)
+  },
 }
 
 export default Vector3

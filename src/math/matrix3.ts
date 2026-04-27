@@ -1,85 +1,116 @@
 import BufferView from '#/utility/bufferview.js'
 import Vector3 from './vector3.js'
+import type Vector4 from './vector4.js'
 
 /** 3x3 transformation matrix. */
-type Matrix3 = { x: Vector3; y: Vector3; z: Vector3 }
+interface Matrix3 {
+  x: Vector3
+  y: Vector3
+  z: Vector3
+}
 
 const Matrix3 = {
   /** Identity matrix. */
   identity: { x: Vector3.x, y: Vector3.y, z: Vector3.z } as const,
 
   /** Tests if value is a matrix-like object. */
-  is: (value: unknown): value is Matrix3 =>
-    value !== null &&
-    typeof value === 'object' &&
-    'x' in value &&
-    'y' in value &&
-    'z' in value &&
-    Vector3.is(value.x) &&
-    Vector3.is(value.y) &&
-    Vector3.is(value.z),
+  is(value: unknown): value is Matrix3 {
+    return (
+      value !== null &&
+      typeof value === 'object' &&
+      'x' in value &&
+      'y' in value &&
+      'z' in value &&
+      Vector3.is(value.x) &&
+      Vector3.is(value.y) &&
+      Vector3.is(value.z)
+    )
+  },
 
   /** Tests if matrix has any NaN components. */
-  isNaN: ({ x, y, z }: Matrix3): boolean =>
-    Vector3.isNaN(x) || Vector3.isNaN(y) || Vector3.isNaN(z),
+  isNaN(matrix: Matrix3): boolean {
+    return Vector3.isNaN(matrix.x) || Vector3.isNaN(matrix.y) || Vector3.isNaN(matrix.z)
+  },
 
   /** Tests if matrix has finite components. */
-  isFinite: ({ x, y, z }: Matrix3): boolean =>
-    Vector3.isFinite(x) && Vector3.isFinite(y) && Vector3.isFinite(z),
+  isFinite(matrix: Matrix3): boolean {
+    return Vector3.isFinite(matrix.x) && Vector3.isFinite(matrix.y) && Vector3.isFinite(matrix.z)
+  },
 
   /** Tests if two matrices are equal within margin of error. */
-  equal: (a: Matrix3, b: Matrix3, epsilon?: number): boolean =>
-    Vector3.equal(a.x, b.x, epsilon) &&
-    Vector3.equal(a.y, b.y, epsilon) &&
-    Vector3.equal(a.z, b.z, epsilon),
+  equal(a: Matrix3, b: Matrix3, epsilon?: number): boolean {
+    return (
+      Vector3.equal(a.x, b.x, epsilon) &&
+      Vector3.equal(a.y, b.y, epsilon) &&
+      Vector3.equal(a.z, b.z, epsilon)
+    )
+  },
 
   /** Transforms vector by matrix. */
-  transform: ({ x, y, z }: Vector3, { x: u, y: v, z: w }: Matrix3): Vector3 => ({
-    x: x * u.x + y * v.x + z * w.x,
-    y: x * u.y + y * v.y + z * w.y,
-    z: x * u.z + y * v.z + z * w.z,
-  }),
+  transform(vector: Vector3, matrix: Matrix3): Vector3 {
+    const { x, y, z } = vector
+    const { x: u, y: v, z: w } = matrix
+
+    return {
+      x: x * u.x + y * v.x + z * w.x,
+      y: x * u.y + y * v.y + z * w.y,
+      z: x * u.z + y * v.z + z * w.z,
+    }
+  },
 
   /** Creates a copy of matrix. */
-  copy: ({ x = Vector3.x, y = Vector3.y, z = Vector3.z }: Partial<Matrix3>): Matrix3 => ({
-    x: Vector3.copy(x),
-    y: Vector3.copy(y),
-    z: Vector3.copy(z),
-  }),
+  copy(matrix: Partial<Matrix3>): Matrix3 {
+    const { x = Vector3.x, y = Vector3.y, z = Vector3.z } = matrix
+
+    return {
+      x: Vector3.copy(x),
+      y: Vector3.copy(y),
+      z: Vector3.copy(z),
+    }
+  },
 
   /** Calculates matrix determinant (1 for normal and -1 for flipped matrices). */
-  determinant: ({ x, y, z }: Matrix3) =>
-    x.x * (y.y * z.z - y.z * z.y) - x.y * (y.x * z.z - y.z * z.x) + x.z * (y.x * z.y - y.y * z.x),
+  determinant(matrix: Matrix3) {
+    const { x, y, z } = matrix
+
+    return (
+      x.x * (y.y * z.z - y.z * z.y) - x.y * (y.x * z.z - y.z * z.x) + x.z * (y.x * z.y - y.y * z.x)
+    )
+  },
 
   /**
    * Transposes matrix rows and columns.
    * @param matrix Input matrix
    * @returns
    */
-  transpose: ({ x, y, z }: Matrix3): Matrix3 => ({
-    x: {
-      x: x.x,
-      y: y.x,
-      z: z.x,
-    },
-    y: {
-      x: x.y,
-      y: y.y,
-      z: z.y,
-    },
-    z: {
-      x: x.z,
-      y: y.z,
-      z: z.z,
-    },
-  }),
+  transpose(matrix: Matrix3): Matrix3 {
+    const { x, y, z } = matrix
+
+    return {
+      x: {
+        x: x.x,
+        y: y.x,
+        z: z.x,
+      },
+      y: {
+        x: x.y,
+        y: y.y,
+        z: z.y,
+      },
+      z: {
+        x: x.z,
+        y: y.z,
+        z: z.z,
+      },
+    }
+  },
 
   /** Calculates inversion of a matrix. */
-  invert: (m: Matrix3): Matrix3 => {
-    const d = 1 / Matrix3.determinant(m)
+  invert(matrix: Matrix3): Matrix3 {
+    const d = 1 / Matrix3.determinant(matrix)
     if (!isFinite(d)) throw new Error()
 
-    const { x, y, z } = m
+    const { x, y, z } = matrix
 
     return {
       x: {
@@ -101,7 +132,7 @@ const Matrix3 = {
   },
 
   /** Multiplies two matrices. */
-  multiply: (a: Matrix3, b: Matrix3): Matrix3 => {
+  multiply(a: Matrix3, b: Matrix3): Matrix3 {
     const { x: ax, y: ay, z: az } = a
     const { x: bx, y: by, z: bz } = b
 
@@ -130,7 +161,9 @@ const Matrix3 = {
    * @param angle Turn angle (radians)
    * @returns
    */
-  axisAngle: ({ x, y, z }: Vector3, angle: number): Matrix3 => {
+  axisAngle(axis: Vector3, angle: number): Matrix3 {
+    const { x, y, z } = axis
+
     const co = Math.cos(angle)
     const si = Math.sin(angle)
     const t = 1 - co
@@ -162,7 +195,9 @@ const Matrix3 = {
   },
 
   /** Creates matrix from quaternion. */
-  fromQuaternion: ({ x, y, z, w }: Vector3 & { w: number }): Matrix3 => {
+  fromQuaternion(quat: Vector4): Matrix3 {
+    const { x, y, z, w } = quat
+
     const xx = x * x
     const xy = x * y
     const xz = x * z
@@ -193,7 +228,7 @@ const Matrix3 = {
   },
 
   /** Creates matrix oriented towards direction vector. */
-  lookAt: (direction: Vector3, up: Vector3 = Vector3.y): Matrix3 => {
+  lookAt(direction: Vector3, up: Vector3 = Vector3.y): Matrix3 {
     const x = Vector3.normalize(direction)
     const y = Vector3.normalize(Vector3.cross(Vector3.normalize(up), x))
     const z = Vector3.normalize(Vector3.cross(x, y))
@@ -203,24 +238,31 @@ const Matrix3 = {
 
   /**
    * Pushes transformation matrix into transform stack.
-   * @param array
-   * @param value
+   * @param stack Matrix stack
+   * @param matrix Matrix to be pushed
    * @returns
    */
-  push: (array: Matrix3[], value: Matrix3) => {
-    const last = array.at(-1)
-    array.push((value = last ? Matrix3.multiply(value, last) : Matrix3.copy(value)))
-    return value
+  push(stack: Matrix3[], matrix: Matrix3) {
+    const last = stack.at(-1)
+    stack.push((matrix = last ? Matrix3.multiply(matrix, last) : Matrix3.copy(matrix)))
+    return matrix
   },
 
-  read: (view: BufferView): Matrix3 => ({
-    x: Vector3.read(view),
-    y: Vector3.read(view),
-    z: Vector3.read(view),
-  }),
+  read(view: BufferView): Matrix3 {
+    return {
+      x: Vector3.read(view),
+      y: Vector3.read(view),
+      z: Vector3.read(view),
+    }
+  },
 
-  write: ({ x, y, z }: Matrix3) =>
-    BufferView.join(Vector3.write(x), Vector3.write(y), Vector3.write(z)),
+  write(matrix: Matrix3) {
+    return BufferView.join(
+      Vector3.write(matrix.x),
+      Vector3.write(matrix.y),
+      Vector3.write(matrix.z),
+    )
+  },
 }
 
 export default Matrix3

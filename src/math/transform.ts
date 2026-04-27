@@ -3,37 +3,56 @@ import Vector3 from './vector3.js'
 import Vector4 from './vector4.js'
 
 /** Transformation stack element. */
-type Transform = { position: Vector3; orientation: Quat }
+interface Transform {
+  position: Vector3
+  orientation: Quat
+}
 
 const Transform = {
   /** Creates a copy of transform. */
-  copy: ({ position, orientation }: Transform): Transform => ({
-    position: Vector3.copy(position),
-    orientation: Vector4.copy(orientation),
-  }),
+  copy(transform: Transform): Transform {
+    let { position, orientation } = transform
+
+    position = Vector3.copy(position)
+    orientation = Vector4.copy(orientation)
+
+    return { position, orientation }
+  },
 
   /** Transforms vector by a transform object. */
-  transform: (v: Vector3, t: Transform): Vector3 =>
-    Vector3.add(Quat.transform(v, t.orientation), t.position),
+  transform(vector: Vector3, transform: Transform): Vector3 {
+    const position = Quat.transform(vector, transform.orientation)
+
+    return Vector3.add(position, transform.position)
+  },
 
   /** Transforms vector by inverse of transform object. */
-  revert: (v: Vector3, t: Transform): Vector3 =>
-    Quat.transform(Vector3.subtract(v, t.position), Quat.conjugate(t.orientation)),
+  revert(vector: Vector3, transform: Transform): Vector3 {
+    const orientation = Quat.conjugate(transform.orientation)
+    const position = Vector3.subtract(vector, transform.position)
+
+    return Quat.transform(position, orientation)
+  },
 
   /** Multiplies transform by a transform object. */
-  multiply: (child: Transform, parent: Transform): Transform => ({
-    position: Vector3.add(Quat.transform(child.position, parent.orientation), parent.position),
-    orientation: Quat.multiply(parent.orientation, child.orientation),
-  }),
+  multiply(child: Transform, parent: Transform): Transform {
+    const orientation = Quat.multiply(parent.orientation, child.orientation)
+    let position = Quat.transform(child.position, parent.orientation)
+    position = Vector3.add(position, parent.position)
+
+    return { position, orientation }
+  },
 
   /** Interpolates between two transforms. */
-  interpolate: (a: Transform, b: Transform, t: number): Transform => ({
-    position: Vector3.lerp(a.position, b.position, t),
-    orientation: Quat.slerp(a.orientation, b.orientation, t),
-  }),
+  interpolate(source: Transform, target: Transform, t: number): Transform {
+    const orientation = Quat.slerp(source.orientation, target.orientation, t)
+    const position = Vector3.lerp(source.position, target.position, t)
+
+    return { position, orientation }
+  },
 
   /** Pushes transform to transform stack. */
-  push: (stack: Transform[], transform: Transform): void => {
+  push(stack: Transform[], transform: Transform): void {
     const last = stack.at(-1)
     stack.push(last ? Transform.multiply(transform, last) : Transform.copy(transform))
   },
