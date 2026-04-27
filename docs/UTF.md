@@ -13,26 +13,117 @@ A UTF file consists of a fixed header followed by three data regions:
 | **Dictionary block** | NUL-terminated ASCII entry names, deduplicated by CRC32                                                       |
 | **Data block**       | Raw file payloads                                                                                             |
 
+## Header
+
+The header is 56 bytes: an 8-byte version block followed by a 48-byte field block.
+
+| Field                | Type   | Description                                                       |
+| -------------------- | ------ | ----------------------------------------------------------------- |
+| `signature`          | uint32 | Magic bytes `UTF ` (`0x20465455`); must match exactly             |
+| `version`            | uint32 | Format version; only `0x101` is valid                             |
+| `treeOffset`         | uint32 | Byte offset to the tree block                                     |
+| `treeSize`           | uint32 | Byte size of the tree block                                       |
+| `entryOffset`        | uint32 | Offset of the root entry within the tree block                    |
+| `entrySize`          | uint32 | Byte size of one entry; must be 44 (`0x2c`)                       |
+| `namesOffset`        | uint32 | Byte offset to the dictionary block                               |
+| `namesSizeAllocated` | uint32 | Allocated byte size of the dictionary block                       |
+| `namesSizeUsed`      | uint32 | Used byte size of the dictionary block (≤ `namesSizeAllocated`)   |
+| `dataOffset`         | uint32 | Byte offset to the data block                                     |
+| `unusedOffset`       | uint32 | Offset to extra data (unused)                                     |
+| `unusedSize`         | uint32 | Size of extra data (unused)                                       |
+| `filetime`           | uint64 | Windows 64-bit FILETIME (file creation time)                      |
+
 ## Tree entries
 
 Each tree entry is 44 bytes and encodes one node (directory or file):
 
-| Field           | Type   | Description                                    |
-| --------------- | ------ | ---------------------------------------------- |
-| `nameOffset`    | uint32 | Byte offset into the dictionary block          |
-| `unknown`       | uint32 | Unused                                         |
-| `flags`         | uint32 | `0x10` = directory, `0x80` = file with data    |
-| `siblingOffset` | uint32 | Offset to next sibling entry (0 if none)       |
-| `childOffset`   | uint32 | Offset to first child entry (directories only) |
-| `dataOffset`    | uint32 | Byte offset into the data block (files only)   |
-| `dataLength`    | uint32 | Byte length of the file payload                |
-| `nameHash`      | uint32 | CRC32 of the entry name (used for lookup)      |
-| `timestamp`     | uint32 | DOS timestamp                                  |
-| `unknown2`      | uint32 | Unused                                         |
-| `unknown3`      | uint32 | Unused                                         |
+| Field                  | Type   | Description                                                             |
+| ---------------------- | ------ | ----------------------------------------------------------------------- |
+| `nextOffset`           | uint32 | Offset to next sibling entry relative to tree block                     |
+| `nameOffset`           | uint32 | Offset to entry name in dictionary block                                |
+| `fileAttributes`       | uint32 | Win32 `dwFileAttributes`; `0x10` = directory, `0x80` = file with data  |
+| `sharingAttributes`    | uint32 | Unused filesystem sharing bitmask                                       |
+| `childOffset`          | uint32 | First child (directories) or data offset (files) relative to block base |
+| `dataSizeAllocated`    | uint32 | Allocated byte length in data block                                     |
+| `dataSizeUsed`         | uint32 | Actual byte length of file payload                                      |
+| `dataSizeUncompressed` | uint32 | Uncompressed size; typically equal to `dataSizeUsed`                   |
+| `createTime`           | uint32 | DOS creation timestamp                                                  |
+| `accessTime`           | uint32 | DOS last-access timestamp                                               |
+| `modifyTime`           | uint32 | DOS last-modification timestamp                                         |
 
 ## Parsing
 
 `Directory.read(view)` parses the binary using a BFS queue starting from the root tree entry. `Directory.write()` re-serializes the in-memory tree back to binary. Both operate on `BufferView`, an internal stateful `DataView` subclass with sequential read/write methods and little-endian default.
 
-Path lookups (`getDirectory`, `getFile`) match entry names using `getResourceId` (Freelancer CRC32) for case-insensitive comparison.
+Path lookups (`getDirectory`, `getFile`) compare entry names via `getResourceId` (Freelancer CRC32) for case-insensitive matching.
+
+## API
+
+### `Directory`
+
+| Member                  | Description                                                       |
+| ----------------------- | ----------------------------------------------------------------- |
+| `static read(input)`    | Parses a UTF binary from a `Uint8Array`; returns root `Directory` |
+| `write()`               | Serializes the tree to a `Uint8Array`                             |
+| `getDirectory(...path)` | Finds a nested directory by path segments                         |
+| `setDirectory(...path)` | Finds or creates a nested directory                               |
+| `getFile(...path)`      | Finds a file by path (last segment is filename)                   |
+| `setFile(...path)`      | Finds or creates a file                                           |
+| `delete(...path)`       | Removes all entries matching the path                             |
+| `append(...entries)`    | Inserts or replaces children by name                              |
+| `directories`           | Filtered list of child `Directory` instances                      |
+| `files`                 | Filtered list of child `File` instances                           |
+
+### `File`
+
+| Member                     | Description                                                            |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `readIntegers()`           | Iterator of signed integers (32/16/8-bit depending on remaining bytes) |
+| `writeIntegers(...values)` | Appends values as 32-bit signed integers                               |
+| `readFloats()`             | Iterator of 32-bit floats                                              |
+| `writeFloats(...values)`   | Appends values as 32-bit floats                                        |
+| `readStrings()`            | Iterator of NUL-terminated strings                                     |
+| `writeStrings(...values)`  | Appends NUL-separated strings                                          |
+| `append(...views)`         | Appends raw `ArrayBufferView` data                                     |
+
+## Utilities (`@treewyrm/utf2json/utils`)
+
+```ts
+import {
+  toDOSTimestamp,
+  fromDOSTimestamp,
+  toFileTime,
+  fromFileTime,
+  toHex,
+  isHex,
+  parseHex,
+  getResourceId,
+  getObjectId,
+  getResource,
+  getObject,
+  type Hash,
+} from '@treewyrm/utf2json/utils'
+```
+
+| Export                                 | Description                                       |
+| -------------------------------------- | ------------------------------------------------- |
+| `toDOSTimestamp(date)`                 | `Date` → 32-bit DOS timestamp                     |
+| `fromDOSTimestamp(value)`              | 32-bit DOS timestamp → `Date`                     |
+| `toFileTime(date)`                     | `Date` → Windows 64-bit FILETIME (`bigint`)       |
+| `fromFileTime(value)`                  | Windows FILETIME → `Date`                         |
+| `toHex(value, byteLength?, prefix?)`   | Number to hex string                              |
+| `isHex(value)`                         | Tests for `0x…` hex string                        |
+| `parseHex(value)`                      | Parses `0x…` hex string                           |
+| `getResourceId(value, caseSensitive?)` | CRC32 hash (materials, mesh names, UTF resources) |
+| `getObjectId(value, caseSensitive?)`   | id32 hash (object nicknames, INI references)      |
+| `getResource(items, predicate, value)` | Finds array entry by CRC32 key                    |
+| `getObject(items, predicate, value)`   | Finds array entry by id32 key                     |
+
+### Hash functions
+
+Two hash algorithms match Freelancer's internal conventions:
+
+- **`getResourceId`** — Freelancer CRC32 (table extracted from `dacom.dll`). Used for material names, mesh library names, and most UTF resource references.
+- **`getObjectId`** — A byte-swapped CRC32 variant (`id32`). Used for object/archetype nicknames typically found in INI files.
+
+Both accept `number | string | ArrayBufferView | ArrayBufferLike` and default to case-insensitive matching.

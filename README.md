@@ -2,7 +2,7 @@
 
 TypeScript library for reading and writing UTF (Universal Tree Format) files — a bespoke binary container format used by the Freelancer PC game (2003).
 
-See [docs/UTF.md](docs/UTF.md) for the binary format specification.
+See [docs/UTF.md](docs/UTF.md) for the binary format specification and API reference.
 
 ## Installation
 
@@ -88,77 +88,6 @@ root.append(new Directory('NewDir'), new File('newfile'))
 const subdirs = root.directories // Directory[]
 const files = root.files // File[]
 ```
-
-## API
-
-### `Directory`
-
-| Member                  | Description                                                       |
-| ----------------------- | ----------------------------------------------------------------- |
-| `static read(input)`    | Parses a UTF binary from a `Uint8Array`; returns root `Directory` |
-| `write()`               | Serializes the tree to a `Uint8Array`                             |
-| `getDirectory(...path)` | Finds a nested directory by path segments                         |
-| `setDirectory(...path)` | Finds or creates a nested directory                               |
-| `getFile(...path)`      | Finds a file by path (last segment is filename)                   |
-| `setFile(...path)`      | Finds or creates a file                                           |
-| `delete(...path)`       | Removes all entries matching the path                             |
-| `append(...entries)`    | Inserts or replaces children by name                              |
-| `directories`           | Filtered list of child `Directory` instances                      |
-| `files`                 | Filtered list of child `File` instances                           |
-
-### `File`
-
-| Member                     | Description                                                            |
-| -------------------------- | ---------------------------------------------------------------------- |
-| `readIntegers()`           | Iterator of signed integers (32/16/8-bit depending on remaining bytes) |
-| `writeIntegers(...values)` | Appends values as 32-bit signed integers                               |
-| `readFloats()`             | Iterator of 32-bit floats                                              |
-| `writeFloats(...values)`   | Appends values as 32-bit floats                                        |
-| `readStrings()`            | Iterator of NUL-terminated strings                                     |
-| `writeStrings(...values)`  | Appends NUL-separated strings                                          |
-| `append(...views)`         | Appends raw `ArrayBufferView` data                                     |
-
-## Utilities export (`@treewyrm/utf/utils`)
-
-```ts
-import {
-  toDOSTimestamp,
-  fromDOSTimestamp,
-  toFileTime,
-  fromFileTime,
-  toHex,
-  isHex,
-  parseHex,
-  getResourceId,
-  getObjectId,
-  getResource,
-  getObject,
-  type Hash,
-} from '@treewyrm/utf2json/utils'
-```
-
-| Export                                 | Description                                       |
-| -------------------------------------- | ------------------------------------------------- |
-| `toDOSTimestamp(date)`                 | `Date` → 32-bit DOS timestamp                     |
-| `fromDOSTimestamp(value)`              | 32-bit DOS timestamp → `Date`                     |
-| `toFileTime(date)`                     | `Date` → Windows 64-bit FILETIME (`bigint`)       |
-| `fromFileTime(value)`                  | Windows FILETIME → `Date`                         |
-| `toHex(value, byteLength?, prefix?)`   | Number to hex string                              |
-| `isHex(value)`                         | Tests for `0x…` hex string                        |
-| `parseHex(value)`                      | Parses `0x…` hex string                           |
-| `getResourceId(value, caseSensitive?)` | CRC32 hash (materials, mesh names, UTF resources) |
-| `getObjectId(value, caseSensitive?)`   | id32 hash (object nicknames, INI references)      |
-| `getResource(items, predicate, value)` | Finds array entry by CRC32 key                    |
-| `getObject(items, predicate, value)`   | Finds array entry by id32 key                     |
-
-### Hash functions
-
-Two hash algorithms match Freelancer's internal conventions:
-
-- **`getResourceId`** — Freelancer CRC32 (table extracted from `dacom.dll`). Used for material names, mesh library names, and most UTF resource references.
-- **`getObjectId`** — A byte-swapped CRC32 variant (`id32`). Used for object/archetype nicknames typically found in INI files.
-
-Both accept `number | string | ArrayBufferView | ArrayBufferLike` and default to case-insensitive matching.
 
 ## Development
 
