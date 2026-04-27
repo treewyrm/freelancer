@@ -8,6 +8,7 @@ export const clamp = (a: number, min = -Infinity, max = Infinity): number =>
 
 export const mod = (a: number, b: number): number => ((a % b) + b) % b
 
+// 1 on positive integers is intentional (hold at end of animation cycle)
 export const fract = (a: number): number => (a > 0 ? 1 + Math.floor(-a) + a : a - Math.floor(a))
 
 export const saw = (v: number, a = 1, p = 1): number => (p !== 0 ? (a * mod(v, p)) / p : 0)

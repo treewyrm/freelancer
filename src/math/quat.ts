@@ -64,6 +64,37 @@ const Quat = {
     return { axis: Vector3.copy(Vector3.x), angle: r }
   },
 
+  /** Generates shortest-arc quaternion rotating unit vector `from` onto unit vector `to`. */
+  fromTo(from: Vector3, to: Vector3): Vector4 {
+    const d = Vector3.dot(from, to)
+
+    if (d < -1 + 1e-6) {
+      const perp = Math.abs(from.x) < 0.9
+        ? Vector3.normalize(Vector3.cross(from, Vector3.x))
+        : Vector3.normalize(Vector3.cross(from, Vector3.y))
+      return { x: perp.x, y: perp.y, z: perp.z, w: 0 }
+    }
+
+    const c = Vector3.cross(from, to)
+    const w = Math.sqrt(2 * (1 + d))
+    return { x: c.x / w, y: c.y / w, z: c.z / w, w: w / 2 }
+  },
+
+  /** Generates quaternion from intrinsic XYZ Euler angles (radians). */
+  fromEuler(x: number, y: number, z: number): Vector4 {
+    const hx = x * 0.5, hy = y * 0.5, hz = z * 0.5
+    const cx = Math.cos(hx), sx = Math.sin(hx)
+    const cy = Math.cos(hy), sy = Math.sin(hy)
+    const cz = Math.cos(hz), sz = Math.sin(hz)
+
+    return {
+      x: sx * cy * cz - cx * sy * sz,
+      y: cx * sy * cz + sx * cy * sz,
+      z: cx * cy * sz - sx * sy * cz,
+      w: cx * cy * cz + sx * sy * sz,
+    }
+  },
+
   /** Generates quaternion from a matrix. */
   fromMatrix(matrix: Matrix3): Vector4 {
     const { x, y, z } = matrix
@@ -124,6 +155,17 @@ const Quat = {
         Vector3.multiplyScalar(Vector3.cross(quat, u), 2),
       ),
     )
+  },
+
+  /** Normalised linear interpolation — cheaper than slerp, accurate for small angles. */
+  nlerp(a: Vector4, b: Vector4, t: number): Vector4 {
+    if (Vector4.dot(a, b) < 0) b = Vector4.multipyScalar(b, -1)
+    return Vector4.normalize({
+      x: a.x + t * (b.x - a.x),
+      y: a.y + t * (b.y - a.y),
+      z: a.z + t * (b.z - a.z),
+      w: a.w + t * (b.w - a.w),
+    })
   },
 
   /** Calculate quaternion spherical interpolation. */
