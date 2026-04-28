@@ -7,6 +7,7 @@ export default defineConfig({
     './src/vmesh/index.ts',
     './src/model/index.ts',
     './src/utility/index.ts',
+    './src/surface/index.ts',
     './src/index.ts',
   ],
   platform: 'neutral',

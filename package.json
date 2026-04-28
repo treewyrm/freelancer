@@ -40,6 +40,10 @@
     "./model": {
       "import": "./dist/model/index.js",
       "types": "./dist/model/index.d.ts"
+    },
+    "./surface": {
+      "import": "./dist/surface/index.js",
+      "types": "./dist/surface/index.d.ts"
     }
   },
   "main": "./dist/index.js",
@@ -65,6 +69,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/treewyrm/utf.git"
+    "url": "git+https://github.com/treewyrm/utf2json.git"
   }
 }
