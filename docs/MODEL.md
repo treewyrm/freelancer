@@ -1,8 +1,8 @@
 # Model
 
-Reader and writer for Freelancer rigid models — the `.3db` (single part) and `.cmp` (compound) UTF trees. A model is either a **single part** or a **compound**: a hierarchy of named parts, each stored in its own UTF fragment directory and connected to its parent by a **joint**.
+Reader and writer for Freelancer rigid models — the `.3db` (single part), `.cmp` (compound) and `.sph` (procedural sphere) UTF trees. A model is either a **single part** or a **compound**: a hierarchy of named parts, each stored in its own UTF fragment directory and connected to its parent by a **joint**.
 
-Geometry itself is not handled here; parts delegate to [VMESH.md](VMESH.md) (`VMeshPart` / `MultiLevel`). This module covers the surrounding structure: compound hierarchy, constraints, joints, hardpoints, and cameras.
+Geometry itself is not handled here; parts delegate to [VMESH.md](VMESH.md) (`VMeshPart` / `MultiLevel`). This module covers the surrounding structure: compound hierarchy, constraints, joints, hardpoints, cameras, and spheres.
 
 ## Architecture
 
@@ -22,6 +22,14 @@ Single-part model (.3db)
   <root> (UTF directory)
     ├─ MultiLevel | VMeshPart
     └─ Hardpoints
+
+Sphere model (.sph)
+  <root> (UTF directory)
+    └─ Sphere
+         ├─ M0..M5 ── material name per cube face
+         ├─ M6     ── atmosphere material name (optional)
+         ├─ Radius (float32)
+         └─ Sides  (int32, number of M entries)
 ```
 
 The `Cmpnd` subdirectories carry only names and fragment filenames; the hierarchy itself is reconstructed from the constraint list in `Cons`, which links a parent object name to a child object name via a joint.
@@ -48,13 +56,13 @@ interface Model<T> extends Compound<Model<T>> {
 
 ### Functions
 
-| Function                                    | Description                                                                                       |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `readModel(parent, read)`                   | Reads the `Cmpnd` subtree; calls `read(fragment)` per part and returns the root `Model<T>`        |
-| `writeModel(root, write)`                   | Serializes a `Model<T>` tree into a new `Directory`, calling `write(part)` per fragment           |
-| `isCompoundModel(directory)`                | True when the directory has a `Cmpnd` child (i.e. compound rather than single-part)               |
-| `arrangeByConstraints(objects, constraints)` | Links flat objects into a tree by matching constraint parent/child names, assigning `joint`       |
-| `getModelHardpoint(root, predicate, name)`  | Searches the whole tree for a hardpoint by name/CRC; returns `{ hardpoint, parent }` or `undefined` |
+| Function                                     | Description                                                                                         |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `readModel(parent, read)`                    | Reads the `Cmpnd` subtree; calls `read(fragment)` per part and returns the root `Model<T>`          |
+| `writeModel(root, write)`                    | Serializes a `Model<T>` tree into a new `Directory`, calling `write(part)` per fragment             |
+| `isCompoundModel(directory)`                 | True when the directory has a `Cmpnd` child (i.e. compound rather than single-part)                 |
+| `arrangeByConstraints(objects, constraints)` | Links flat objects into a tree by matching constraint parent/child names, assigning `joint`         |
+| `getModelHardpoint(root, predicate, name)`   | Searches the whole tree for a hardpoint by name/CRC; returns `{ hardpoint, parent }` or `undefined` |
 
 `readModel` throws when the `Cmpnd` directory, an `Object name`, a `File name`, the fragment directory, or the root object is missing. The root is the `Root`-prefixed subdirectory; remaining `Part_*` subdirectories become its descendants.
 
@@ -76,7 +84,7 @@ interface Rigid {
   wireframe?: VMeshWire // optional edge overlay drawn over the geometry
 }
 
-type RigidPart = Rigid | Camera
+type RigidPart = Rigid | Camera | Sphere
 type RigidModel = Model<RigidPart> | RigidPart
 ```
 
@@ -84,14 +92,14 @@ A `RigidModel` is either a compound tree of rigid parts or a single bare part �
 
 ### Functions
 
-| Function                    | Description                                                             |
-| --------------------------- | ------------------------------------------------------------------------ |
-| `readRigidModel(directory)` | Reads a `.cmp` compound or a `.3db` single part, whichever is present   |
-| `writeRigidModel(model)`    | Serializes either form back into a `Directory`                          |
-| `readRigid(parent)`         | Reads hardpoints, `MultiLevel` (preferred) or `VMeshPart`, plus any `VMeshWire` |
-| `writeRigid(rigid)`         | Writes geometry and, when present, `Hardpoints` and `VMeshWire`        |
-| `readPart(directory)`       | Dispatches to `readCamera` when the directory looks like a camera        |
-| `writePart(part)`           | Dispatches by `part.type`                                               |
+| Function                    | Description                                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
+| `readRigidModel(directory)` | Reads a `.cmp` compound or a `.3db` single part, whichever is present                          |
+| `writeRigidModel(model)`    | Serializes either form back into a `Directory`                                                 |
+| `readRigid(parent)`         | Reads hardpoints, `MultiLevel` (preferred) or `VMeshPart`, plus any `VMeshWire`                |
+| `writeRigid(rigid)`         | Writes geometry and, when present, `Hardpoints` and `VMeshWire`                                |
+| `readPart(directory)`       | Dispatches to `readCamera` or `readSphere` when the directory looks like one, else `readRigid` |
+| `writePart(part)`           | Dispatches by `part.type`                                                                      |
 
 ---
 
@@ -99,16 +107,18 @@ A `RigidModel` is either a compound tree of rigid parts or a single bare part �
 
 A `Joint` describes how a child part is attached to its parent, and which degrees of freedom animation may drive.
 
-| Type          | Fields                                                                       | Animation                                     |
-| ------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
-| `'fixed'`     | `position`, `rotation`                                                       | None — rigid attachment                       |
-| `'revolute'`  | `position`, `offset`, `rotation`, `axis`, `min`, `max`                       | Angle around `axis`, clamped to `min`/`max`   |
-| `'prismatic'` | `position`, `offset`, `rotation`, `axis`, `min`, `max`                       | Offset along `axis`, clamped to `min`/`max`   |
-| `'cylinder'`  | `position`, `rotation`, `axis`, `minPris`, `maxPris`, `minRev`, `maxRev`     | Rotation + slide; keyframe layout unknown     |
-| `'sphere'`    | `position`, `offset`, `rotation`, `minX/maxX`, `minY/maxY`, `minZ/maxZ`      | Rotation by quaternion within per-axis limits |
-| `'loose'`     | `position`, `rotation`                                                       | Unconstrained motion (vector + rotation)      |
+| Type          | Fields                                                                   | Animation                                     |
+| ------------- | ------------------------------------------------------------------------ | --------------------------------------------- |
+| `'fixed'`     | `position`, `rotation`                                                   | None — rigid attachment                       |
+| `'revolute'`  | `position`, `offset`, `rotation`, `axis`, `min`, `max`                   | Angle around `axis`, clamped to `min`/`max`   |
+| `'prismatic'` | `position`, `offset`, `rotation`, `axis`, `min`, `max`                   | Offset along `axis`, clamped to `min`/`max`   |
+| `'cylinder'`  | `position`, `rotation`, `axis`, `minPris`, `maxPris`, `minRev`, `maxRev` | Rotation + slide; keyframe layout unknown     |
+| `'sphere'`    | `position`, `offset`, `rotation`, `minX/maxX`, `minY/maxY`, `minZ/maxZ`  | Rotation by quaternion within per-axis limits |
+| `'loose'`     | `position`, `rotation`                                                   | Unconstrained motion (vector + rotation)      |
 
 `position`/`offset`/`axis` are `Vector3`, `rotation` is `Matrix3`; both are read and written through the [`math`](../src/math) helpers. Each joint type has a matching `readX(view)` / `writeX(joint)` pair operating on a `BufferView`.
+
+The keyframes that drive these degrees of freedom live in the `Animation` directory beside `Cmpnd` — see [ANIMATION.md](ANIMATION.md).
 
 > **Cylinder joints are not implemented.** `readCylinder`/`writeCylinder` do not exist; `cyl` constraint records are recognized but skipped, and a `'cylinder'` joint is dropped on write.
 
@@ -128,18 +138,18 @@ interface Constraint {
 
 Constraints live in the `Cons` directory, one file per joint kind, each holding a packed array of records. A record is two 64-byte NUL-padded names (parent, then child) followed by the joint payload.
 
-| File     | Joint type    |
-| -------- | ------------- |
-| `Fix`    | `'fixed'`     |
-| `Rev`    | `'revolute'`  |
-| `Pris`   | `'prismatic'` |
+| File     | Joint type             |
+| -------- | ---------------------- |
+| `Fix`    | `'fixed'`              |
+| `Rev`    | `'revolute'`           |
+| `Pris`   | `'prismatic'`          |
 | `Cyl`    | `'cylinder'` (skipped) |
-| `Sphere` | `'sphere'`    |
-| `Loose`  | `'loose'`     |
+| `Sphere` | `'sphere'`             |
+| `Loose`  | `'loose'`              |
 
-| Function                     | Description                                                    |
-| ---------------------------- | -------------------------------------------------------------- |
-| `readConstraints(files)`     | Generator — yields a `Constraint` per record across all files  |
+| Function                        | Description                                                   |
+| ------------------------------- | ------------------------------------------------------------- |
+| `readConstraints(files)`        | Generator — yields a `Constraint` per record across all files |
 | `writeConstraints(constraints)` | Generator — yields one `File` per constraint record           |
 
 File names are matched case-insensitively on read.
@@ -166,14 +176,14 @@ interface Base<T> {
 
 ### Functions
 
-| Function                       | Description                                                            |
-| ------------------------------ | ------------------------------------------------------------------------ |
-| `readHardpoints(parent)`       | Generator — yields hardpoints from the `Hardpoints/Fixed` and `Hardpoints/Revolute` groups |
-| `writeHardpoints(hardpoints)`  | Builds a `Hardpoints` directory with `Fixed` / `Revolute` subgroups     |
-| `getHardpoint(hardpoints, name)` | Finds a hardpoint by name string or CRC (case-insensitive)            |
-| `readFixed` / `writeFixed`     | Single fixed hardpoint directory                                        |
-| `readRevolute` / `writeRevolute` | Single revolute hardpoint directory                                   |
-| `readPosition` / `writePosition`, `readOrientation` / `writeOrientation`, `readAxis` / `writeAxis` | Individual hardpoint files |
+| Function                                                                                           | Description                                                                                |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `readHardpoints(parent)`                                                                           | Generator — yields hardpoints from the `Hardpoints/Fixed` and `Hardpoints/Revolute` groups |
+| `writeHardpoints(hardpoints)`                                                                      | Builds a `Hardpoints` directory with `Fixed` / `Revolute` subgroups                        |
+| `getHardpoint(hardpoints, name)`                                                                   | Finds a hardpoint by name string or CRC (case-insensitive)                                 |
+| `readFixed` / `writeFixed`                                                                         | Single fixed hardpoint directory                                                           |
+| `readRevolute` / `writeRevolute`                                                                   | Single revolute hardpoint directory                                                        |
+| `readPosition` / `writePosition`, `readOrientation` / `writeOrientation`, `readAxis` / `writeAxis` | Individual hardpoint files                                                                 |
 
 > Prismatic hardpoints exist in the type union but are neither read from nor written to the `Hardpoints` directory.
 
@@ -197,6 +207,46 @@ interface Camera {
 
 ---
 
+## `sphere.ts` — Procedural Spheres
+
+Planets and stars ship as `.sph` files, which carry **no geometry at all**. The game tessellates a sphere at load time and skins it with one material per cube face, so the whole document is a single `Sphere` directory of material names, a radius, and a count.
+
+```ts
+interface Sphere {
+  type: 'sphere'
+  sides: string[] // material name per side, in M0..M6 order
+  radius: number // float32
+}
+```
+
+`isSphere(directory)` detects a sphere document by the presence of a `Sphere` directory.
+
+### Binary layout (`Sphere` UTF directory)
+
+| Entry      | Type    | Notes                                                          |
+| ---------- | ------- | -------------------------------------------------------------- |
+| `M0`..`M3` | ASCIIZ  | The four equatorial faces                                      |
+| `M4`, `M5` | ASCIIZ  | The polar caps                                                 |
+| `M6`       | ASCIIZ  | Atmosphere shell, drawn around the body; absent on some models |
+| `Radius`   | float32 |                                                                |
+| `Sides`    | int32   | Number of `M` entries; 1 to 7                                  |
+
+`Sides` is the authority on how many materials to read, and `writeSphere` derives it from `sides.length`. Across the retail data it always agrees with the number of `M` files present: 7 for planets with an atmosphere, 6 for `planet_neutron_800.sph`, and 1 for `sun.sph`.
+
+> **Unterminated names:** material names are NUL-terminated everywhere except `sun.sph`, whose `M0` is exactly the four bytes `none`. The reader treats the terminator as optional; the writer always emits one, so that single file grows by one byte on rewrite.
+
+> **Unhandled siblings:** `sun.sph` also carries root-level `Texture Library` and `Material Library` directories. Like `writeRigid`, `writeSphere` builds a fresh directory and does not carry unrecognised siblings across.
+
+### Functions
+
+| Function              | Description                                                             |
+| --------------------- | ----------------------------------------------------------------------- |
+| `isSphere(directory)` | True when the directory holds a `Sphere` child                          |
+| `readSphere(parent)`  | Reads the `Sphere` directory; throws when it or a listed `M` is missing |
+| `writeSphere(sphere)` | Writes a `Sphere` directory, deriving `Sides` from `sides.length`       |
+
+---
+
 ## `index.ts` — Public API
 
 ```ts
@@ -205,6 +255,11 @@ import {
   type Hardpoint,
   type Model,
   type RigidModel,
+  type RigidPart,
+  type Sphere,
+  isSphere,
+  readSphere,
+  writeSphere,
   getHardpoint,
   getModelHardpoint,
   readModel,
@@ -225,7 +280,11 @@ const root = Directory.read(readFileSync('ships/li_fighter.cmp'))
 const model = readRigidModel(root)
 
 if (model.type === 'compound') {
-  const mount = getModelHardpoint(model, (part) => (part.type === 'rigid' ? part.hardpoints : []), 'HpWeapon01')
+  const mount = getModelHardpoint(
+    model,
+    (part) => (part.type === 'rigid' ? part.hardpoints : []),
+    'HpWeapon01',
+  )
   console.log(mount?.parent.name, mount?.hardpoint.position)
 }
 ```

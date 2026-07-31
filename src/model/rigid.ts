@@ -5,6 +5,7 @@ import { readVMeshWire, writeVMeshWire, type VMeshWire } from '#/vmesh/wireframe
 import { isCamera, readCamera, writeCamera, type Camera } from './camera.js'
 import { isCompoundModel, type Model, readModel, writeModel } from './model.js'
 import { readHardpoints, writeHardpoints, type Hardpoint } from './hardpoint.js'
+import { isSphere, readSphere, writeSphere, type Sphere } from './sphere.js'
 
 export interface Rigid {
   type: 'rigid'
@@ -13,7 +14,7 @@ export interface Rigid {
   wireframe?: VMeshWire
 }
 
-export type RigidPart = Rigid | Camera
+export type RigidPart = Rigid | Camera | Sphere
 
 export type RigidModel = Model<RigidPart> | RigidPart
 
@@ -46,6 +47,7 @@ export function writeRigid(rigid: Rigid): Directory {
 
 export function readPart(directory: Directory): RigidPart {
   if (isCamera(directory)) return readCamera(directory)
+  if (isSphere(directory)) return readSphere(directory)
   return readRigid(directory)
 }
 
@@ -55,6 +57,8 @@ export function writePart(part: RigidPart): Directory {
       return writeRigid(part)
     case 'camera':
       return writeCamera(part)
+    case 'sphere':
+      return new Directory(undefined, [writeSphere(part)])
   }
 }
 
@@ -71,5 +75,7 @@ export function writeRigidModel(model: RigidModel): Directory {
       return writeModel(model, writePart)
     case 'camera':
       return writeCamera(model)
+    case 'sphere':
+      return writePart(model)
   }
 }

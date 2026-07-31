@@ -15,6 +15,7 @@ The package ships several entry points:
 | `@treewyrm/utf2json/math`       | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Transform`, scalar and keyframe helpers | —                       |
 | `@treewyrm/utf2json/vmesh`      | VMesh geometry parts and mesh library                                       | [VMESH.md](docs/VMESH.md)    |
 | `@treewyrm/utf2json/model`      | Rigid models: compound hierarchy, joints, hardpoints                        | [MODEL.md](docs/MODEL.md)    |
+| `@treewyrm/utf2json/animation`  | Keyframe animation scripts, shared by `.cmp` and `.anm`                     | [ANIMATION.md](docs/ANIMATION.md) |
 | `@treewyrm/utf2json/surface`    | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy          | [SURFACE.md](docs/SURFACE.md) |
 | `@treewyrm/utf2json/alchemy`    | Alchemy particle effects: node library and effect library                   | [ALCHEMY.md](docs/ALCHEMY.md) |
 

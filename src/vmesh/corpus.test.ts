@@ -1,0 +1,335 @@
+import { deepStrictEqual, ok, strictEqual } from 'node:assert/strict'
+import { describe, it } from 'node:test'
+import { list, load, skip } from '../corpus.js'
+import type Directory from '../directory.js'
+import type File from '../file.js'
+import { Format, Primitive, readVMeshData, vertexByteLength } from './data.js'
+import { getMeshDraw, readVMeshLibrary, writeVMeshLibrary } from './library.js'
+import { readMultiLevel } from './multilevel.js'
+import { readVMeshPart, writeVMeshPart } from './part.js'
+import { readVMeshWire, writeVMeshWire } from './wireframe.js'
+
+/** Every UTF container that can hold mesh data. `.sph` are planets, `.dfm` are characters. */
+const extensions = ['3db', 'cmp', 'sph', 'dfm', 'vms']
+
+const assets = () => load(...extensions)
+
+function* walk(directory: Directory): Generator<Directory> {
+  yield directory
+  for (const child of directory.directories) yield* walk(child)
+}
+
+const bytes = (file: File) => new Uint8Array(file.buffer, file.byteOffset, file.byteLength)
+
+describe('retail asset corpus', { skip }, () => {
+  it('finds assets to read', () => {
+    const paths = list(...extensions)
+
+    ok(paths.length > 1000, `expected a full DATA tree, found ${paths.length} files`)
+    strictEqual(assets().length, paths.length)
+  })
+
+  describe('VMeshData', () => {
+    it('reads every mesh in every library', () => {
+      let meshes = 0
+
+      for (const { path, root } of assets())
+        for (const directory of root.getDirectory('VMeshLibrary')?.directories ?? []) {
+          const data = readVMeshData(directory)
+          ok(data.name.length > 0, `${path}: unnamed mesh`)
+          meshes++
+        }
+
+      ok(meshes > 2000, `expected the full mesh corpus, read ${meshes}`)
+    })
+
+    it('re-serialises every mesh byte for byte', () => {
+      for (const { path, root } of assets()) {
+        const library = root.getDirectory('VMeshLibrary')
+        if (!library) continue
+
+        const written = writeVMeshLibrary(readVMeshLibrary(root))
+
+        for (const directory of library.directories) {
+          const original = directory.getFile('VMeshData')
+          const result = written.getDirectory(directory.name)?.getFile('VMeshData')
+
+          ok(original && result, `${path}/${directory.name}: mesh went missing`)
+          deepStrictEqual(bytes(result), bytes(original), `${path}/${directory.name}`)
+        }
+      }
+    })
+
+    it('consumes each VMeshData file exactly, leaving no trailing bytes', () => {
+      for (const { path, root } of assets())
+        for (const directory of root.getDirectory('VMeshLibrary')?.directories ?? []) {
+          const data = readVMeshData(directory)
+          const consumed =
+            16 + data.groups.length * 12 + data.indices.byteLength + data.vertices.byteLength
+
+          strictEqual(consumed, directory.getFile('VMeshData')?.byteLength, `${path}/${data.name}`)
+        }
+    })
+
+    it('only ever uses triangle lists', () => {
+      for (const { path, root } of assets())
+        for (const data of readVMeshLibrary(root))
+          strictEqual(data.primitive, Primitive.TriangleList, `${path}/${data.name}`)
+    })
+
+    it('only uses vertex formats that always include a position', () => {
+      const seen = new Set<number>()
+
+      for (const { path, root } of assets())
+        for (const { name, format } of readVMeshLibrary(root)) {
+          ok(format & Format.Position, `${path}/${name}: format 0x${format.toString(16)}`)
+          ok(!(format & (Format.PointSize | Format.Specular)), `${path}/${name}: unexpected flag`)
+          seen.add(format)
+        }
+
+      // Retail never authored more than two UV sets or a specular colour.
+      for (const format of seen)
+        ok(vertexByteLength(format) <= 44, `format 0x${format.toString(16)}`)
+    })
+
+    it('keeps every index inside the vertex buffer', () => {
+      for (const { path, root } of assets())
+        for (const data of readVMeshLibrary(root)) {
+          const count = data.vertices.byteLength / vertexByteLength(data.format)
+
+          for (const index of data.indices)
+            ok(index < count, `${path}/${data.name}: index ${index} of ${count}`)
+        }
+    })
+
+    it('partitions the index buffer exactly across the group element counts', () => {
+      for (const { path, root } of assets())
+        for (const data of readVMeshLibrary(root)) {
+          const total = data.groups.reduce((sum, { elementCount }) => sum + elementCount, 0)
+
+          strictEqual(total, data.indices.length, `${path}/${data.name}`)
+        }
+    })
+
+    // The invariant that pins down both halves of the group vertex range: indices are
+    // relative to vertexStart, and vertexEnd is the last vertex of the group rather
+    // than one past it. It holds for every group in the retail data without exception,
+    // so a group covers vertexEnd - vertexStart + 1 vertices.
+    it('ends every group exactly at vertexStart plus its highest index', () => {
+      for (const { path, root } of assets())
+        for (const data of readVMeshLibrary(root)) {
+          let base = 0
+
+          for (const group of data.groups) {
+            const elements = data.indices.subarray(base, base + group.elementCount)
+            base += group.elementCount
+            if (!elements.length) continue
+
+            const highest = elements.reduce((max, index) => (index > max ? index : max), 0)
+
+            strictEqual(group.vertexStart + highest, group.vertexEnd, `${path}/${data.name}`)
+          }
+        }
+    })
+
+    it('keeps every group vertex range inside the vertex buffer', () => {
+      for (const { path, root } of assets())
+        for (const data of readVMeshLibrary(root)) {
+          const count = data.vertices.byteLength / vertexByteLength(data.format)
+
+          for (const { vertexStart, vertexEnd } of data.groups) {
+            ok(vertexStart <= vertexEnd, `${path}/${data.name}: ${vertexStart} > ${vertexEnd}`)
+            ok(vertexEnd < count, `${path}/${data.name}: ${vertexEnd} of ${count}`)
+          }
+        }
+    })
+  })
+
+  describe('VMeshRef', () => {
+    it('re-serialises every reference byte for byte', () => {
+      let refs = 0
+
+      for (const { path, root } of assets())
+        for (const directory of walk(root)) {
+          const part = readVMeshPart(directory)
+          if (!part) continue
+
+          const original = directory.getDirectory('VMeshPart')?.getFile('VMeshRef')
+          const result = writeVMeshPart(part).getFile('VMeshRef')
+
+          ok(original && result, `${path}/${directory.name}`)
+          deepStrictEqual(bytes(result), bytes(original), `${path}/${directory.name}`)
+          refs++
+        }
+
+      ok(refs > 9000, `expected the full reference corpus, read ${refs}`)
+    })
+
+    it('reads bounding boxes with the minimum on or below the maximum', () => {
+      for (const { path, root } of assets())
+        for (const directory of walk(root)) {
+          const part = readVMeshPart(directory)
+          if (!part) continue
+
+          const { a, b } = part.reference.boundingBox
+          ok(a.x <= b.x && a.y <= b.y && a.z <= b.z, `${path}/${directory.name}: box inverted`)
+        }
+    })
+
+    it('resolves against the library in the same file, or reports the mesh as absent', () => {
+      let resolved = 0
+      let external = 0
+
+      for (const { root } of assets()) {
+        const library = readVMeshLibrary(root)
+
+        for (const directory of walk(root)) {
+          const part = readVMeshPart(directory)
+          if (!part) continue
+
+          try {
+            const draws = [...getMeshDraw(library, part.reference)]
+            strictEqual(draws.length, part.reference.groupCount)
+            resolved++
+          } catch (error) {
+            ok(error instanceof RangeError)
+            external++
+          }
+        }
+      }
+
+      // Interface models keep their geometry in a shared library file.
+      ok(resolved > 8000, `resolved ${resolved}`)
+      ok(external < resolved / 4, `unresolved ${external} of ${resolved + external}`)
+    })
+  })
+
+  describe('VMeshWire', () => {
+    it('re-serialises every wireframe byte for byte', () => {
+      let wires = 0
+
+      for (const { path, root } of assets())
+        for (const directory of walk(root)) {
+          const wire = readVMeshWire(directory)
+          if (!wire) continue
+
+          const original = directory.getDirectory('VMeshWire')?.getFile('VWireData')
+          const result = writeVMeshWire(wire).getFile('VWireData')
+
+          ok(original && result, `${path}/${directory.name}`)
+          deepStrictEqual(bytes(result), bytes(original), `${path}/${directory.name}`)
+          wires++
+        }
+
+      ok(wires > 4000, `expected the full wireframe corpus, read ${wires}`)
+    })
+
+    it('holds an even number of indices, since wireframes are line lists', () => {
+      for (const { path, root } of assets())
+        for (const directory of walk(root)) {
+          const wire = readVMeshWire(directory)
+          if (!wire) continue
+
+          strictEqual(wire.data.indices.length % 2, 0, `${path}/${directory.name}`)
+        }
+    })
+  })
+
+  describe('MultiLevel', () => {
+    it('carries one more breakpoint than it has levels', () => {
+      let found = 0
+
+      for (const { path, root } of assets())
+        for (const directory of walk(root)) {
+          const level = readMultiLevel(directory)
+          if (!level?.levels.length) continue
+
+          strictEqual(level.ranges.length, level.levels.length + 1, `${path}/${directory.name}`)
+          found++
+        }
+
+      ok(found > 1000, `expected the full LOD corpus, read ${found}`)
+    })
+
+    it('always starts its breakpoints at zero', () => {
+      for (const { path, root } of assets())
+        for (const directory of walk(root)) {
+          const level = readMultiLevel(directory)
+          if (!level?.levels.length) continue
+
+          strictEqual(level.ranges[0], 0, `${path}/${directory.name}`)
+        }
+    })
+
+    // Four capital ships carry denormal junk in the middle of Switch2. The reader
+    // hands the breakpoints back verbatim rather than sorting or repairing them,
+    // so those files still round-trip.
+    it('passes non-ascending breakpoints through unrepaired', () => {
+      const junk = new Set<string>()
+
+      for (const { path, root } of assets())
+        for (const directory of walk(root)) {
+          const level = readMultiLevel(directory)
+          if (!level?.levels.length) continue
+
+          for (let i = 1; i < level.ranges.length; i++)
+            if (!(level.ranges[i]! > level.ranges[i - 1]!)) junk.add(path)
+        }
+
+      ok(junk.size > 0, 'expected the known capital ship Switch2 defects')
+      ok(junk.size < 10, `unexpectedly widespread: ${[...junk]}`)
+    })
+  })
+
+  // Five files under EQUIPMENT/MODELS predate VMesh: they are UTF containers holding
+  // an "openFLAME 3D N-mesh" tree left over from Conquest: Frontier Wars, and the
+  // retail game cannot render them either. Reading them must degrade, not throw.
+  describe('pre-VMesh assets', () => {
+    const legacy = () =>
+      assets().filter(({ root }) => root.getDirectory('openFLAME 3D N-mesh') !== undefined)
+
+    it('finds the openFLAME leftovers', () => {
+      const paths = legacy().map(({ path }) => path)
+
+      ok(paths.length > 0, 'expected at least one openFLAME model')
+      for (const path of paths) ok(/equipment/i.test(path), `unexpected location ${path}`)
+    })
+
+    it('reads them as an empty library instead of throwing', () => {
+      for (const { path, root } of legacy()) {
+        deepStrictEqual(readVMeshLibrary(root), [], path)
+        strictEqual(readVMeshPart(root), undefined, path)
+        strictEqual(readVMeshWire(root), undefined, path)
+      }
+    })
+
+    // Their Sphere directory is the openFLAME bounding sphere, unrelated to the
+    // Sphere that planet .sph files use, and neither is modelled yet.
+    it('leaves their unsupported Sphere directory untouched', () => {
+      for (const { path, root } of legacy())
+        ok(root.getDirectory('openFLAME 3D N-mesh', 'Sphere'), `${path}: expected a Sphere`)
+    })
+  })
+
+  // Planet and sun .sph models hold no geometry at all — see model/sphere.test.ts for what
+  // they do hold. Here they only have to leave the VMesh readers unbothered.
+  describe('planet spheres', () => {
+    const spheres = () => assets().filter(({ path }) => /\.sph$/i.test(path))
+
+    it('finds sphere models, all of which carry a Sphere directory', () => {
+      const found = spheres()
+
+      ok(found.length > 0, 'expected planet .sph models')
+      for (const { path, root } of found) ok(root.getDirectory('Sphere'), `${path}: no Sphere`)
+    })
+
+    it('reads them as empty rather than throwing, since they hold no VMesh at all', () => {
+      for (const { path, root } of spheres()) {
+        strictEqual(root.getDirectory('VMeshLibrary'), undefined, path)
+        deepStrictEqual(readVMeshLibrary(root), [], path)
+        strictEqual(readVMeshPart(root), undefined, path)
+        strictEqual(readVMeshWire(root), undefined, path)
+      }
+    })
+  })
+})

@@ -110,11 +110,11 @@ Each `VMeshGroup` corresponds to one `DrawIndexedPrimitive` call. The fields map
 ```cpp
 // D3D8
 device->DrawIndexedPrimitive(
-  primitive,                           // D3DPRIMITIVETYPE
-  group.vertexStart,                   // MinIndex
-  group.vertexEnd - group.vertexStart, // NumVertices
-  startIndex,                          // StartIndex (accumulated from ref.indexStart + prior groups)
-  primitiveCount                       // derived from group.elementCount + primitive type
+  primitive,                               // D3DPRIMITIVETYPE
+  group.vertexStart,                       // MinIndex
+  group.vertexEnd - group.vertexStart + 1, // NumVertices
+  startIndex,                              // StartIndex (accumulated from ref.indexStart + prior groups)
+  primitiveCount                           // derived from group.elementCount + primitive type
 );
 ```
 
@@ -123,14 +123,19 @@ device->DrawIndexedPrimitive(
 ```ts
 interface VMeshGroup {
   materialId: number // int32 — CRC32 of material name; set active material before drawing
-  vertexStart: number // uint16 — MinIndex: lowest vertex index referenced by this group
-  vertexEnd: number // uint16 — MinIndex + NumVertices (exclusive); NumVertices = vertexEnd - vertexStart
+  vertexStart: number // uint16 — MinIndex: base vertex of this group; its indices are relative to it
+  vertexEnd: number // uint16 — last vertex of the group (inclusive); NumVertices = vertexEnd - vertexStart + 1
   elementCount: number // uint16 — total index count; PrimitiveCount = f(elementCount, primitive type)
   padding: number // uint16 — unused alignment field
 }
 ```
 
 Fixed size: **12 bytes** per group.
+
+> **`vertexEnd` is inclusive.** Index values in a group are relative to `vertexStart`, not absolute
+> within the mesh, so `vertexStart + max(indices) === vertexEnd`. This holds for all 22,416 groups in
+> the retail data without exception, and `corpus.test.ts` asserts it. Treating `vertexEnd` as
+> exclusive silently drops the last vertex of every group.
 
 ---
 

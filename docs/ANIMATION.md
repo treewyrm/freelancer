@@ -1,0 +1,205 @@
+# Animation
+
+Parser and serializer for Freelancer's keyframe animation, called **scripts**. Rigid compound
+models (`.cmp`) embed their scripts in the same UTF tree as the model; deformable models keep
+theirs in a standalone `.anm` file. Both use exactly the same structures, so this module reads and
+writes either.
+
+A script is a named bundle of **maps**, each map binding one animated object to one **channel** of
+keyframes. Interpolation between keyframes is always linear.
+
+## Architecture
+
+```
+Animation (UTF directory)
+  └─ Script (UTF directory)
+       └─ <script name> (UTF directory per script)
+            ├─ Root height (UTF file, float — deformable models only)
+            ├─ Object map <n> (UTF directory)
+            │    ├─ Parent name (UTF file, string — the animated object)
+            │    └─ Channel
+            └─ Joint map <n> (UTF directory)
+                 ├─ Parent name (UTF file, string)
+                 ├─ Child name (UTF file, string — the animated object)
+                 └─ Channel
+                      ├─ Header (UTF file — keyframe count, interval, type)
+                      └─ Frames (UTF file — packed keyframe array)
+```
+
+Scripts are referenced by name from INI files (`animation = Sc_open dock`) and matched by CRC, so
+`getScript` is case-insensitive like every other name lookup in the library.
+
+The trailing number on `Object map 0` / `Joint map 4` is decorative. Freelancer matches on the
+name prefix alone, and retail `.anm` files have gaps in the sequence. The writer renumbers maps
+sequentially within each kind rather than preserving the original numbers.
+
+## Object maps vs joint maps
+
+|                | Object map                             | Joint map                                     |
+| -------------- | -------------------------------------- | --------------------------------------------- |
+| Applies to     | The root object only                   | A child object, via the joint to its parent   |
+| Name entries   | `Parent name` — the animated object    | `Parent name` + `Child name` — the target     |
+| Animates       | Position and rotation in object space  | Whatever the joint exposes                    |
+
+Applying an object map to a subpart or a joint map to the root does nothing.
+
+Which keyframe fields a joint map consumes depends on the joint in [`src/model/joint.ts`](../src/model/joint.ts):
+
+| Joint       | Keyframe field used                                                    |
+| ----------- | ---------------------------------------------------------------------- |
+| `fixed`     | none — fixed joints cannot be animated                                 |
+| `revolute`  | `value` — angle in radians, between the joint's `min` and `max`        |
+| `prismatic` | `value` — offset along the joint axis                                  |
+| `sphere`    | `rotation`                                                             |
+| `loose`     | `position`, `rotation`, or both                                        |
+| `cylinder`  | unimplemented — see [Pair keyframes](#pair-keyframes-0x08)             |
+
+`Root height` is an elevation added on top of the object map position. Only deformable models use
+it, and in retail data it appears exactly once per object map.
+
+---
+
+## `channel.ts` — Keyframe channels
+
+### `Header`
+
+Twelve bytes, always.
+
+| Offset | Type      | Field      | Description                                                |
+| ------ | --------- | ---------- | ---------------------------------------------------------- |
+| `0x00` | `uint32`  | count      | Number of keyframes                                        |
+| `0x04` | `float32` | interval   | Keyframe spacing in seconds; negative means per-key times  |
+| `0x08` | `uint32`  | type       | Keyframe contents bitfield ([`ChannelType`](#channeltype)) |
+
+When `interval` is negative, every keyframe in `Frames` is prefixed with its own `float32` time
+marker in seconds. When it is zero or positive the markers are omitted and keyframe *n* occurs at
+`n * interval`. Retail assets use both: `.cmp` door and radar animations mostly carry explicit
+times, while resampled `.anm` tracks run at a fixed 1/30 s.
+
+### `ChannelType`
+
+A byte-wide bitfield describing what each keyframe holds. At most one position bit and at most one
+quaternion bit may be set, and `Angle` never combines with anything else.
+
+| Flag                 | Value  | Bytes per keyframe | Description                                                    |
+| -------------------- | ------ | ------------------ | -------------------------------------------------------------- |
+| `Angle`              | `0x01` | 4                  | Single float: revolute angle in radians or prismatic offset    |
+| `Position`           | `0x02` | 12                 | Position vector, 3× `float32`                                  |
+| `Quaternion`         | `0x04` | 16                 | Rotation quaternion, 4× `float32` stored **W, X, Y, Z**        |
+| `Pair`               | `0x08` | —                  | Unknown; unused by retail assets and rejected by this library  |
+| `ZeroPosition`       | `0x10` | 0                  | Position is animated but always zero; nothing is stored        |
+| `IdentityQuaternion` | `0x20` | 0                  | Rotation is animated but always identity; nothing is stored    |
+| `VectorQuaternion`   | `0x40` | 6                  | Rotation quantized to the quaternion vector part, 3× `int16`   |
+| `AngleQuaternion`    | `0x80` | 6                  | Rotation quantized to the axis scaled by angle, 3× `int16`     |
+
+Ten combinations occur across the retail `DATA` tree, and the corpus test asserts that set exactly:
+
+| Type   | Composition                              | Where it appears                       |
+| ------ | ---------------------------------------- | -------------------------------------- |
+| `0x01` | angle                                    | `.cmp` — revolute and prismatic joints |
+| `0x04` | full quaternion                          | `.cmp`, `.anm`                         |
+| `0x06` | position + full quaternion               | `.cmp` — loose joints and object maps  |
+| `0x22` | position + identity rotation             | `.anm`                                 |
+| `0x40` | vector-part quaternion                   | `.anm`                                 |
+| `0x42` | position + vector-part quaternion        | `.anm`                                 |
+| `0x50` | zero position + vector-part quaternion   | `.anm`                                 |
+| `0x80` | angle-scaled-axis quaternion             | `.anm`                                 |
+| `0x82` | position + angle-scaled-axis quaternion  | `.anm`                                 |
+| `0x90` | zero position + angle-scaled-axis        | `.anm`                                 |
+
+`ZeroPosition` and `IdentityQuaternion` declare that a channel drives a property without storing
+any data for it. The reader materialises the constant so consumers never have to special-case
+them; the writer emits nothing, because the type says so.
+
+### `Frames`
+
+Keyframes are packed back to back with no padding, each field appearing in this order:
+
+```
+[ time marker ][ angle ][ position ][ quaternion ]
+    4 bytes      4 bytes   12 bytes    16 / 6 / 0 bytes
+   if interval<0  if 0x01    if 0x02    per quaternion flag
+```
+
+`keyframeByteLength(type, interval)` returns the stride. Across the retail corpus the stride
+always divides the `Frames` file exactly — there are no trailing bytes anywhere.
+
+### Quantized quaternions
+
+Both compressed forms store three `int16` fractions of `0x7fff` and drop the sign of W. That loss
+is free: `q` and `-q` are the same rotation, so the encoders fold negative-W quaternions into the
+positive hemisphere first.
+
+**`VectorQuaternion` (`0x40`)** stores the quaternion vector part verbatim and restores W from
+unit length:
+
+```
+w = sqrt(1 - (x² + y² + z²))
+```
+
+The stored length is `sin(θ/2)`, so precision is finest near identity and the representable range
+tops out at a half turn. Retail data never exceeds a length of 0.85.
+
+**`AngleQuaternion` (`0x80`)** stores the unit rotation axis scaled by `θ/π`, which spreads the
+whole positive hemisphere linearly over the unit range — zero is identity, one is a half turn:
+
+```
+s = sin(π · |v| / 2)         // = sin(θ/2), the quaternion vector magnitude
+q = ( v · s / |v|, sqrt(1 - s²) )
+```
+
+> **Divergence from MAXLancer.** [MAXLancer](https://github.com/treewyrm/MAXLancer/blob/master/scripts/Animation.ms)
+> decodes `0x40` with a half-angle function and labels `0x80` a "harmonic mean". This library
+> follows [Librelancer](https://github.com/Librelancer/Librelancer/tree/main/src/LibreLancer/Utf/Anm)
+> instead, which treats `0x40` as a plain W restore and `0x80` as the angle-scaled axis above.
+
+#### Round-trip fidelity
+
+Every one of the 143,679 channels in the retail `DATA` tree re-serializes byte for byte, with one
+documented exception: 55 keyframes across 20 `.anm` channels store an angle-scaled axis slightly
+longer than one unit — outside the range the encoding can represent. Re-encoding clamps them, so
+they come back one `int16` LSB off. The resulting rotation differs by at most 0.004°. The corpus
+test allows exactly these and asserts the decoded quaternions still match.
+
+### Pair keyframes (`0x08`)
+
+Retail assets never set this bit and Freelancer has no code for it. MAXLancer repurposes it to
+write a pair of floats for cylinder joints, which the game will not play back. This library
+recognises the flag by name and rejects it in `validateChannelType`, matching
+[`joint.ts`](../src/model/joint.ts), where cylinder joints are likewise unimplemented.
+
+---
+
+## API
+
+| Function                             | Description                                                      |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| `readAnimationLibrary(root)`         | Reads `Animation/Script` from a file root; `[]` when absent      |
+| `writeAnimationLibrary(scripts)`     | Builds the `Animation` directory                                 |
+| `getScript(library, name)`           | Finds a script by name, matched by CRC                           |
+| `getLibraryDuration(library)`        | Longest script duration in seconds                               |
+| `readScript(directory)`              | Reads one script directory                                       |
+| `writeScript(script)`                | Writes one script directory, renumbering its maps                |
+| `getObjectMap(script, parent)`       | Finds the object map animating a named object                    |
+| `getJointMap(script, child)`         | Finds the joint map animating a named child object               |
+| `getScriptDuration(script)`          | Longest map duration in seconds                                  |
+| `readChannel(map)`                   | Reads the `Channel` directory of a map                           |
+| `writeChannel(channel)`              | Builds a `Channel` directory holding `Header` and `Frames`       |
+| `sampleChannel(channel, time)`       | Samples a channel, lerping position/value and slerping rotation  |
+| `keyframeByteLength(type, interval)` | Keyframe stride in bytes                                         |
+| `validateChannelType(type)`          | Throws `RangeError` on an impossible type bitfield               |
+
+The `Keyframe` interface extends the `Keyframe` in [`src/math/animation.ts`](../src/math/animation.ts),
+so channel keyframes work directly with the shared `at()` range query that `sampleChannel` is
+built on.
+
+```ts
+import { getScript, readAnimationLibrary, sampleChannel } from '@treewyrm/utf2json/animation'
+import { Directory } from '@treewyrm/utf2json'
+
+const root = Directory.read(await readFile('dyson_door.cmp'))
+const script = getScript(readAnimationLibrary(root), 'Sc_open dock')
+
+for (const map of script?.maps ?? [])
+  console.log(map.parent, sampleChannel(map.channel, 1.25))
+```

@@ -14,6 +14,10 @@ To run a single test file:
 node --import tsx --test src/directory.test.ts
 ```
 
+The `corpus.test.ts` suites (`src/vmesh/`, `src/animation/`) validate the readers against retail game assets. They look for a
+Freelancer `DATA` directory at `$FREELANCER_DATA`, falling back to `~/Downloads/Freelancer/DATA`,
+and skips itself with a reason when neither exists — the rest of the suite never depends on it.
+
 ## Architecture
 
 This is a TypeScript library for reading and writing **UTF (Universal Tree Format)** — a binary container format used by Freelancer (2003). The library is published as an ES module package with multiple entry points.
@@ -28,9 +32,10 @@ This is a TypeScript library for reading and writing **UTF (Universal Tree Forma
 | `./alchemy` | `src/alchemy/index.ts` | Alchemy particle effect system (node library + effect library) |
 | `./vmesh` | `src/vmesh/index.ts` | VMesh geometry part/library serialization |
 | `./model` | `src/model/index.ts` | Rigid models: compound hierarchy, joints, hardpoints |
+| `./animation` | `src/animation/index.ts` | Keyframe animation scripts shared by `.cmp` and `.anm` |
 | `./surface` | `src/surface/index.ts` | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy |
 
-Module documentation lives in `docs/`: [UTF.md](docs/UTF.md), [VMESH.md](docs/VMESH.md), [MODEL.md](docs/MODEL.md), [SURFACE.md](docs/SURFACE.md), [ALCHEMY.md](docs/ALCHEMY.md).
+Module documentation lives in `docs/`: [UTF.md](docs/UTF.md), [VMESH.md](docs/VMESH.md), [MODEL.md](docs/MODEL.md), [ANIMATION.md](docs/ANIMATION.md), [SURFACE.md](docs/SURFACE.md), [ALCHEMY.md](docs/ALCHEMY.md).
 
 ### Binary format overview
 
@@ -79,6 +84,16 @@ Rigid models (`.3db` single part, `.cmp` compound), layered on top of VMesh geom
 - **`joint.ts`** / **`constraint.ts`** — parent↔child joints (`fixed`, `revolute`, `prismatic`, `cylinder`, `sphere`, `loose`) stored as fixed-size records in `Cons/Fix`, `Cons/Rev`, etc. Cylinder joints are unimplemented.
 - **`hardpoint.ts`** — named attachment points under `Hardpoints/Fixed` and `Hardpoints/Revolute`.
 - **`camera.ts`** — stub reader/writer detected via the `Fovx` file.
+
+### Animation (`src/animation/`)
+
+Keyframe animation "scripts". Rigid compound models embed the `Animation` directory in the `.cmp` next to `Cmpnd`; deformable models keep it in a standalone `.anm`. Both use the same structures, so this module is a sibling of `model/` rather than part of it — `readAnimationLibrary(root)` takes a file root directory, like `readVMeshLibrary` does.
+
+- **`channel.ts`** — `Header` (count, interval, type) + `Frames` (packed keyframes). `ChannelType` is a byte-wide bitfield; `keyframeByteLength` derives the stride from it. A negative interval means each keyframe carries its own timestamp.
+- **`map.ts`** — `ObjectMap` (root object, `Parent name` only) and `JointMap` (`Parent name` + `Child name`, drives the joint between them).
+- **`script.ts`** / **`library.ts`** — `Animation/Script/<name>` tree, plus `Root height` for deformable models.
+
+Quaternions come in four flavours: full `float32` W-X-Y-Z (`0x04`), implied identity (`0x20`), and two `int16` quantizations (`0x40` restores W from unit length, `0x80` stores the axis scaled by angle/π). **The quantized decode follows [Librelancer](https://github.com/Librelancer/Librelancer/tree/main/src/LibreLancer/Utf/Anm), not MAXLancer, which assigns the half-angle function to the wrong flag.** [ANIMATION.md](docs/ANIMATION.md) documents the layout, the type combinations that occur in retail data, and the 55 keyframes that cannot round-trip exactly because their source data is out of encoding range.
 
 ### Surface (`src/surface/`)
 

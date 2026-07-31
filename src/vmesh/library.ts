@@ -45,8 +45,9 @@ export function* getMeshDraw(library: VMeshLibrary, reference: VMeshRef) {
     if (!group) continue
 
     const { materialId } = group
+    // vertexEnd is the last vertex of the group, not one past it.
     const start = group.vertexStart * size
-    const end = start + Math.max(0, group.vertexEnd - group.vertexStart) * size
+    const end = start + Math.max(0, group.vertexEnd - group.vertexStart + 1) * size
 
     const elements = data.indices.subarray(base, base + group.elementCount)
     const vertices = data.vertices.subarray(start, end)

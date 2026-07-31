@@ -4,6 +4,7 @@ export default defineConfig({
   entry: [
     './src/math/index.ts',
     './src/alchemy/index.ts',
+    './src/animation/index.ts',
     './src/vmesh/index.ts',
     './src/model/index.ts',
     './src/utility/index.ts',
