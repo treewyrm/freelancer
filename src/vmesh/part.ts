@@ -6,9 +6,9 @@ export interface VMeshPart {
   reference: VMeshRef
 }
 
-export function readVMeshPart(parent: Directory): VMeshPart {
+export function readVMeshPart(parent: Directory): VMeshPart | undefined {
   const directory = parent.getDirectory('VMeshPart')
-  if (!directory) throw new Error(`Missing VMeshPart in ${parent.name}`)
+  if (!directory) return
 
   return { type: 'vmeshpart', reference: readVMeshRef(directory) }
 }
