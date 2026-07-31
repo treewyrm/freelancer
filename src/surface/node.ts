@@ -2,19 +2,25 @@ import BufferView from '../utility/bufferview.js'
 import Vector3 from '../math/vector3.js'
 import type { Hull } from './hull.js'
 
-/** Boundary volume hierarchy node. */
+/** Quantization steps for {@link Node.boxSizes}. */
+const BOX_STEPS = 0xfa
+
+/** Boundary volume hierarchy node. Corresponds to IVP's `IVP_Compact_Ledgetree_Node`. */
 export interface Node {
-  /** Boundary center. */
+  /** Boundary center, in object coordinates. */
   center: Vector3
 
-  /** Boundary half-width */
+  /** Bounding sphere radius. */
   radius: number
 
-  /** Boundary axis multiplier. */
-  axis: Vector3
+  /**
+   * Box sizes, quantized in steps of 1/250. Multiply by {@link radius} to get the half-extents
+   * of the axis-aligned bounding box around {@link center}.
+   */
+  boxSizes: Vector3
 
-  /** Unknown byte (padding?). */
-  unknown: number
+  /** Padding to a 4-byte boundary. Zero in every file Freelancer ships. */
+  padding: number
 
   /** Referenced hull. */
   hull?: Hull
@@ -34,12 +40,12 @@ export function readNode(view: BufferView): Node {
       z: view.readFloat32(),
     },
     radius: view.readFloat32(),
-    axis: {
-      x: view.readUint8() / 0xfa,
-      y: view.readUint8() / 0xfa,
-      z: view.readUint8() / 0xfa,
+    boxSizes: {
+      x: view.readUint8() / BOX_STEPS,
+      y: view.readUint8() / BOX_STEPS,
+      z: view.readUint8() / BOX_STEPS,
     },
-    unknown: view.readUint8(),
+    padding: view.readUint8(),
   }
 }
 
@@ -48,8 +54,8 @@ export function writeNode(view: BufferView, node: Node) {
   view.writeFloat32(node.center.y)
   view.writeFloat32(node.center.z)
   view.writeFloat32(node.radius)
-  view.writeUint8(node.axis.x * 0xfa)
-  view.writeUint8(node.axis.y * 0xfa)
-  view.writeUint8(node.axis.z * 0xfa)
-  view.writeUint8(node.unknown)
+  view.writeUint8(Math.round(node.boxSizes.x * BOX_STEPS))
+  view.writeUint8(Math.round(node.boxSizes.y * BOX_STEPS))
+  view.writeUint8(Math.round(node.boxSizes.z * BOX_STEPS))
+  view.writeUint8(node.padding)
 }

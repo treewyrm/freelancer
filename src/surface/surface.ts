@@ -4,19 +4,34 @@ import { HullType, readHull, writeHull, type Hull } from './hull.js'
 import { readNode, writeNode, type Node } from './node.js'
 import { readPoint, writePoint, type Point } from './point.js'
 
-/** Surfaces section. */
-export interface Surface {
-  /** Center of mass and bounding sphere center. Used for aiming reticle. */
-  center: Vector3
+/** Header size of `IVP_Compact_Surface`, in bytes. */
+const HEADER_SIZE = 48
 
-  /** Default linear drag. */
-  drag: Vector3
+/** Size of a single `IVP_Compact_Ledgetree_Node`, in bytes. */
+const NODE_SIZE = 28
+
+/** Size of an `IVP_Compact_Ledge` header and of one `IVP_Compact_Poly_Point`, in bytes. */
+const RECORD_SIZE = 16
+
+/** Quantization steps for {@link Surface.surfaceDeviation}. */
+const DEVIATION_STEPS = 0xfa
+
+/** Surfaces section. Corresponds to IVP's `IVP_Compact_Surface`. */
+export interface Surface {
+  /** Center of mass, also the bounding sphere center. Used for aiming reticle. */
+  massCenter: Vector3
+
+  /** Rotation inertia, not a drag coefficient. */
+  rotationInertia: Vector3
 
   /** Bounding sphere radius. Must encompass all hulls of a part. */
   radius: number
 
-  /** Bounding sphere radius multiplier for hulls not listed in hardpoints. */
-  radiusScale: number
+  /**
+   * Maximum surface deviation factor, quantized in steps of 1/250. Multiply by {@link radius}
+   * to get how far the surface departs from the bounding sphere.
+   */
+  surfaceDeviation: number
 
   /** Hull points. */
   points: Point[]
@@ -24,8 +39,8 @@ export interface Surface {
   /** Root node of boundary volume hierarchy. */
   root: Node
 
-  /** Unknown vector. Appears unused. */
-  unknown: Vector3
+  /** Padding to a 16-byte boundary. Zero in every file Freelancer ships. */
+  padding: Vector3
 }
 
 export function* getNodes(root: Node) {
@@ -53,13 +68,13 @@ const subView = (view: BufferView, length: number): BufferView => {
 export function readSurface(view: BufferView, surface: Surface): void {
   view = subView(view, view.readUint32())
 
-  surface.center = {
+  surface.massCenter = {
     x: view.readFloat32(),
     y: view.readFloat32(),
     z: view.readFloat32(),
   }
 
-  surface.drag = {
+  surface.rotationInertia = {
     x: view.readFloat32(),
     y: view.readFloat32(),
     z: view.readFloat32(),
@@ -69,15 +84,16 @@ export function readSurface(view: BufferView, surface: Surface): void {
 
   const header = view.readUint32()
 
-  surface.radiusScale = (header && 0xff) / 0xfa
+  surface.surfaceDeviation = (header & 0xff) / DEVIATION_STEPS
 
-  const endOffset = header >> 8
+  /** Size of the whole block, so also one past its last valid offset. */
+  const endOffset = header >>> 8
   const startOffset = view.readInt32()
 
-  surface.unknown = {
-    x: view.readFloat32(),
-    y: view.readFloat32(),
-    z: view.readFloat32(),
+  surface.padding = {
+    x: view.readInt32(),
+    y: view.readInt32(),
+    z: view.readInt32(),
   }
 
   const queue: [offset: number, parent?: Node][] = [[startOffset]]
@@ -125,69 +141,64 @@ export function readSurface(view: BufferView, surface: Surface): void {
   while (view.offset < startOffset) surface.points.push(readPoint(view))
 }
 
+/**
+ * Blocks are laid out in the order IVP's `IVP_SurfaceBuilder_Ledge_Soup` emits them: header,
+ * hulls, points, then the node tree. Every offset stored inside the block is relative to the
+ * field that holds it, so the block is position independent.
+ */
 export function writeSurface(surface: Surface): BufferView {
-  const { root, center, drag, points, radius, radiusScale, unknown } = surface
-
-  let size = 0
+  const { root, massCenter, rotationInertia, points, radius, surfaceDeviation, padding } = surface
 
   const nodes = Array.from(getNodes(root))
   const hulls = nodes.filter(({ hull }) => !!hull).map(({ hull }) => hull!)
 
-  size += 48 // header
-  size += nodes.length * 28
-  size += hulls.reduce((total, { faces: { length } }) => total + 16 + length * 16, 0)
-  size += points.length * 16
+  const size =
+    HEADER_SIZE +
+    hulls.reduce((total, { faces }) => total + RECORD_SIZE + faces.length * RECORD_SIZE, 0) +
+    points.length * RECORD_SIZE +
+    nodes.length * NODE_SIZE
 
   const view = BufferView.allocate(size)
 
-  /** Points block start offset. */
-  let pointsOffset = 0
-
-  /** Nodes block start offset. */
-  let nodesOffset = 0
-
-  // Skip header
-  view.offset += 48
+  view.offset = HEADER_SIZE
 
   const hullOffsets = new Map<Hull, number>()
 
-  // Write hulls.
+  // Write hulls. The leading point offset is patched in once the points block is placed.
   for (const hull of hulls) {
     hullOffsets.set(hull, view.offset)
 
     view.offset += Int32Array.BYTES_PER_ELEMENT
-    view.writeUint32(hull.type)
     writeHull(view, hull)
   }
 
-  // Mark where points begin
-  pointsOffset = view.offset
+  /** Points block start offset. */
+  const pointsOffset = view.offset
 
-  // Write points.
   for (const point of points) writePoint(view, point)
 
-  // Mark where nodes begin
-  nodesOffset = view.offset
+  /** Nodes block start offset, and the value of `offset_ledgetree_root`. */
+  const nodesOffset = view.offset
 
-  // Update hulls with relative offsets to pointsOffset and nodesOffset.
-  for (const [hull, offset] of hullOffsets) {
+  for (const offset of hullOffsets.values()) {
     view.offset = offset
-
     view.writeInt32(pointsOffset - offset)
-    if (hull.type === HullType.Skip) view.writeInt32(nodesOffset - offset)
   }
 
-  // Switch back to nodes
   view.offset = nodesOffset
 
-  // Write nodes.
-  const queue: [number, Node][] = [[0, root]]
+  const nodeOffsets = new Map<Node, number>()
+
+  // Depth-first, so that a left child always immediately follows its parent.
+  const queue: [parentOffset: number, node: Node][] = [[0, root]]
 
   while (queue.length > 0) {
     const [parentOffset, node] = queue.pop()!
     const offset = view.offset
 
-    // Update parent offset.
+    nodeOffsets.set(node, offset)
+
+    // Fill in the right-child offset the parent left blank.
     if (parentOffset > 0) view.setInt32(parentOffset, offset - parentOffset, view.littleEndian)
 
     view.writeInt32(0) // Offset to right child.
@@ -198,26 +209,35 @@ export function writeSurface(surface: Surface): BufferView {
     if (node.left) queue.push([0, node.left])
   }
 
-  size = view.offset
+  // A hull bounding a subtree stores an offset back to the node that owns it, which is only
+  // known now that the tree has been placed.
+  for (const [node, offset] of nodeOffsets) {
+    const { hull } = node
+    if (!hull || hull.type !== HullType.Skip) continue
+
+    const hullOffset = hullOffsets.get(hull) ?? 0
+
+    view.offset = hullOffset + Int32Array.BYTES_PER_ELEMENT
+    view.writeInt32(offset - hullOffset)
+  }
 
   view.offset = 0
-  view.writeUint32(size)
 
-  view.writeFloat32(center.x)
-  view.writeFloat32(center.y)
-  view.writeFloat32(center.z)
+  view.writeFloat32(massCenter.x)
+  view.writeFloat32(massCenter.y)
+  view.writeFloat32(massCenter.z)
 
-  view.writeFloat32(drag.x)
-  view.writeFloat32(drag.y)
-  view.writeFloat32(drag.z)
+  view.writeFloat32(rotationInertia.x)
+  view.writeFloat32(rotationInertia.y)
+  view.writeFloat32(rotationInertia.z)
 
   view.writeFloat32(radius)
-  view.writeUint32((radiusScale * 0xfa) | (size << 8))
-  view.writeUint32(nodesOffset)
+  view.writeUint32(((Math.round(surfaceDeviation * DEVIATION_STEPS) & 0xff) | (size << 8)) >>> 0)
+  view.writeInt32(nodesOffset)
 
-  view.writeFloat32(unknown.x)
-  view.writeFloat32(unknown.y)
-  view.writeFloat32(unknown.z)
+  view.writeInt32(padding.x)
+  view.writeInt32(padding.y)
+  view.writeInt32(padding.z)
 
   return BufferView.join(BufferView.allocate(Uint32Array.BYTES_PER_ELEMENT).writeUint32(size), view)
 }

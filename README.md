@@ -4,6 +4,20 @@ TypeScript library for reading and writing UTF (Universal Tree Format) files —
 
 See [docs/UTF.md](docs/UTF.md) for the binary format specification and API reference.
 
+## Modules
+
+The package ships several entry points:
+
+| Import                          | Contents                                                                    | Documentation                |
+| ------------------------------- | ----------------------------------------------------------------------------- | ---------------------------- |
+| `@treewyrm/utf2json`            | `Directory`, `File`, hash helpers                                           | [UTF.md](docs/UTF.md)        |
+| `@treewyrm/utf2json/utility`    | `BufferView`, compound hierarchy, timestamp and string helpers              | [UTF.md](docs/UTF.md)        |
+| `@treewyrm/utf2json/math`       | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Transform`, scalar and keyframe helpers | —                       |
+| `@treewyrm/utf2json/vmesh`      | VMesh geometry parts and mesh library                                       | [VMESH.md](docs/VMESH.md)    |
+| `@treewyrm/utf2json/model`      | Rigid models: compound hierarchy, joints, hardpoints                        | [MODEL.md](docs/MODEL.md)    |
+| `@treewyrm/utf2json/surface`    | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy          | [SURFACE.md](docs/SURFACE.md) |
+| `@treewyrm/utf2json/alchemy`    | Alchemy particle effects: node library and effect library                   | [ALCHEMY.md](docs/ALCHEMY.md) |
+
 ## Installation
 
 ```sh
@@ -89,11 +103,31 @@ const subdirs = root.directories // Directory[]
 const files = root.files // File[]
 ```
 
+### Reading a model
+
+```ts
+import { Directory } from '@treewyrm/utf2json'
+import { readRigidModel } from '@treewyrm/utf2json/model'
+
+const model = readRigidModel(Directory.read(readFileSync('ships/li_fighter.cmp')))
+```
+
+### Reading a collision surface
+
+`.sur` files are a standalone binary rather than a UTF tree:
+
+```ts
+import { BufferView } from '@treewyrm/utf2json/utility'
+import { readSurfaceLibrary } from '@treewyrm/utf2json/surface'
+
+const parts = readSurfaceLibrary(BufferView.from(readFileSync('ships/li_fighter.sur')))
+```
+
 ## Development
 
 ```sh
-npm run build   # compile TypeScript → dist/
-npm test        # build + run Node test runner
+npm run build   # compile TypeScript → dist/ via tsdown
+npm test        # run the Node test runner over src/**/*.test.ts (via tsx, no build step)
 ```
 
 ## License

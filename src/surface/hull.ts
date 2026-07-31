@@ -1,17 +1,23 @@
 import BufferView from '../utility/bufferview.js'
 import type { Face } from './face.js'
 
+/**
+ * Not an enum in IVP but two packed flags: `has_children` (bits 0-1) and `is_compact` (bits 2-3).
+ * Every hull Freelancer emits is compact, so only these two values occur.
+ */
 export enum HullType {
+  /** Terminal hull; the node holding it is a leaf. */
   Enabled = 4,
+
+  /** Hull bounds an entire subtree; the node holding it has children. */
   Skip = 5,
 }
 
 export interface Hull {
   /**
-   * ID/offset.
-   * - Model part ID when type is 4.
-   * - It may have a id different from the surface part it belongs to.
-   * - Offset to node when type is 5.
+   * IVP's `union { ledgetree_node_offset; client_data; }`.
+   * - Model part ID when type is 4. May differ from the id of the surface part it belongs to.
+   * - Offset back to the owning node when type is 5, relative to the hull.
    */
   id: number
 
@@ -21,14 +27,30 @@ export interface Hull {
   /** Hull faces. */
   faces: Face[]
 
-  /** Could be flags or padding bytes. */
-  unknown: number
+  /** Reserved trailing field. Zero in every hull Freelancer ships. */
+  reserved: number
 }
 
+/**
+ * IVP stores `size_div_16`, the whole ledge size in 16-byte units: one header, one per triangle
+ * and one per point. A closed convex polyhedron has `V = 2 + F / 2` by Euler's formula, so the
+ * count reduces to `1 + F + (2 + F / 2)`, i.e. `(12 + F * 6) / 4`.
+ */
 const getIndexCount = (faceCount: number): number => (12 + faceCount * 6) / 4
 
+/**
+ * A triangle occupies four 4-byte slots: a header word followed by its three edges. Edge `v` of
+ * face `f` therefore sits at slot `4f + v + 1`, while `Face.opposites` uses the flat edge index
+ * `3f + v`. IVP's `opposite_index` is a slot delta, so both codecs convert through these.
+ *
+ * `toEdgeIndex` takes a slot biased by -1 (the running `count` used while walking edges).
+ */
+const toEdgeIndex = (slot: number): number => Math.ceil(slot - slot / 4)
+
+const toSlot = (edge: number): number => edge + Math.floor(edge / 3)
+
 export const getIndices = (faces: Face[]): number[] => [
-  ...new Set(faces.flatMap((face) => face.edges)),
+  ...new Set(faces.flatMap((face) => face.points)),
 ]
 
 export function readHull(view: BufferView): Hull {
@@ -39,37 +61,40 @@ export function readHull(view: BufferView): Hull {
   const indexCount = hull >> 8
 
   const faces: Face[] = new Array(view.readUint16())
-  const unknown = view.readUint16()
+  const reserved = view.readUint16()
 
   let count = 0
 
   for (let i = 0; i < faces.length; i++) {
-    /** Flag (8 bits), opposite face index (12 bits unsigned), face index (12 bits unsigned). */
+    /**
+     * Virtual flag (1 bit), material index (7 bits), pierce index (12 bits unsigned),
+     * face index (12 bits unsigned).
+     */
     const header = view.readUint32()
 
     /** Face index. */
     const index = header & 0xfff
 
     const face: Face = (faces[index] = {
-      flag: (header >> 24) & 0xff,
-      opposite: (header >> 12) & 0xfff,
-      edges: [0, 0, 0],
-      adjacent: [0, 0, 0],
-      state: [false, false, false],
+      material: (header >> 24) & 0x7f,
+      virtual: header >>> 31 > 0,
+      pierce: (header >> 12) & 0xfff,
+      points: [0, 0, 0],
+      opposites: [0, 0, 0],
+      virtualEdges: [false, false, false],
     })
 
     for (let v = 0; v < 3; v++) {
-      face.edges[v] = view.readUint16()
+      face.points[v] = view.readUint16()
 
-      /** Edge flag (1 bit), offset to opposite side (signed 15-bit integer). */
-      let data = view.readUint16()
-      face.state[v] = data >> 15 > 0
+      /** Virtual flag (1 bit), slot offset to the opposite edge (signed 15-bit integer). */
+      const data = view.readUint16()
+      face.virtualEdges[v] = data >> 15 > 0
 
-      data &= 0x7fff
+      /** Sign-extend the low 15 bits. */
+      const relative = (data & 0x3fff) - (data & 0x4000)
 
-      // This is retarded but it just works, okay?
-      const edgeOffset = count + (data >> 14 > 0 ? (data & 0x3fff) | ~0x3fff : data & 0x3fff)
-      face.adjacent[v] = Math.ceil(edgeOffset - edgeOffset / 4)
+      face.opposites[v] = toEdgeIndex(count + relative)
 
       count++
     }
@@ -79,27 +104,35 @@ export function readHull(view: BufferView): Hull {
 
   if (getIndexCount(faces.length) !== indexCount) throw new RangeError('Invalid hull index count')
 
-  return { id, type, faces, unknown }
+  return { id, type, faces, reserved }
 }
 
 export function writeHull(view: BufferView, hull: Hull): void {
   view.writeUint32(hull.id)
   view.writeUint32((getIndexCount(hull.faces.length) << 8) | (hull.type & 0xff))
   view.writeUint16(hull.faces.length)
-  view.writeUint16(hull.unknown)
+  view.writeUint16(hull.reserved)
 
   let count = 0
 
   for (const [index, face] of hull.faces.entries()) {
-    view.writeUint32((index & 0xfff) | ((face.opposite & 0xfff) << 12) | ((face.flag & 0xff) << 24))
+    view.writeUint32(
+      ((index & 0xfff) |
+        ((face.pierce & 0xfff) << 12) |
+        ((face.material & 0x7f) << 24) |
+        (face.virtual ? 0x80000000 : 0)) >>>
+        0,
+    )
 
     for (let v = 0; v < 3; v++) {
-      let edgeOffset = (face.adjacent[v]! - count + face.adjacent[v]! / 3 - count / 3) & 0x7fff
-      if (face.state) edgeOffset |= 0x8000 // Set MSB.
+      let data = (toSlot(face.opposites[v]!) - count) & 0x7fff
+      if (face.virtualEdges[v]) data |= 0x8000
 
-      view.writeUint16(face.edges[v]!)
-      view.writeUint16(edgeOffset)
+      view.writeUint16(face.points[v]!)
+      view.writeUint16(data)
       count++
     }
+
+    count++
   }
 }

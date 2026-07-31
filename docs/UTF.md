@@ -86,38 +86,31 @@ Path lookups (`getDirectory`, `getFile`) compare entry names via `getResourceId`
 | `writeStrings(...values)`  | Appends NUL-separated strings                                          |
 | `append(...views)`         | Appends raw `ArrayBufferView` data                                     |
 
-## Utilities (`@treewyrm/utf2json/utils`)
+## Hashing (`@treewyrm/utf2json`)
+
+Hash helpers are exported from the package root alongside `Directory` and `File`.
 
 ```ts
 import {
-  toDOSTimestamp,
-  fromDOSTimestamp,
-  toFileTime,
-  fromFileTime,
-  toHex,
-  isHex,
-  parseHex,
   getResourceId,
   getObjectId,
   getResource,
   getObject,
-  type Hash,
-} from '@treewyrm/utf2json/utils'
+  filterResources,
+  filterObjects,
+} from '@treewyrm/utf2json'
 ```
 
-| Export                                 | Description                                       |
-| -------------------------------------- | ------------------------------------------------- |
-| `toDOSTimestamp(date)`                 | `Date` → 32-bit DOS timestamp                     |
-| `fromDOSTimestamp(value)`              | 32-bit DOS timestamp → `Date`                     |
-| `toFileTime(date)`                     | `Date` → Windows 64-bit FILETIME (`bigint`)       |
-| `fromFileTime(value)`                  | Windows FILETIME → `Date`                         |
-| `toHex(value, byteLength?, prefix?)`   | Number to hex string                              |
-| `isHex(value)`                         | Tests for `0x…` hex string                        |
-| `parseHex(value)`                      | Parses `0x…` hex string                           |
-| `getResourceId(value, caseSensitive?)` | CRC32 hash (materials, mesh names, UTF resources) |
-| `getObjectId(value, caseSensitive?)`   | id32 hash (object nicknames, INI references)      |
-| `getResource(items, predicate, value)` | Finds array entry by CRC32 key                    |
-| `getObject(items, predicate, value)`   | Finds array entry by id32 key                     |
+| Export                                     | Description                                       |
+| ------------------------------------------ | ------------------------------------------------- |
+| `getResourceId(value, caseSensitive?)`     | CRC32 hash (materials, mesh names, UTF resources) |
+| `getObjectId(value, caseSensitive?)`       | id32 hash (object nicknames, INI references)      |
+| `getResource(items, predicate, value)`     | Finds array entry by CRC32 key                    |
+| `getObject(items, predicate, value)`       | Finds array entry by id32 key                     |
+| `filterResources(items, predicate, value)` | Generator — yields all entries matching a CRC32 key |
+| `filterObjects(items, predicate, value)`   | Generator — yields all entries matching an id32 key  |
+
+`Hashable` (`number | string | ArrayBufferView | ArrayBufferLike`), `Hasher<T>`, and `Hash` are the supporting types in `hash.ts`.
 
 ### Hash functions
 
@@ -127,3 +120,64 @@ Two hash algorithms match Freelancer's internal conventions:
 - **`getObjectId`** — A byte-swapped CRC32 variant (`id32`). Used for object/archetype nicknames typically found in INI files.
 
 Both accept `number | string | ArrayBufferView | ArrayBufferLike` and default to case-insensitive matching.
+
+## Utilities (`@treewyrm/utf2json/utility`)
+
+```ts
+import {
+  BufferView,
+  type Compound,
+  listCompoundElements,
+  toDOSTimestamp,
+  fromDOSTimestamp,
+  toFileTime,
+  fromFileTime,
+  toHex,
+  isHex,
+  parseHex,
+} from '@treewyrm/utf2json/utility'
+```
+
+### `BufferView`
+
+A stateful `DataView` subclass with an internal offset pointer, little-endian by default. Every binary reader and writer in the package operates on it.
+
+| Member                                | Description                                                     |
+| ------------------------------------- | ----------------------------------------------------------------- |
+| `static allocate(length)`             | Creates a view over a new zeroed buffer                          |
+| `static join(...views)`               | Concatenates views into a single new view                        |
+| `static from(view \| string)`         | Wraps an existing `ArrayBufferView`, or encodes a string         |
+| `offset` / `rewind()` / `byteRemain`  | Cursor position, reset to zero, bytes left                       |
+| `slice(begin?, end?)` / `subarray(start?, end?)` | Copying / non-copying sub-views                       |
+| `read*` / `write*`                    | Sequential accessors (`readUint32`, `writeFloat32`, …) that advance the cursor |
+| `get*` / `set*`                       | Absolute accessors at an explicit offset                         |
+| `readString(length)` / `writeString(value)` | Fixed-length string                                        |
+| `readStringZ()` / `writeStringZ(value)` | NUL-terminated string                                          |
+| `readHex(length)` / `writeHex(value)` | Hex-string form of raw bytes                                     |
+| `readBuffer(target)` / `writeBuffer(source)` | Raw block copy                                             |
+
+Write methods chain.
+
+### Compound hierarchies
+
+`Compound<T>` (`{ children: T[] }`) is the shape shared by tree-structured records such as `Model` in the [model](MODEL.md) module.
+
+| Export                                    | Description                                              |
+| ----------------------------------------- | ---------------------------------------------------------- |
+| `listCompoundElements(parent)`            | Generator — depth-first walk including `parent` itself    |
+| `listCompoundPairs(parent)`               | Generator — yields `{ parent, child }` links              |
+| `findCompoundElement(root, predicate)`    | First element matching a predicate                        |
+| `reduceCompount(root, reducer, initial)`  | Folds the tree, passing `(accumulator, child, parent)`    |
+| `Parenthesis<T>`                          | The `{ parent, child }` pair type                         |
+
+### Timestamps and strings
+
+| Export                               | Description                                 |
+| ------------------------------------ | --------------------------------------------- |
+| `toDOSTimestamp(date)`               | `Date` → 32-bit DOS timestamp                |
+| `fromDOSTimestamp(value)`            | 32-bit DOS timestamp → `Date`                |
+| `toFileTime(date)`                   | `Date` → Windows 64-bit FILETIME (`bigint`)  |
+| `fromFileTime(value)`                | Windows FILETIME → `Date`                    |
+| `toHex(value, byteLength?, prefix?)` | Number to hex string                         |
+| `isHex(value)`                       | Tests for `0x…` hex string                   |
+| `parseHex(value)`                    | Parses `0x…` hex string                      |

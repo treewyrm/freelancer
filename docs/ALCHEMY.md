@@ -206,17 +206,29 @@ interface Transform {
 
 Data is only present when `TransformFlags.Enable` (bit 31) is set. `TransformFlags.Default` combines several unknown flags as the standard enabled state.
 
-### Evaluation functions
+### Serialization
 
-| Function                        | Description                                                                                                                                                                      |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `at(keyframes, key)`            | Binary search returning `{ before, ahead, span }` for interpolation                                                                                                              |
-| `ease(type, a, b, t)`           | Scalar interpolation by easing type                                                                                                                                              |
-| `limit(flags, start, end, key)` | Applies `WrapFlags` to remap a key, returns `{ key, count }`                                                                                                                     |
-| `floatAt(animation, p, t)`      | Evaluates `AnimatedFloat` at sparam `p` and time `t`                                                                                                                             |
-| `colorAt(animation, p, t)`      | Evaluates `AnimatedColor` at `p` and `t`, returns `Vector`                                                                                                                       |
-| `curveAt(animation, p, t)`      | Evaluates `AnimatedCurve` via Hermite spline at `p` and `t`                                                                                                                      |
-| `transformAt(transform, p, t)`  | Evaluates a `Transform` at `p` and `t`; returns `{ flags, position, rotation, scale }` as `Vector` each; missing components default to zero-vector (scale defaults to `{1,1,1}`) |
+Each structure has a `read*` / `write*` pair: `readFloatKeyframe`, `readVectorKeyframe`, `readEaseAnimation`, `readLoopAnimation`, `readAnimatedFloat`, `readAnimatedColor`, `readAnimatedCurve`, `readTransformPoint`, `readTransform`, and their writers. `isTransformEnabled(flags)` tests the enable bit.
+
+---
+
+## `evaluation.ts` — Animation Evaluation
+
+| Function                            | Description                                                                                                                                                                      |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ease(type, a, b, t)`               | Scalar interpolation by easing type                                                                                                                                              |
+| `easeVector(type, a, b, t)`         | Per-component interpolation of a `Vector3`                                                                                                                                       |
+| `limit(flags, start, end, key)`     | Applies `WrapFlags` to remap a key, returns `{ key, count }`                                                                                                                     |
+| `floatWhen(animation, key)`         | Evaluates a single `EaseAnimation<FloatKeyframe>`                                                                                                                                |
+| `vectorWhen(animation, key)`        | Evaluates a single `EaseAnimation<VectorKeyframe>`                                                                                                                               |
+| `hermiteAt(animation, key)`         | Evaluates a `LoopAnimation<VectorKeyframe>` as a Hermite spline                                                                                                                  |
+| `floatAt(animation, p, t)`          | Evaluates `AnimatedFloat` at sparam `p` and time `t`                                                                                                                             |
+| `colorAt(animation, p, t)`          | Evaluates `AnimatedColor` at `p` and `t`, returns `Vector3`                                                                                                                      |
+| `curveAt(animation, p, t)`          | Evaluates `AnimatedCurve` via Hermite spline at `p` and `t`                                                                                                                      |
+| `transformPointAt(point, p, t)`     | Evaluates one `TransformPoint` into a `Vector3`                                                                                                                                  |
+| `transformAt(transform, p, t)`      | Evaluates a `Transform` at `p` and `t`; returns `TransformAt` — `{ flags, position, rotation, scale }` as `Vector3` each; missing components default to zero-vector (scale defaults to `{1,1,1}`) |
+
+Keyframe lookup itself comes from the math module: `at(keyframes, key)` in [`math/animation.ts`](../src/math/animation.ts) returns `{ start, end, span }`, where `span` is the normalized position between the two keyframes.
 
 The two-axis evaluation (`p`, `t`) allows properties to vary both over a particle's lifespan (`t`) and over an external control value `p` (referred to in-game as **sparam**). `sparam` is supplied by the game engine to blend between animation states — for example, transitioning an engine thruster effect between idle and full throttle.
 

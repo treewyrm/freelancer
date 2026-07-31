@@ -2,20 +2,23 @@ export type TriangleIndices = [x: number, y: number, z: number]
 
 export type TriangleFlags = [x: boolean, y: boolean, z: boolean]
 
-/** Hull triangle face. */
+/** Hull triangle face. Corresponds to IVP's `IVP_Compact_Triangle`. */
 export interface Face {
-  /** Face properties. Most significant bit should be set when hull type is 5. */
-  flag: number
+  /** Material index (7 bits). Freelancer leaves this at zero. */
+  material: number
 
-  /** Opposite face index. Cast a ray opposite to face normal to find which opposite face is. */
-  opposite: number
+  /** Whether the face belongs to a hull that merely bounds a subtree (type 5). */
+  virtual: boolean
 
-  /** Edge indices referencing point index in hulls' part. */
-  edges: TriangleIndices
+  /** Face reached by casting a ray opposite to this face's normal. */
+  pierce: number
 
-  /** Adjacent edges in a hull. */
-  adjacent: TriangleIndices
+  /** Point index, into the part's shared point list, at which each edge starts. */
+  points: TriangleIndices
 
-  /** Face edge boolean state. Should be true when hull type is 5. */
-  state: TriangleFlags
+  /** Flat index (`face * 3 + edge`) of the half-edge opposing each edge. */
+  opposites: TriangleIndices
+
+  /** Per-edge counterpart of {@link virtual}. Should be true when hull type is 5. */
+  virtualEdges: TriangleFlags
 }
