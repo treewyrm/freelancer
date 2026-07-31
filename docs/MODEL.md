@@ -72,7 +72,8 @@ interface Model<T> extends Compound<Model<T>> {
 interface Rigid {
   type: 'rigid'
   hardpoints: Hardpoint[]
-  part?: MultiLevel | VMeshPart // TODO: VMeshWire not yet supported
+  part?: MultiLevel | VMeshPart
+  wireframe?: VMeshWire // optional edge overlay drawn over the geometry
 }
 
 type RigidPart = Rigid | Camera
@@ -87,8 +88,8 @@ A `RigidModel` is either a compound tree of rigid parts or a single bare part â€
 | --------------------------- | ------------------------------------------------------------------------ |
 | `readRigidModel(directory)` | Reads a `.cmp` compound or a `.3db` single part, whichever is present   |
 | `writeRigidModel(model)`    | Serializes either form back into a `Directory`                          |
-| `readRigid(parent)`         | Reads hardpoints plus `MultiLevel` (preferred) or `VMeshPart` geometry  |
-| `writeRigid(rigid)`         | Writes geometry and, when non-empty, the `Hardpoints` directory         |
+| `readRigid(parent)`         | Reads hardpoints, `MultiLevel` (preferred) or `VMeshPart`, plus any `VMeshWire` |
+| `writeRigid(rigid)`         | Writes geometry and, when present, `Hardpoints` and `VMeshWire`        |
 | `readPart(directory)`       | Dispatches to `readCamera` when the directory looks like a camera        |
 | `writePart(part)`           | Dispatches by `part.type`                                               |
 

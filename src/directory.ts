@@ -181,7 +181,11 @@ export default class Directory {
 
     const treeOffset = view.readUint32()
     const treeSize = view.readUint32()
-    const entryOffset = view.readUint32()
+
+    // Head of the free entry list, not the root entry: the root always sits at tree offset 0.
+    // Read only to advance the header cursor; write() emits 0 here.
+    view.readUint32()
+
     const entrySize = view.readUint32()
     const namesOffset = view.readUint32()
     const namesSizeAllocated = view.readUint32()
@@ -202,8 +206,8 @@ export default class Directory {
 
     const names = view.slice(namesOffset, namesOffset + namesSizeUsed)
 
-    /** Entry queue. */
-    const queue: ReadQueueItem[] = [{ offset: entryOffset }]
+    /** Entry queue. Root entry is always the first entry in the tree. */
+    const queue: ReadQueueItem[] = [{ offset: 0 }]
 
     /** Root directory. */
     let root: Directory | undefined

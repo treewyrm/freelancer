@@ -1,6 +1,7 @@
 import Directory from '#/directory.js'
 import { readMultiLevel, writeMultiLevel, type MultiLevel } from '#/vmesh/multilevel.js'
 import { readVMeshPart, writeVMeshPart, type VMeshPart } from '#/vmesh/part.js'
+import { readVMeshWire, writeVMeshWire, type VMeshWire } from '#/vmesh/wireframe.js'
 import { isCamera, readCamera, writeCamera, type Camera } from './camera.js'
 import { isCompoundModel, type Model, readModel, writeModel } from './model.js'
 import { readHardpoints, writeHardpoints, type Hardpoint } from './hardpoint.js'
@@ -9,7 +10,7 @@ export interface Rigid {
   type: 'rigid'
   hardpoints: Hardpoint[]
   part?: MultiLevel | VMeshPart
-  // TODO: Add VMeshWire
+  wireframe?: VMeshWire
 }
 
 export type RigidPart = Rigid | Camera
@@ -19,12 +20,13 @@ export type RigidModel = Model<RigidPart> | RigidPart
 export function readRigid(parent: Directory): Rigid {
   const hardpoints = [...readHardpoints(parent)]
   const part = readMultiLevel(parent) ?? readVMeshPart(parent)
+  const wire = readVMeshWire(parent)
 
-  return { type: 'rigid', hardpoints, part }
+  return { type: 'rigid', hardpoints, part, wireframe: wire }
 }
 
 export function writeRigid(rigid: Rigid): Directory {
-  const { part, hardpoints } = rigid
+  const { part, hardpoints, wireframe: wire } = rigid
   const directory = new Directory()
 
   switch (part?.type) {
@@ -37,6 +39,7 @@ export function writeRigid(rigid: Rigid): Directory {
   }
 
   if (hardpoints.length) directory.children.push(writeHardpoints(hardpoints))
+  if (wire) directory.children.push(writeVMeshWire(wire))
 
   return directory
 }

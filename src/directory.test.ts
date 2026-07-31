@@ -314,3 +314,34 @@ describe('Directory.read error handling', () => {
     assert.throws(() => Directory.read(new Uint8Array(view.buffer)), RangeError)
   })
 })
+
+// ===========================================================================
+// Header free entry list offset
+// ===========================================================================
+
+describe('Directory.read header free offset', () => {
+  // The uint32 after treeSize is the head of the free entry list, not the root
+  // entry. The root always sits at tree offset 0. Files written by the original
+  // Freelancer tools leave a non-zero value here.
+  const freeOffsetAt = Directory.VERSION_BYTE_LENGTH + 8
+
+  it('ignores a non-zero free offset and reads the root from tree offset 0', () => {
+    const root = new Directory()
+    root.setDirectory('Nested').setFile('Payload').writeIntegers(1, 2, 3)
+
+    const buffer = root.write()
+    const view = BufferView.from(buffer)
+
+    assert.equal(view.getUint32(freeOffsetAt, true), 0)
+    view.setUint32(freeOffsetAt, 0xe8, true) // point at an unrelated tree entry
+
+    const restored = Directory.read(buffer)
+    assert.equal(restored.name, '\\')
+    assert.deepEqual([...restored.getFile('Nested', 'Payload')!.readIntegers()], [1, 2, 3])
+  })
+
+  it('writes zero for the free offset', () => {
+    const view = BufferView.from(new Directory().write())
+    assert.equal(view.getUint32(freeOffsetAt, true), 0)
+  })
+})

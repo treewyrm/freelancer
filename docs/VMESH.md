@@ -18,9 +18,14 @@ MultiLevel (UTF directory)
   ├─ Switch2 (float[] distance breakpoints)
   └─ Level0..N
        └─ VMeshPart
+
+VMeshWire (UTF directory)
+  └─ VWireData (UTF file) ── meshId (CRC), vertex slice, LineList indices
 ```
 
 A `VMeshRef` identifies a mesh by the CRC32 of its name (`meshId`) and selects a slice of that mesh's groups, indices, and vertices. `getMeshDraw` resolves the reference against a loaded `VMeshLibrary` and yields per-group draw calls ready to pass to `DrawIndexedPrimitive`.
+
+`VMeshWire` is a sibling of `VMeshPart` rather than a child: it addresses the same `VMeshLibrary` mesh by CRC, but carries its own index buffer describing edges instead of faces.
 
 ---
 
@@ -177,6 +182,96 @@ A thin wrapper that reads/writes a `VMeshPart` UTF directory containing a single
 ### `readVMeshPart(parent)` / `writeVMeshPart(part)`
 
 Looks up the `VMeshPart` subdirectory inside `parent`, then delegates to `readVMeshRef`/`writeVMeshRef`.
+
+`readVMeshPart` returns `undefined` when the `VMeshPart` subdirectory is absent, so callers can probe for it (`readMultiLevel(parent) ?? readVMeshPart(parent)`); a `VMeshPart` directory that exists but lacks its `VMeshRef` file still throws.
+
+---
+
+## `wireframe.ts` — Wireframe Overlay
+
+A `VMeshWire` is an edge-only companion to a rigid part's geometry — the line overlay Freelancer draws over a ship in the scanner and dealer views. It reuses a mesh already present in the `VMeshLibrary` but supplies its own index buffer, drawn as `D3DPT_LINELIST` (`PrimitiveCount = indices.length / 2`).
+
+### Interfaces
+
+```ts
+interface VWireData {
+  meshId: number // int32 — CRC32 of target VMeshData name, same key space as VMeshRef.meshId
+  vertexStart: number // uint16 — base vertex offset; indices are relative to it
+  vertexCount: number // uint16 — number of unique vertex ids referenced by indices
+  vertexRange: number // uint16 — vertex span covering those vertices (D3D NumVertices)
+  indices: Uint16Array // uint16[] — LineList indices, two per edge, relative to vertexStart
+}
+
+interface VMeshWire {
+  data: VWireData
+}
+```
+
+The wrapper mirrors the UTF shape: a `VMeshWire` directory holding a single `VWireData` file, the same way `VMeshPart` wraps `VMeshRef`.
+
+### Indices are relative to `vertexStart`
+
+**Absolute vertex = `vertexStart + index`.** `vertexStart` is a base offset into the wire mesh's vertex buffer, not the smallest index present — `indices` themselves normally start at 0.
+
+This matters because several parts routinely share one wire mesh, each claiming its own slice. Reading the indices as relative makes those slices tile the buffer without overlapping; reading them as absolute makes every part draw the same vertices. From `OSMIUM/node_asteroid_osmium03f.cmp`, four parts sharing one mesh:
+
+```
+absolute: [0,24] [0,99]   [0,83]    [0,68]      ← all overlapping
+relative: [0,24] [36,135] [148,231] [244,312]   ← disjoint, ascending
+```
+
+Across the Freelancer/Discovery asset corpus this holds for 718 of 718 such groups, while the absolute reading collides in 717 of them.
+
+Together `vertexStart` and `vertexRange` are the `MinIndex`/`NumVertices` pair of `DrawIndexedPrimitive` — the same role `VMeshGroup` fills with `vertexStart`/`vertexEnd`.
+
+### Binary layout (`VWireData` UTF file)
+
+| Field       | Type     | Notes                                        |
+| ----------- | -------- | -------------------------------------------- |
+| headerSize  | uint32   | Must be `0x10` (16) — self-describing size   |
+| meshId      | int32    | CRC32 of target `VMeshData` name             |
+| vertexStart | uint16   | Base vertex offset; indices are relative     |
+| vertexCount | uint16   | Unique vertex ids referenced                 |
+| indexCount  | uint16   | Number of indices that follow                |
+| vertexRange | uint16   | Vertex span covering the referenced vertices |
+| indices     | uint16[] | count = indexCount                           |
+
+Header size is fixed at **16 bytes**; total file size is `16 + indexCount × 2`.
+
+> **Field order caveat:** `indexCount` is stored _before_ `vertexRange`, so the two trailing uint16s are not the (start, count) pair the leading ones are.
+
+### Deriving the fields
+
+When authoring new wireframe data from a set of absolute vertex ids referenced by the lines:
+
+```ts
+vertexStart = Math.min(...ids)
+indices = ids.map((id) => id - vertexStart) // relative, so min(indices) === 0
+vertexCount = new Set(ids).size
+vertexRange = Math.max(...ids) - Math.min(...ids) + 1
+```
+
+**Provenance.** These formulas come from measuring 6,308 `VWireData` records across 3,931 `.cmp`/`.3db` files. `vertexCount` matches the unique-id count in 99.3% of them. `vertexRange` splits perfectly along exporter lineage:
+
+| records | `max-min` | `max-min+1` | exporter               |
+| ------- | --------- | ----------- | ---------------------- |
+| 1816    | 0         | **1816**    | `Nov 5 2002 11:41:55`  |
+| 1319    | **1319**  | 0           | `MAXLancer Tools 0.97` |
+| 588     | **588**   | 0           | `MAXLancer Tools 0.98` |
+| 495     | 0         | **495**     | `Aug 24 2002 12:33:14` |
+| 473     | **473**   | 0           | `MAXLancer Tools`      |
+| 311     | 0         | **311**     | `Jun 10 2002 16:27:11` |
+| 21      | **20**    | 0           | `LancerEdit 2024.06.1` |
+
+Every date-stamped build string is an original Digital Anvil exporter, and all of them emit `max - min + 1` without exception. MAXLancer and LancerEdit emit one less, which under-declares the span so the highest-numbered vertex falls outside it. The `+ 1` form is canonical: as a vertex count it is exactly the `NumVertices` that `DrawIndexedPrimitive` expects.
+
+> The reader and writer **preserve whatever a file contains** and never normalise it, so assets round-trip byte-exactly regardless of which tool produced them. Use the formulas above only when creating new data. `indexCount` is the one field genuinely derived on write.
+
+### `readVMeshWire(parent)` / `writeVMeshWire(wire)`
+
+`readVMeshWire` returns `undefined` when `parent` has no `VMeshWire` subdirectory, throws when that directory exists without a `VWireData` file, and throws `RangeError` if the leading size field is not `0x10`. `writeVMeshWire` returns a fresh `VMeshWire` directory, recomputes `indexCount` from `indices.length`, and writes the three vertex fields unchanged.
+
+Rigid parts read and write this through `Rigid.wireframe` — see [MODEL.md](MODEL.md).
 
 ---
 

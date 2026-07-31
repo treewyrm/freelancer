@@ -69,7 +69,7 @@ Property system is a discriminated union keyed by `PropertyType`. Boolean values
 
 ### VMesh (`src/vmesh/`)
 
-Reads/writes VMesh geometry: `readVMeshPart`/`writeVMeshPart` for individual mesh parts and `readVMeshLibrary`/`writeVMeshLibrary` for the full mesh library. See `src/vmesh/data.ts` for binary layout details.
+Reads/writes VMesh geometry: `readVMeshPart`/`writeVMeshPart` for individual mesh parts, `readVMeshWire`/`writeVMeshWire` for the `VMeshWire` line-list overlay, and `readVMeshLibrary`/`writeVMeshLibrary` for the full mesh library. See `src/vmesh/data.ts` for binary layout details.
 
 ### Model (`src/model/`)
 
