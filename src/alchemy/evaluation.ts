@@ -124,11 +124,11 @@ export function hermiteAt(animation: LoopAnimation<VectorKeyframe>, key: number)
 
   const { start, end, span } = at(animation.keyframes, key)
 
+  /** Continue effect. */
+  const accumulate = (last.value.x - first.value.x) * count
+
   // Add loop distance for accumulative result.
-  return (
-    hermite(start.value.x, start.value.z, end.value.x, end.value.y, span) +
-    (last.value.x - first.value.x) * count
-  )
+  return hermite(start.value.x, start.value.z, end.value.x, end.value.y, span) + accumulate
 }
 
 export function curveAt(animation: AnimatedCurve, p: number, t: number): number {
