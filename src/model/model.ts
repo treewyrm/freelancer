@@ -24,6 +24,8 @@ export interface Model<T> extends Compound<Model<T>> {
   joint?: Joint
 }
 
+export const isCompoundModel = (directory: Directory) => !!directory.getDirectory('Cmpnd')
+
 /**
  * Arranges compound objects into hierarchy from constraints.
  * @param objects

@@ -8,6 +8,8 @@ export interface Camera {
   zFar: number
 }
 
+export const isCamera = (directory: Directory) => !!directory.getFile('Fovx')
+
 export function readCamera(directory: Directory): Camera {
   // TODO: Make readCamera function.
 

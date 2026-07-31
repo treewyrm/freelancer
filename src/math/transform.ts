@@ -9,6 +9,8 @@ interface Transform {
 }
 
 const Transform = {
+  identity: { position: Vector3.identity, orientation: Quat.identity } as const,
+
   /** Creates a copy of transform. */
   copy(transform: Transform): Transform {
     let { position, orientation } = transform
@@ -51,10 +53,12 @@ const Transform = {
     return { position, orientation }
   },
 
-  /** Pushes transform to transform stack. */
-  push(stack: Transform[], transform: Transform): void {
-    const last = stack.at(-1)
-    stack.push(last ? Transform.multiply(transform, last) : Transform.copy(transform))
+  /** Pushes one or more transforms onto a transform stack. */
+  push(stack: Transform[], ...transforms: Transform[]): void {
+    for (const transform of transforms) {
+      const last = stack.at(-1)
+      stack.push(last ? Transform.multiply(transform, last) : Transform.copy(transform))
+    }
   },
 }
 

@@ -5,8 +5,6 @@ import Quat from './quat.js'
 import Vector3 from './vector3.js'
 import Vector4 from './vector4.js'
 
-const identity: Transform = { position: { x: 0, y: 0, z: 0 }, orientation: Quat.identity }
-
 const vecApprox = (a: Vector3, b: Vector3) => Vector3.equal(a, b)
 const quatApprox = (a: Vector4, b: Vector4) => Vector4.equal(a, b)
 
@@ -48,7 +46,7 @@ describe('Transform.copy', () => {
 describe('Transform.transform', () => {
   it('identity transform leaves vector unchanged', () => {
     const v = { x: 1, y: 2, z: 3 }
-    assert.ok(vecApprox(Transform.transform(v, identity), v))
+    assert.ok(vecApprox(Transform.transform(v, Transform.identity), v))
   })
 
   it('pure translation adds offset to vector', () => {
@@ -80,7 +78,7 @@ describe('Transform.transform', () => {
 describe('Transform.revert', () => {
   it('identity transform leaves vector unchanged', () => {
     const v = { x: 3, y: 1, z: 4 }
-    assert.ok(vecApprox(Transform.revert(v, identity), v))
+    assert.ok(vecApprox(Transform.revert(v, Transform.identity), v))
   })
 
   it('revert undoes a pure translation', () => {
@@ -108,14 +106,14 @@ describe('Transform.revert', () => {
 describe('Transform.multiply', () => {
   it('child * identity parent = child', () => {
     const child: Transform = { position: { x: 1, y: 2, z: 3 }, orientation: rot90z }
-    const result = Transform.multiply(child, identity)
+    const result = Transform.multiply(child, Transform.identity)
     assert.ok(vecApprox(result.position, child.position))
     assert.ok(quatApprox(result.orientation, child.orientation))
   })
 
   it('identity child * parent = parent', () => {
     const parent: Transform = { position: { x: 5, y: 0, z: 0 }, orientation: rot90x }
-    const result = Transform.multiply(identity, parent)
+    const result = Transform.multiply(Transform.identity, parent)
     assert.ok(vecApprox(result.position, parent.position))
     assert.ok(quatApprox(result.orientation, parent.orientation))
   })
@@ -191,8 +189,8 @@ describe('Transform.push', () => {
 
   it('stack grows by one per push', () => {
     const stack: Transform[] = []
-    Transform.push(stack, identity)
-    Transform.push(stack, identity)
+    Transform.push(stack, Transform.identity)
+    Transform.push(stack, Transform.identity)
     assert.equal(stack.length, 2)
   })
 
@@ -205,10 +203,20 @@ describe('Transform.push', () => {
     assert.ok(vecApprox(stack[1]!.position, { x: 2, y: 0, z: 0 }))
   })
 
+  it('variadic push adds multiple transforms in one call', () => {
+    const stack: Transform[] = []
+    const tx: Transform = { position: { x: 1, y: 0, z: 0 }, orientation: Quat.identity }
+    const ty: Transform = { position: { x: 0, y: 2, z: 0 }, orientation: Quat.identity }
+    Transform.push(stack, tx, ty)
+    assert.equal(stack.length, 2)
+    assert.ok(vecApprox(stack[0]!.position, { x: 1, y: 0, z: 0 }))
+    assert.ok(vecApprox(stack[1]!.position, { x: 1, y: 2, z: 0 }))
+  })
+
   it('pushing identity onto identity stack stays identity', () => {
     const stack: Transform[] = []
-    Transform.push(stack, identity)
-    Transform.push(stack, identity)
+    Transform.push(stack, Transform.identity)
+    Transform.push(stack, Transform.identity)
     assert.ok(vecApprox(stack[1]!.position, { x: 0, y: 0, z: 0 }))
     assert.ok(quatApprox(stack[1]!.orientation, Quat.identity))
   })
