@@ -110,10 +110,10 @@ export function readModel<T>(parent: Directory, read: (parent: Directory) => T):
  * @param parent Output directory
  */
 export function writeModel<T>(root: Model<T>, write: (value: T) => Directory): Directory {
-  const directory = new Directory()
+  const output = new Directory()
 
   /** Compound directory. */
-  const compound = directory.setDirectory('Cmpnd')
+  const compound = output.setDirectory('Cmpnd')
 
   /** Model constraint list. */
   const constraints: Constraint[] = []
@@ -139,7 +139,7 @@ export function writeModel<T>(root: Model<T>, write: (value: T) => Directory): D
     for (const { joint, name } of object.children)
       if (joint) constraints.push({ parent: object.name, child: name, joint })
 
-    const fragment = directory.setDirectory(filename)
+    const fragment = output.setDirectory(filename)
     fragment.children = write(part).children
   }
 
@@ -147,7 +147,7 @@ export function writeModel<T>(root: Model<T>, write: (value: T) => Directory): D
   for (const file of writeConstraints(constraints))
     compound.setFile('Cons', file.name).append(file.data)
 
-  return directory
+  return output
 }
 
 /** Finds hardpoint. */

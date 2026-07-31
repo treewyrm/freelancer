@@ -81,7 +81,7 @@ export function* writeConstraints(constraints: Iterable<Constraint>): Generator<
         yield new File('rev', BufferView.join(writeNames(parent, child), writeRevolute(joint)))
         break
       case 'prismatic':
-        yield new File('rev', BufferView.join(writeNames(parent, child), writePrismatic(joint)))
+        yield new File('pris', BufferView.join(writeNames(parent, child), writePrismatic(joint)))
         break
       case 'sphere':
         yield new File('sphere', BufferView.join(writeNames(parent, child), writeSphere(joint)))
