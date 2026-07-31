@@ -52,7 +52,7 @@ Which keyframe fields a joint map consumes depends on the joint in [`src/model/j
 | `prismatic` | `value` — offset along the joint axis                                  |
 | `sphere`    | `rotation`                                                             |
 | `loose`     | `position`, `rotation`, or both                                        |
-| `cylinder`  | unimplemented — see [Pair keyframes](#pair-keyframes-0x08)             |
+| `cylinder`  | unimplementable — see [Why cylinder joints cannot be animated](#why-cylinder-joints-cannot-be-animated) |
 
 `Root height` is an elevation added on top of the object map position. Only deformable models use
 it, and in retail data it appears exactly once per object map.
@@ -86,7 +86,7 @@ quaternion bit may be set, and `Angle` never combines with anything else.
 | `Angle`              | `0x01` | 4                  | Single float: revolute angle in radians or prismatic offset    |
 | `Position`           | `0x02` | 12                 | Position vector, 3× `float32`                                  |
 | `Quaternion`         | `0x04` | 16                 | Rotation quaternion, 4× `float32` stored **W, X, Y, Z**        |
-| `Pair`               | `0x08` | —                  | Unknown; unused by retail assets and rejected by this library  |
+| `Event`              | `0x08` | —                  | Event stream; no retail asset sets it, rejected by this library |
 | `ZeroPosition`       | `0x10` | 0                  | Position is animated but always zero; nothing is stored        |
 | `IdentityQuaternion` | `0x20` | 0                  | Rotation is animated but always identity; nothing is stored    |
 | `VectorQuaternion`   | `0x40` | 6                  | Rotation quantized to the quaternion vector part, 3× `int16`   |
@@ -161,12 +161,59 @@ longer than one unit — outside the range the encoding can represent. Re-encodi
 they come back one `int16` LSB off. The resulting rotation differs by at most 0.004°. The corpus
 test allows exactly these and asserts the decoded quaternions still match.
 
-### Pair keyframes (`0x08`)
+### Event keyframes (`0x08`)
 
-Retail assets never set this bit and Freelancer has no code for it. MAXLancer repurposes it to
-write a pair of floats for cylinder joints, which the game will not play back. This library
-recognises the flag by name and rejects it in `validateChannelType`, matching
-[`joint.ts`](../src/model/joint.ts), where cylinder joints are likewise unimplemented.
+This bit is `PersistDT_EVENT`, an **event stream** rather than joint data. Conquest: Frontier Wars
+defines it in `Libs/Include/PersistChannel.h` alongside the other three, and pairs it with an
+`Event map` directory — a third map stem beside `Object map` and `Joint map`
+(`Libs/Include/persistanim.h`).
+
+Freelancer authored none. Across 3117 retail scripts the only map stems are `Joint map` (142669)
+and `Object map` (1010), and no channel sets `0x08`. Its payload layout is therefore unknown here,
+and `validateChannelType` rejects it.
+
+MAXLancer repurposes the bit to write a pair of floats for cylinder joints. That is MAXLancer's own
+convention and not what the bit means.
+
+### Why the low bits are what they are
+
+The whole low nibble comes straight from CFW, where the type describes a joint's **state vector**:
+
+| Bit    | CFW name              | Floats | Joint it serves            |
+| ------ | --------------------- | ------ | -------------------------- |
+| `0x01` | `PersistDT_FLOAT`     | 1      | revolute, prismatic        |
+| `0x02` | `PersistDT_VECTOR`    | 3      | translational              |
+| `0x04` | `PersistDT_QUATERNION`| 4      | spherical                  |
+| `0x08` | `PersistDT_EVENT`     | —      | event stream               |
+
+`JointInfo::get_num_state_floats` returns exactly those counts, and `0x06` — the combination that
+does occur in retail Freelancer — is the 7 floats a **loose** joint needs, a vector plus a
+quaternion. The channel header itself is unchanged too: `PersistChannelHeader` is `frames`,
+`capture_rate`, `type`, and its comment states the rule this library calls a negative interval —
+*"if the capture rate is less than 0.0 then the data is not periodic … each frame consists of a
+time value"*.
+
+The upper nibble (`0x10`–`0x80`) has no CFW counterpart. Those four are Freelancer's own additions,
+all of them compression: two implied-constant forms and two quaternion quantizations.
+
+### Why cylinder joints cannot be animated
+
+A cylinder takes **2 floats** — `get_num_state_floats` returns 2 for `JT_CYLINDRICAL` — and no
+combination of the bits above comes to 2. The format has nowhere to put them. It is not a decoder
+this library is missing.
+
+CFW never animated one either. Its exporter has no cylinder branch anywhere: `GetChannelType`
+(`Libs/Src/Tools/Exporters/Common/CMP.CPP`) dispatches loose, spherical, translational and event
+straight off the type bits and then falls back to searching the prismatic and revolute lists by
+name — there is no `cyl_list` in the exporter at all — and `IsConstantChannel`'s `frame_size`
+switch has cases for every joint kind except cylindrical, which lands in *"Error: unknown channel
+type"*.
+
+Worth noting for anyone tempted to add it: a cylinder channel would have to be `PersistDT_FLOAT`
+carrying two floats, so its stride could not be derived from the channel type alone — it would need
+the joint type, reached through the map's parent and child names. That is exactly what
+`GetChannelType` does to tell a prismatic channel from a revolute one, where it happens not to
+matter because both are one float.
 
 ---
 

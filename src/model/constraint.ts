@@ -1,11 +1,13 @@
 import File from '#/file.js'
 import BufferView from '#/utility/bufferview.js'
 import {
+  readCylinder,
   readFixed,
   readLoose,
   readPrismatic,
   readRevolute,
   readSphere,
+  writeCylinder,
   writeFixed,
   writeLoose,
   writePrismatic,
@@ -25,9 +27,17 @@ export interface Constraint {
   joint: Joint
 }
 
-const readName = (view: BufferView) => view.slice(0x40).readStringZ()
+/** Byte length of a constraint name field. Names are NUL-padded to it, not NUL-separated. */
+const NAME_LENGTH = 0x40
 
-const writeName = (value: string) => BufferView.allocate(0x40).writeString(value)
+const readName = (view: BufferView) => {
+  const value = view.readString(NAME_LENGTH)
+  const end = value.indexOf('\0')
+
+  return end < 0 ? value : value.substring(0, end)
+}
+
+const writeName = (value: string) => BufferView.allocate(NAME_LENGTH).writeString(value)
 
 const readNames = (view: BufferView) => ({
   parent: readName(view),
@@ -39,16 +49,21 @@ const writeNames = (parent: string, child: string): BufferView =>
 
 /**
  * Reads compound hierarchy constraints.
+ *
+ * Records are not self-describing: the file name is the only thing that gives their size, so a
+ * file whose joint cannot be read cannot be skipped either — carrying on would silently
+ * desynchronize every record after it.
  * @param files
  */
 export function* readConstraints(files: Iterable<File>): Generator<Constraint> {
   for (const file of files) {
     const view = BufferView.from(file)
+    const kind = file.name.toLowerCase()
 
     while (view.byteRemain > 0) {
       const { parent, child } = readNames(view)
 
-      switch (file.name.toLowerCase()) {
+      switch (kind) {
         case 'fix':
           yield { parent, child, joint: readFixed(view) }
           break
@@ -59,6 +74,7 @@ export function* readConstraints(files: Iterable<File>): Generator<Constraint> {
           yield { parent, child, joint: readPrismatic(view) }
           break
         case 'cyl':
+          yield { parent, child, joint: readCylinder(view) }
           break
         case 'sphere':
           yield { parent, child, joint: readSphere(view) }
@@ -66,6 +82,8 @@ export function* readConstraints(files: Iterable<File>): Generator<Constraint> {
         case 'loose':
           yield { parent, child, joint: readLoose(view) }
           break
+        default:
+          throw new RangeError(`Unknown constraint file ${file.name}`)
       }
     }
   }
@@ -88,6 +106,9 @@ export function* writeConstraints(constraints: Iterable<Constraint>): Generator<
         break
       case 'loose':
         yield new File('loose', BufferView.join(writeNames(parent, child), writeLoose(joint)))
+        break
+      case 'cylinder':
+        yield new File('cyl', BufferView.join(writeNames(parent, child), writeCylinder(joint)))
         break
     }
   }

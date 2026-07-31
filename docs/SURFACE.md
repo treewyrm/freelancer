@@ -77,6 +77,12 @@ import { readFileSync } from 'node:fs'
 const parts = readSurfaceLibrary(BufferView.from(readFileSync('ships/li_fighter.sur')))
 ```
 
+### Files that predate the container
+
+17 of the 798 retail `.sur` files carry no signature at all. They open with the 24-byte bounding box, then a length-prefixed part **name** where the modern format puts a part CRC, then the chunk list — whose tags include `ledg`, which `vers` files never use. `li_battleship.sur` and the freight train are the notable ones.
+
+Nothing past the bounding box is shared with the version 2 layout, so `readSurfaceLibrary` rejects them with `Invalid SUR header` rather than misreading them. This module does not support the older format.
+
 ---
 
 ## `part.ts` — Surface Part
@@ -106,7 +112,7 @@ interface Part extends Extent, Surface {
 | `surf`   | `0x66727573` | uint32 size, then the `Surface` block           |
 | `hpid`   | `0x64697068` | uint32 count followed by that many int32 IDs   |
 
-Chunk payloads are not length-prefixed at the tag level, so an unrecognized tag cannot be skipped — continuing past one would silently desynchronize the rest of the file. `readPart` therefore throws a `RangeError` instead. No file in a 476-file survey used a tag outside the four above.
+Chunk payloads are not length-prefixed at the tag level, so an unrecognized tag cannot be skipped — continuing past one would silently desynchronize the rest of the file. `readPart` therefore throws a `RangeError` instead. No file in the retail corpus used a tag outside the four above.
 
 `fixed` is the **inverse** of the `!fxd` chunk: a part reads back as `fixed: true` when the chunk is absent. On write the chunk is emitted whenever `fixed` is falsy. The `hpid` chunk is written only when `hardpoints` is non-empty, matching Freelancer, which omits it for most parts.
 
@@ -129,7 +135,7 @@ Fixed size: **24 bytes**.
 
 `readExtent(view, extent)` fills an existing object in place (parts are `Extent`s); `writeExtent(extent)` returns a new `BufferView`.
 
-The extent bounds the part, which for a compound part is not obliged to enclose every hull: across 743 parts surveyed, 633 had all their points inside it.
+The extent bounds the part, which for a compound part is not obliged to enclose every hull: across the 1365 retail parts, 1134 had all their points inside it.
 
 ---
 
@@ -155,7 +161,7 @@ interface Surface {
 
 ### Binary layout
 
-The block is preceded by a `uint32` size, which duplicates the `byte_size` field inside the header — the two agreed on all 743 parts surveyed. Then a 48-byte header:
+The block is preceded by a `uint32` size, which duplicates the `byte_size` field inside the header — the two agree on all 1365 retail parts. Then a 48-byte header:
 
 | Field              | Type       | IVP name                          |
 | ------------------ | ---------- | ----------------------------------- |
@@ -197,7 +203,7 @@ Fixed size: **28 bytes** — right-child offset (int32), hull offset (int32), th
 
 Multiply `boxSizes` by `radius` to get the half-extents of the axis-aligned box around `center`. For `ge_cm_mark1.sur` the root yields `(0.505, 0.505, 0.379)` against an extent half-size of `(0.5, 0.5, 0.375)`.
 
-A well-formed tree is a full binary tree, so `nodeCount == 2 × terminalHulls − 1`. This held for all 743 parts surveyed.
+A well-formed tree is a full binary tree, so `nodeCount == 2 × terminalHulls − 1`. This holds for all 1365 retail parts.
 
 ---
 
@@ -217,7 +223,7 @@ interface Hull {
 }
 ```
 
-`HullType` is not an enum in IVP but two packed flags: `has_children` (bits 0–1) and `is_compact` (bits 2–3). Every hull Freelancer emits is compact, so only 4 (terminal) and 5 (has children) occur — 3914 and 185 respectively in the survey.
+`HullType` is not an enum in IVP but two packed flags: `has_children` (bits 0–1) and `is_compact` (bits 2–3). Every hull Freelancer emits is compact, so only 4 (terminal) and 5 (has children) occur — 9111 and 415 respectively in the retail corpus.
 
 That distinction is what gives `id` two meanings: it is IVP's `union { ledgetree_node_offset; client_data; }`. A terminal ledge stores user data — Freelancer's part CRC, which may differ from the id of the surface part containing it — while a subtree-bounding ledge stores a relative offset back to the node that owns it. **`writeSurface` recomputes the type-5 value**, since it depends on where the node tree lands.
 
@@ -234,7 +240,7 @@ That distinction is what gives `id` two meanings: it is IVP's `union { ledgetree
 
 `readHull` is entered after the caller has consumed the point offset.
 
-`size_div_16` is the whole ledge size in 16-byte units: one header, one per triangle, one per point. Since a closed convex polyhedron has `V = 2 + F / 2` by Euler's formula, this reduces to `(12 + faceCount × 6) / 4`, which is what `getIndexCount` computes and validates on read (`RangeError` on mismatch). It held for all 4099 hulls surveyed.
+`size_div_16` is the whole ledge size in 16-byte units: one header, one per triangle, one per point. Since a closed convex polyhedron has `V = 2 + F / 2` by Euler's formula, this reduces to `(12 + faceCount × 6) / 4`, which is what `getIndexCount` computes and validates on read (`RangeError` on mismatch). It holds for all 9526 retail hulls.
 
 ### Helper functions
 
@@ -260,7 +266,7 @@ interface Face {
 
 Fixed size: **16 bytes**. The leading `uint32` packs `virtual` (bit 31), `material` (bits 24–30), `pierce` (bits 12–23), and the face's own `tri_index` (bits 0–11) — faces are therefore stored out of order and placed into `faces[index]` on read.
 
-IVP declares `material_index` and `is_virtual` as adjacent bitfields, so this module splits them rather than exposing one byte. The survey bears the split out exactly: `material` was 0 for all 73264 faces, and `virtual` was true for all 11434 faces of type-5 hulls and false for all 61830 faces of type-4 hulls.
+IVP declares `material_index` and `is_virtual` as adjacent bitfields, so this module splits them rather than exposing one byte. The retail corpus bears the split out exactly: `material` is 0 for all 177824 faces, and `virtual` is true for all 28644 faces of type-5 hulls and false for all 149180 faces of type-4 hulls. The three per-edge `is_virtual` flags always agree with it.
 
 Each of the three edges is a `uint16` point index followed by a `uint16` holding `is_virtual` in bit 15 and a signed 15-bit `opposite_index` in the rest.
 
@@ -276,7 +282,7 @@ interface Point extends Vector3 {
 }
 ```
 
-Fixed size: **16 bytes** — float32 x/y/z, **then** the int32 `clientData`. `IVP_Compact_Poly_Point` derives from `IVP_U_Float_Hesse`, so the coordinates come first and the trailing word is the plane's `hesse_val` slot, reused as `client_data`. Freelancer uses it: it was non-zero for 72% of the 33352 points surveyed.
+Fixed size: **16 bytes** — float32 x/y/z, **then** the int32 `clientData`. `IVP_Compact_Poly_Point` derives from `IVP_U_Float_Hesse`, so the coordinates come first and the trailing word is the plane's `hesse_val` slot, reused as `client_data`. Freelancer uses it: it is non-zero for 75% of the 79596 retail points.
 
 Points are shared across all the hulls of a part — the builder re-indexes each ledge into one common array — so faces reference them by index into `Surface.points`.
 
@@ -303,6 +309,6 @@ import {
 
 ## Round-tripping
 
-`writeSurfaceLibrary` reproduces the IVP layout but not Freelancer's exact ordering: IVP's builder emits terminal ledges before subtree-bounding ones, whereas this writer emits them in tree order. Re-encoding is therefore not byte-identical to the original file, but it **is** a fixed point — writing a decoded library and reading it back yields the same structure, and encoding that again gives identical bytes. Both properties were verified across the 472 well-formed files of a 476-file survey.
+`writeSurfaceLibrary` reproduces the IVP layout but not Freelancer's exact ordering: IVP's builder emits terminal ledges before subtree-bounding ones, whereas this writer emits them in tree order. Re-encoding is therefore not byte-identical to the original file, but it **is** a fixed point — writing a decoded library and reading it back yields the same structure, and encoding that again gives identical bytes. Both properties hold across all 781 files the reader accepts; 574 of them re-encode byte for byte regardless.
 
 The one value that does not survive verbatim is a type-5 hull's `id`, which is a derived offset and is reassigned on write.

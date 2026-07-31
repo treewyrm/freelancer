@@ -339,3 +339,22 @@ The library is a `Map` keyed by the CRC32 of each mesh's name (computed via `get
 ```
 
 Each yielded object provides everything needed to issue one `DrawIndexedPrimitive` call. The `elements` and `vertices` slices are `subarray` views into the shared `VMeshData` buffers — no copying occurs.
+
+---
+
+## Mesh resolution is global, not per file
+
+A `VMeshRef` names its mesh by CRC alone, with nothing to say which file that mesh lives in. At runtime Freelancer resolves it against every library currently loaded, so a model may reference geometry that its own `VMeshLibrary` does not contain — and `getMeshDraw` will throw `RangeError` for it when handed only the one file's library.
+
+The retail data has exactly one case: **`INTERFACE/interface.generic.vms`**, a bare UTF tree whose only child is a `VMeshLibrary` holding two meshes.
+
+```
+INTERFACE/interface.generic.vms
+  VMeshLibrary/
+    interface.generic-2.vms     ── id -493461457
+    interface.generic-102.vms   ── id  324122324
+```
+
+`.vms` is not a distinct format — it is a UTF container with nothing but the library, read by `readVMeshLibrary` like any other. The game loads it unprompted (the path is baked into the executable rather than named by any INI), which is why 331 `INTERFACE/**` models reference those two meshes without ever declaring a library of their own. Those 530 references are the **only** external ones in retail data; every other `VMeshRef` in the game resolves inside its own file.
+
+A consumer that renders arbitrary models therefore wants to merge libraries across files rather than resolve one file at a time.

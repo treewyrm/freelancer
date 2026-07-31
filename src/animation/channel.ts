@@ -11,6 +11,15 @@ import Vector3 from '#/math/vector3.js'
  *
  * At most one of the position bits and at most one of the quaternion bits may be set, and
  * {@link Angle} never combines with anything else.
+ *
+ * The low four bits are inherited verbatim from Conquest: Frontier Wars, where they are
+ * `PersistDT_FLOAT`, `_VECTOR`, `_QUATERNION` and `_EVENT`. There they describe the joint's state
+ * vector, and its width follows: 1, 3 and 4 floats, so `Position | Quaternion` is the 7 floats a
+ * loose joint needs. The high four bits are Freelancer's own additions, all of them compression.
+ *
+ * A cylinder joint takes 2 floats — an angle and an offset along one shared axis — and no
+ * combination of these bits comes to 2. That, rather than a missing decoder, is why cylinder
+ * joints cannot be animated: the format has nowhere to put them.
  */
 export enum ChannelType {
   /** Single float: revolute joint angle in radians or prismatic joint offset. */
@@ -23,10 +32,17 @@ export enum ChannelType {
   Quaternion = 0x04,
 
   /**
-   * Unknown and unused by retail assets. MAXLancer writes a pair of floats here to animate
-   * cylinder joints, a convention the game itself does not implement.
+   * Event stream rather than joint data. `PersistDT_EVENT` in Conquest: Frontier Wars, where it
+   * pairs with an `Event map` directory alongside `Object map` and `Joint map`.
+   *
+   * Freelancer authored none: no retail script holds an `Event map`, and no channel sets this
+   * bit. The payload layout is therefore unknown here, and `validateChannelType` rejects it.
+   *
+   * MAXLancer repurposes the bit to write a pair of floats for cylinder joints. That is its own
+   * convention, not this one — see {@link ChannelType} for why a cylinder cannot be expressed
+   * by the bitfield at all.
    */
-  Pair = 0x08,
+  Event = 0x08,
 
   /** Channel animates position, but every keyframe is zero and no data is stored. */
   ZeroPosition = 0x10,
@@ -66,7 +82,7 @@ const countBits = (value: number): number => {
  * @returns Type unchanged
  */
 export function validateChannelType(type: number): ChannelType {
-  if (type & ChannelType.Pair) throw new RangeError('Channel pair keyframes are unsupported')
+  if (type & ChannelType.Event) throw new RangeError('Channel event keyframes are unsupported')
   if (type & ~0xff || type < 0) throw new RangeError(`Unknown channel type bits: ${type}`)
 
   if (type & ChannelType.Angle && type !== ChannelType.Angle)

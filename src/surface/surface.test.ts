@@ -5,8 +5,9 @@ import { readSurfaceLibrary, writeSurfaceLibrary } from './library.js'
 import { readExtent, writeExtent, type Extent } from './extent.js'
 import { readPoint, writePoint, type Point } from './point.js'
 import { readHull, writeHull, type Hull } from './hull.js'
-import { getHulls, getNodes, type Surface } from './surface.js'
-import type { Part } from './part.js'
+import { readNode, writeNode } from './node.js'
+import { readSurface, getHulls, getNodes, writeSurface, type Surface } from './surface.js'
+import { readPart, writePart, type Part } from './part.js'
 import type { Node } from './node.js'
 import type { Face } from './face.js'
 
@@ -59,19 +60,21 @@ const node = (radius: number, hull?: Hull, left?: Node, right?: Node): Node => (
   ...(right ? { right } : {}),
 })
 
-function samplePart(): Part {
-  const left = node(1, tetrahedron(0x11111111))
-  const right = node(2, tetrahedron(0x22222222))
-
-  const surface: Surface = {
+function sampleSurface(root: Node): Surface {
+  return {
     massCenter: { x: 1, y: 2, z: 3 },
     rotationInertia: { x: 0.25, y: 0.5, z: 0.75 },
     radius: 4.5,
     surfaceDeviation: 243 / 0xfa,
     points,
-    root: node(3, tetrahedron(0, 5), left, right),
+    root,
     padding: { x: 0, y: 0, z: 0 },
   }
+}
+
+function samplePart(root?: Node): Part {
+  const left = node(1, tetrahedron(0x11111111))
+  const right = node(2, tetrahedron(0x22222222))
 
   return {
     id: 0x0badf00d | 0,
@@ -79,9 +82,34 @@ function samplePart(): Part {
     hardpoints: [1, 2, 3],
     minimum: { x: -1, y: -2, z: -3 },
     maximum: { x: 4, y: 5, z: 6 },
-    ...surface,
+    ...sampleSurface(root ?? node(3, tetrahedron(0, 5), left, right)),
   }
 }
+
+/** A seven node tree, deeper on the left than on the right, with four terminal hulls. */
+function deepPart(): Part {
+  const leaf = (id: number, radius: number) => node(radius, tetrahedron(id))
+
+  return samplePart(
+    node(
+      4,
+      tetrahedron(0, 5),
+      node(2, tetrahedron(0, 5), leaf(0x11111111, 1), leaf(0x22222222, 1)),
+      node(3, tetrahedron(0, 5), leaf(0x33333333, 1), leaf(0x44444444, 1)),
+    ),
+  )
+}
+
+/** Blank target for {@link readSurface}, which fills an existing object. */
+const emptySurface = (): Surface => ({
+  massCenter: { x: 0, y: 0, z: 0 },
+  rotationInertia: { x: 0, y: 0, z: 0 },
+  radius: 0,
+  surfaceDeviation: 0,
+  points: [],
+  root: { center: { x: 0, y: 0, z: 0 }, radius: 0, boxSizes: { x: 0, y: 0, z: 0 }, padding: 0 },
+  padding: { x: 0, y: 0, z: 0 },
+})
 
 describe('extent', () => {
   it('stores minimum and maximum as contiguous vectors', () => {
@@ -148,6 +176,102 @@ describe('hull', () => {
   })
 })
 
+describe('node', () => {
+  it('occupies twenty bytes, the sphere ahead of the packed box', () => {
+    const view = BufferView.allocate(20)
+
+    writeNode(view, node(2.5))
+    strictEqual(view.offset, 20)
+
+    deepStrictEqual([...new Float32Array(view.buffer, 0, 4)], [0.5, 0.25, -0.125, 2.5])
+    deepStrictEqual([...new Uint8Array(view.buffer, 16, 4)], [100, 200, 250, 0])
+  })
+
+  it('round-trips box sizes that land on a step of 1/250', () => {
+    const view = BufferView.allocate(20)
+    const value = node(2.5)
+
+    writeNode(view, value)
+    view.offset = 0
+
+    // Children are not part of the record, so the reader hands back the node on its own.
+    deepStrictEqual(readNode(view), value)
+  })
+
+  it('quantises box sizes that do not, to the nearest step', () => {
+    const view = BufferView.allocate(20)
+
+    writeNode(view, { ...node(1), boxSizes: { x: 0.5, y: 1, z: 0 } })
+    view.offset = 0
+
+    deepStrictEqual(readNode(view).boxSizes, { x: 125 / 0xfa, y: 1, z: 0 })
+  })
+})
+
+describe('surface block', () => {
+  it('states its own size twice, in the chunk and in the IVP header', () => {
+    const view = writeSurface(samplePart())
+    const size = view.getUint32(0, true)
+
+    strictEqual(size, view.byteLength - Uint32Array.BYTES_PER_ELEMENT)
+    strictEqual(view.getUint32(4 + 28, true) >>> 8, size)
+  })
+
+  it('packs the surface deviation into the low byte of that same word', () => {
+    const view = writeSurface(samplePart())
+    strictEqual(view.getUint32(4 + 28, true) & 0xff, 243)
+  })
+
+  // The byte is free to run past 250, so the decoded factor is free to exceed one.
+  it('round-trips every deviation the byte can hold, including those past 250', () => {
+    for (const steps of [0, 1, 243, 250, 251, 255]) {
+      const surface = emptySurface()
+      readSurface(writeSurface({ ...samplePart(), surfaceDeviation: steps / 0xfa }), surface)
+
+      strictEqual(surface.surfaceDeviation, steps / 0xfa)
+    }
+  })
+
+  it('rejects a node tree that starts outside the block', () => {
+    const view = writeSurface(samplePart())
+
+    // `offset_ledgetree_root`, which the reader bounds against the block size.
+    view.setInt32(4 + 32, 0xffff, true)
+
+    throws(() => readSurface(view.rewind(), emptySurface()), RangeError)
+  })
+})
+
+describe('surface part', () => {
+  const chunkCount = (part: Part) => BufferView.from(writePart(part)).getUint32(4, true)
+
+  const firstTag = (part: Part) => BufferView.from(writePart(part)).getString(8, 4)
+
+  it('writes !fxd for a part that is not fixed, and nothing for one that is', () => {
+    const part = samplePart()
+
+    strictEqual(firstTag(part), '!fxd')
+    strictEqual(chunkCount(part), 4)
+
+    strictEqual(firstTag({ ...part, fixed: true }), 'exts')
+    strictEqual(chunkCount({ ...part, fixed: true }), 3)
+  })
+
+  it('omits the hpid chunk when a part covers no hardpoints', () => {
+    strictEqual(chunkCount({ ...samplePart(), hardpoints: [] }), 3)
+
+    const back = readPart(BufferView.from(writePart({ ...samplePart(), hardpoints: [] })))
+    deepStrictEqual(back.hardpoints, [])
+  })
+
+  it('rejects an unknown chunk tag rather than desynchronising', () => {
+    const view = BufferView.from(writePart({ ...samplePart(), fixed: true }))
+
+    view.setUint32(8, 0x21212121, true)
+    throws(() => readPart(view.rewind()), RangeError)
+  })
+})
+
 describe('surface library', () => {
   it('preserves part data through write and read', () => {
     const parts = [samplePart()]
@@ -196,7 +320,48 @@ describe('surface library', () => {
     deepStrictEqual(terminal(back.root), terminal(part.root))
   })
 
+  // The writer places a left child immediately after its parent and patches the right child's
+  // offset in once it lands, so a tree that is not a single fork is what exercises that.
+  it('rebuilds a deeper hierarchy in the same shape', () => {
+    const part = deepPart()
+    const [back] = readSurfaceLibrary(BufferView.from(writeSurfaceLibrary([part])))
+    ok(back)
+
+    // A subtree hull's id is a derived offset, so it stands in as its type.
+    const shape = (node: Node): unknown => [
+      node.radius,
+      node.hull && (node.hull.type === 5 ? 'subtree' : node.hull.id),
+      node.left && shape(node.left),
+      node.right && shape(node.right),
+    ]
+
+    strictEqual([...getNodes(back.root)].length, 7)
+    strictEqual([...getHulls(back.root)].filter(({ type }) => type === 4).length, 4)
+    deepStrictEqual(shape(back.root), shape(part.root))
+  })
+
+  it('keeps several parts apart in one library', () => {
+    const parts = [samplePart(), { ...deepPart(), id: 0x1234, fixed: true, hardpoints: [] }]
+    const back = readSurfaceLibrary(BufferView.from(writeSurfaceLibrary(parts)))
+
+    strictEqual(back.length, 2)
+    deepStrictEqual(
+      back.map(({ id, fixed, hardpoints }) => [id, fixed, hardpoints]),
+      [
+        [0x0badf00d | 0, false, [1, 2, 3]],
+        [0x1234, true, []],
+      ],
+    )
+  })
+
   it('rejects a bad signature', () => {
     throws(() => readSurfaceLibrary(BufferView.allocate(8)), Error)
+  })
+
+  it('rejects a version other than 2.0', () => {
+    const view = BufferView.from(writeSurfaceLibrary([samplePart()]))
+
+    view.setFloat32(4, 1.0, true)
+    throws(() => readSurfaceLibrary(view.rewind()), RangeError)
   })
 })

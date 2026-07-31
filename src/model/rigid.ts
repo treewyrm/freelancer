@@ -56,7 +56,7 @@ export function writePart(part: RigidPart): Directory {
     case 'rigid':
       return writeRigid(part)
     case 'camera':
-      return writeCamera(part)
+      return new Directory(undefined, [writeCamera(part)])
     case 'sphere':
       return new Directory(undefined, [writeSphere(part)])
   }
@@ -74,7 +74,6 @@ export function writeRigidModel(model: RigidModel): Directory {
     case 'compound':
       return writeModel(model, writePart)
     case 'camera':
-      return writeCamera(model)
     case 'sphere':
       return writePart(model)
   }

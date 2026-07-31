@@ -58,3 +58,30 @@ export function load(...extensions: string[]): Asset[] {
 
   return assets
 }
+
+export interface RawAsset {
+  path: string
+  data: Uint8Array
+}
+
+const bytes = new Map<string, RawAsset[]>()
+
+/**
+ * Reads every listed asset verbatim, for the formats that are not UTF trees. `.sur` is the only
+ * one so far. Cached the same way {@link load} is.
+ */
+export function raw(...extensions: string[]): RawAsset[] {
+  const key = extensions.join(',')
+  let assets = bytes.get(key)
+
+  if (!assets)
+    bytes.set(
+      key,
+      (assets = list(...extensions).map((path) => ({
+        path,
+        data: readFileSync(join(root, path)),
+      }))),
+    )
+
+  return assets
+}

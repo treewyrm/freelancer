@@ -14,7 +14,7 @@ To run a single test file:
 node --import tsx --test src/directory.test.ts
 ```
 
-The `corpus.test.ts` suites (`src/vmesh/`, `src/animation/`) validate the readers against retail game assets. They look for a
+The `corpus.test.ts` suites (`src/vmesh/`, `src/animation/`, `src/surface/`, `src/model/`) validate the readers against retail game assets. They look for a
 Freelancer `DATA` directory at `$FREELANCER_DATA`, falling back to `~/Downloads/Freelancer/DATA`,
 and skips itself with a reason when neither exists — the rest of the suite never depends on it.
 
@@ -83,7 +83,8 @@ Rigid models (`.3db` single part, `.cmp` compound), layered on top of VMesh geom
 - **`rigid.ts`** — `readRigidModel`/`writeRigidModel` dispatch between compound and single-part forms; a part is `Rigid` (hardpoints + `MultiLevel`/`VMeshPart`) or `Camera`.
 - **`joint.ts`** / **`constraint.ts`** — parent↔child joints (`fixed`, `revolute`, `prismatic`, `cylinder`, `sphere`, `loose`) stored as fixed-size records in `Cons/Fix`, `Cons/Rev`, etc. Cylinder joints are unimplemented.
 - **`hardpoint.ts`** — named attachment points under `Hardpoints/Fixed` and `Hardpoints/Revolute`.
-- **`camera.ts`** — stub reader/writer detected via the `Fovx` file.
+- **`camera.ts`** — cockpit view frustum, detected via the `Camera` subdirectory. `Fovx`/`Fovy` are half-angles in radians.
+- **`materialanim.ts`** — `MaterialAnim`, a root-level sibling of `Cmpnd` animating material UV transforms. Read from the file root like `readVMeshLibrary`, not part of `RigidModel`. `MAKeys` is stored rather than derived from `MADeltas`; see [MODEL.md](docs/MODEL.md) for the counterexamples.
 
 ### Animation (`src/animation/`)
 

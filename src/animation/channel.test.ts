@@ -57,8 +57,8 @@ describe('validateChannelType', () => {
     )
   })
 
-  it('rejects pair keyframes and bits outside the byte', () => {
-    throws(() => validateChannelType(ChannelType.Pair), RangeError)
+  it('rejects event keyframes and bits outside the byte', () => {
+    throws(() => validateChannelType(ChannelType.Event), RangeError)
     throws(() => validateChannelType(0x100), RangeError)
   })
 })
@@ -256,7 +256,7 @@ describe('writeChannel', () => {
   })
 
   it('rejects channel types the format does not define', () => {
-    throws(() => writeChannel({ ...channel, type: ChannelType.Pair }), RangeError)
+    throws(() => writeChannel({ ...channel, type: ChannelType.Event }), RangeError)
   })
 
   it('re-reads a byte-identical header', () => {

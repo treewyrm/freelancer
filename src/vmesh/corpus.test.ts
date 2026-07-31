@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { list, load, skip } from '../corpus.js'
 import type Directory from '../directory.js'
 import type File from '../file.js'
+import { getResourceId } from '../hash.js'
 import { Format, Primitive, readVMeshData, vertexByteLength } from './data.js'
 import { getMeshDraw, readVMeshLibrary, writeVMeshLibrary } from './library.js'
 import { readMultiLevel } from './multilevel.js'
@@ -176,6 +177,9 @@ describe('retail asset corpus', { skip }, () => {
         }
     })
 
+    // A VMeshRef names its mesh by CRC alone; the game resolves it against every library
+    // loaded, not against the file the reference came from. Retail exercises that exactly
+    // once — see 'the shared interface library' below.
     it('resolves against the library in the same file, or reports the mesh as absent', () => {
       let resolved = 0
       let external = 0
@@ -201,6 +205,52 @@ describe('retail asset corpus', { skip }, () => {
       // Interface models keep their geometry in a shared library file.
       ok(resolved > 8000, `resolved ${resolved}`)
       ok(external < resolved / 4, `unresolved ${external} of ${resolved + external}`)
+    })
+  })
+
+  // `interface.generic.vms` is a bare UTF tree holding nothing but a VMeshLibrary. The game
+  // loads it unprompted — no INI names it — so interface models reference its two meshes
+  // without declaring a library of their own.
+  describe('the shared interface library', () => {
+    const shared = () => assets().find(({ path }) => /\.vms$/i.test(path))
+
+    it('is the only .vms in the data, and holds only a library', () => {
+      strictEqual(list('vms').length, 1)
+
+      const asset = shared()
+      ok(asset, 'expected INTERFACE/interface.generic.vms')
+      deepStrictEqual(
+        asset.root.children.map(({ name }) => name),
+        ['VMeshLibrary'],
+      )
+      strictEqual(readVMeshLibrary(asset.root).length, 2)
+    })
+
+    // Pins the claim in VMESH.md down: every reference retail cannot satisfy locally is
+    // satisfied here, so nothing in the game is genuinely dangling.
+    it('accounts for every mesh reference no local library can satisfy', () => {
+      const asset = shared()
+      ok(asset)
+
+      const ids = new Set(readVMeshLibrary(asset.root).map(({ name }) => getResourceId(name)))
+      const consumers = new Set<string>()
+      let external = 0
+
+      for (const { path, root } of assets()) {
+        const local = new Set(readVMeshLibrary(root).map(({ name }) => getResourceId(name)))
+
+        for (const directory of walk(root)) {
+          const part = readVMeshPart(directory)
+          if (!part || local.has(part.reference.meshId)) continue
+
+          ok(ids.has(part.reference.meshId), `${path}: mesh ${part.reference.meshId} is nowhere`)
+          consumers.add(path)
+          external++
+        }
+      }
+
+      ok(external > 500, `expected the full interface corpus, found ${external}`)
+      for (const path of consumers) ok(/^interface/i.test(path), `unexpected consumer ${path}`)
     })
   })
 
@@ -281,18 +331,32 @@ describe('retail asset corpus', { skip }, () => {
     })
   })
 
-  // Five files under EQUIPMENT/MODELS predate VMesh: they are UTF containers holding
-  // an "openFLAME 3D N-mesh" tree left over from Conquest: Frontier Wars, and the
-  // retail game cannot render them either. Reading them must degrade, not throw.
+  // Four files under EQUIPMENT/MODELS/HARDWARE predate VMesh: they are UTF containers
+  // holding an "openFLAME 3D N-mesh" tree left over from Conquest: Frontier Wars, which
+  // Freelancer neither supports nor uses. Reading them must degrade, not throw.
+  //
+  // FX/MISC/tlrtube.3db carries a "Mesh" tree of the same vintage — different shape, same
+  // story — and is covered by the same expectations.
   describe('pre-VMesh assets', () => {
     const legacy = () =>
-      assets().filter(({ root }) => root.getDirectory('openFLAME 3D N-mesh') !== undefined)
+      assets().filter(
+        ({ root }) =>
+          root.getDirectory('openFLAME 3D N-mesh') !== undefined ||
+          root.getDirectory('Mesh') !== undefined,
+      )
 
     it('finds the openFLAME leftovers', () => {
       const paths = legacy().map(({ path }) => path)
 
-      ok(paths.length > 0, 'expected at least one openFLAME model')
-      for (const path of paths) ok(/equipment/i.test(path), `unexpected location ${path}`)
+      deepStrictEqual(
+        paths.filter((path) => /equipment/i.test(path)).length,
+        4,
+        `openFLAME models: ${paths}`,
+      )
+      deepStrictEqual(
+        paths.filter((path) => !/equipment/i.test(path)),
+        ['FX/MISC/tlrtube.3db'],
+      )
     })
 
     it('reads them as an empty library instead of throwing', () => {
@@ -306,8 +370,12 @@ describe('retail asset corpus', { skip }, () => {
     // Their Sphere directory is the openFLAME bounding sphere, unrelated to the
     // Sphere that planet .sph files use, and neither is modelled yet.
     it('leaves their unsupported Sphere directory untouched', () => {
-      for (const { path, root } of legacy())
-        ok(root.getDirectory('openFLAME 3D N-mesh', 'Sphere'), `${path}: expected a Sphere`)
+      for (const { path, root } of legacy()) {
+        const openFLAME = root.getDirectory('openFLAME 3D N-mesh')
+        if (!openFLAME) continue
+
+        ok(openFLAME.getDirectory('Sphere'), `${path}: expected a Sphere`)
+      }
     })
   })
 
