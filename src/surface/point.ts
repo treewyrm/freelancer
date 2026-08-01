@@ -1,5 +1,5 @@
-import BufferView from '../utility/bufferview.js'
-import Vector3 from '../math/vector3.js'
+import BufferView from '#/utility/bufferview.js'
+import Vector3 from '#/math/vector3.js'
 
 /**
  * Hull vertex, shared between the hulls of a part.

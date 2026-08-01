@@ -1,4 +1,4 @@
-import BufferView from '../utility/bufferview.js'
+import BufferView from '#/utility/bufferview.js'
 import { readExtent, writeExtent, type Extent } from './extent.js'
 import { readSurface, writeSurface, type Surface } from './surface.js'
 

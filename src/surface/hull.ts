@@ -1,4 +1,4 @@
-import BufferView from '../utility/bufferview.js'
+import BufferView from '#/utility/bufferview.js'
 import type { Face } from './face.js'
 
 /**

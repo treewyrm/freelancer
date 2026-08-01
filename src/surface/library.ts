@@ -1,4 +1,4 @@
-import BufferView from '../utility/bufferview.js'
+import BufferView from '#/utility/bufferview.js'
 import { readPart, writePart, type Part } from './part.js'
 
 const SIGNATURE = 0x73726576 // 'vers'

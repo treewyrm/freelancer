@@ -1,5 +1,5 @@
-import BufferView from '../utility/bufferview.js'
-import Vector3 from '../math/vector3.js'
+import BufferView from '#/utility/bufferview.js'
+import Vector3 from '#/math/vector3.js'
 import type { Hull } from './hull.js'
 
 /** Quantization steps for {@link Node.boxSizes}. */

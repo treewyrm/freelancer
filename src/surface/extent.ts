@@ -1,5 +1,5 @@
-import BufferView from '../utility/bufferview.js'
-import type Vector3 from '../math/vector3.js'
+import BufferView from '#/utility/bufferview.js'
+import type Vector3 from '#/math/vector3.js'
 
 /** Extents section (bounding box). */
 export interface Extent {

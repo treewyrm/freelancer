@@ -1,5 +1,5 @@
-import BufferView from '../utility/bufferview.js'
-import type Vector3 from '../math/vector3.js'
+import BufferView from '#/utility/bufferview.js'
+import type Vector3 from '#/math/vector3.js'
 import { HullType, readHull, writeHull, type Hull } from './hull.js'
 import { readNode, writeNode, type Node } from './node.js'
 import { readPoint, writePoint, type Point } from './point.js'
