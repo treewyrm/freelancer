@@ -14,6 +14,7 @@ export function readMIP(parent: Directory): Texture | undefined {
   let width: number | undefined
   let height: number | undefined
   let depth: number | undefined
+  let flip: boolean | undefined
   let type: TextureType = 'none'
 
   const levels: Uint8Array[] = []
@@ -30,8 +31,10 @@ export function readMIP(parent: Directory): Texture | undefined {
     width ??= image.width
     height ??= image.height
     depth ??= image.depth
+    flip ??= image.flip
 
     if (depth !== image.depth) throw new RangeError(`Invalid bit depth on level ${level}`)
+    if (flip !== image.flip) throw new RangeError(`Invalid vertical origin on level ${level}`)
 
     levels[level] = image.bitmap
   }
@@ -45,15 +48,7 @@ export function readMIP(parent: Directory): Texture | undefined {
   else if (depth === 32) type = 'rgba32_8888'
   else throw new RangeError(`Invalid targa mipmap bit depth: ${depth}`)
 
-  return {
-    name: parent.name,
-    width,
-    height,
-    type,
-    levels,
-    alpha: depth === 16 || depth === 32,
-    flip: false,
-  }
+  return { name: parent.name, width, height, type, levels, flip: flip ?? false }
 }
 
 const getTypeByMask = (r: number, g: number, b: number, a: number): TextureType => {
@@ -73,11 +68,14 @@ const getTypeByMask = (r: number, g: number, b: number, a: number): TextureType 
   }
 }
 
+/**
+ * Cubemaps, stored as a DirectDrawSurface holding all six faces. Retail has exactly two —
+ * `FX/envmapbasic.mat` and `FX/envmapglass.txm` — both 64x64 A8R8G8B8 with a single level and
+ * `DDSCAPS2_CUBEMAP_ALL_FACES`. Not implemented; {@link Texture} has nowhere to put six faces.
+ */
 export function readCUBE(parent: Directory): Texture | undefined {
   const file = parent.getFile('CUBE')
   if (!file) return
-
-  // Not implemented yet.
 
   return
 }
@@ -96,20 +94,16 @@ export function readMIPS(parent: Directory): Texture | undefined {
   )
 
   let type: TextureType = 'none'
-  let alpha = false
 
   switch (compression) {
     case Compression.DXT1:
       type = 'dxt1'
-      alpha = true
       break
     case Compression.DXT3:
       type = 'dxt3'
-      alpha = true
       break
     case Compression.DXT5:
       type = 'dxt5'
-      alpha = true
       break
     case Compression.NONE:
       type = getTypeByMask(mask.r, mask.g, mask.b, mask.a)
@@ -118,9 +112,15 @@ export function readMIPS(parent: Directory): Texture | undefined {
       throw new RangeError(`Unsupported compression method in texture`)
   }
 
-  return { name: parent.name, width, height, type, levels: mipmaps, alpha, flip: true }
+  // DirectDrawSurface is always stored top row first.
+  return { name: parent.name, width, height, type, levels: mipmaps, flip: true }
 }
 
+/**
+ * Reads one texture library entry. Returns undefined for entries in a form the game itself
+ * cannot load: the eight paletted textures under the `openFLAME 3D N-mesh` trees left over from
+ * Conquest: Frontier Wars are deliberately unsupported, not merely unimplemented.
+ */
 export function readTexture(parent: Directory): Texture | AnimatedTexture | undefined {
   let texture: Texture | AnimatedTexture | undefined
 
@@ -166,7 +166,7 @@ export function* readTextures(parent: Directory): Generator<Texture | AnimatedTe
       const texture = readTexture(child)
       if (texture) yield texture
     } catch (error) {
-      errors.push({ name, error })
+      errors.push({ name: child.name, error })
     }
   }
 

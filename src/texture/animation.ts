@@ -20,6 +20,7 @@ export interface AnimatedTextureFrame {
 }
 
 export interface AnimatedTexture {
+  /** Actual texture atlases will match name with _N suffix where N is atlas index referenced in frame. */
   name: string
 
   type: 'animated'

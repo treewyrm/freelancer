@@ -1,7 +1,7 @@
 import BufferView from '#/utility/bufferview.js'
 import { expandRGB } from './misc.js'
 
-export interface TargaBitmap {
+export interface TargaPixels {
   /** Image width. */
   width: number
 
@@ -13,6 +13,15 @@ export interface TargaBitmap {
 
   /** Image bitmap. */
   bitmap: Uint8Array
+}
+
+export interface TargaBitmap extends TargaPixels {
+  /**
+   * First row of the bitmap is the top of the image rather than the bottom, per bit 5 of the
+   * image descriptor. Targa defaults to a bottom-left origin; 84 images in retail set this bit.
+   * Reported as read — the rows are never reordered here.
+   */
+  flip: boolean
 }
 
 export interface TargaOptions {
@@ -38,36 +47,17 @@ export enum ImageType {
  * @returns
  */
 export const swapBGRtoRGB = (array: Uint8Array, depth: number) => {
-  let bitmap = new Uint8Array(array.length)
+  if (depth !== 24 && depth !== 32) throw new RangeError(`Invalid color depth`)
 
-  switch (depth) {
-    case 24:
-      for (let i = 0; i < array.byteLength; i += 3) {
-        bitmap[i + 0] = array[i + 2]!
-        bitmap[i + 1] = array[i + 1]!
-        bitmap[i + 2] = array[i + 0]!
-      }
+  const stride = depth >> 3
+  const bitmap = new Uint8Array(array.length)
 
-      break
-    case 32:
-      for (let i = 0; i < array.byteLength; i += 4) {
-        bitmap[i + 0] = array[i + 2]!
-        bitmap[i + 1] = array[i + 1]!
-        bitmap[i + 2] = array[i + 0]!
-        bitmap[i + 3] = array[i + 3]!
-      }
-
-      break
-    default:
-      throw new RangeError(`Invalid color depth`)
-  }
-
-  for (let i = 0; i < array.byteLength; i += depth >> 3) {
+  for (let i = 0; i < array.byteLength; i += stride) {
     bitmap[i + 0] = array[i + 2]!
     bitmap[i + 1] = array[i + 1]!
     bitmap[i + 2] = array[i + 0]!
 
-    if (depth === 32) bitmap[i + 3] = array[i + 3]!
+    if (stride === 4) bitmap[i + 3] = array[i + 3]!
   }
 
   return bitmap
@@ -92,17 +82,25 @@ export function readUncompressedColorMap(
   paletteCount: number,
   paletteDepth: number,
   options?: TargaOptions,
-): TargaBitmap {
+): TargaPixels {
   const pixelCount = width * height
 
-  // Read colors palette.
+  // Read the palette and normalise it to RGB(A) order up front, so expanding the indices
+  // below is a straight copy. Retail only ever uses 256 entries of BGR-888.
   let palette = new Uint8Array((paletteCount * paletteDepth) >> 3)
   view.readBuffer(palette)
 
-  // Expand 16-bit (5551) palette into 24-bit.
-  if (paletteDepth === 16) {
-    palette = expandRGB(palette, width, height, 24, 0x7c00, 0x3e0, 0x1f)
-    paletteDepth = 24
+  switch (paletteDepth) {
+    case 16: // BGRA-5551 -> RGB-888
+      palette = expandRGB(palette, paletteCount, 1, 24, 0x7c00, 0x3e0, 0x1f)
+      paletteDepth = 24
+      break
+    case 24: // BGR-888 -> RGB-888
+    case 32: // BGRA-8888 -> RGBA-8888
+      palette = swapBGRtoRGB(palette, paletteDepth)
+      break
+    default:
+      throw new RangeError(`Invalid color map palette bit depth: ${paletteDepth}`)
   }
 
   // Read index map.
@@ -122,16 +120,13 @@ export function readUncompressedColorMap(
   view.readBuffer(indices)
 
   // Construct image.
-  const bitmap = new Uint8Array((pixelCount * paletteDepth) >> 3)
+  const stride = paletteDepth >> 3
+  const bitmap = new Uint8Array(pixelCount * stride)
 
-  for (let i = 0, b = 0, t; i < bitmap.length; i++) {
-    t = (indices[i]! * paletteDepth) >> 3
+  for (let i = 0, b = 0, t = 0; i < pixelCount; i++) {
+    t = indices[i]! * stride
 
-    bitmap[b++] = palette[t + 2]!
-    bitmap[b++] = palette[t + 1]!
-    bitmap[b++] = palette[t]!
-
-    if (paletteDepth === 32) bitmap[b++] = palette[t + 3]!
+    for (let c = 0; c < stride; c++) bitmap[b++] = palette[t + c]!
   }
 
   return { width, height, depth: paletteDepth, bitmap }
@@ -152,7 +147,7 @@ export function readUncompressedRGB(
   height: number,
   depth: number,
   options?: TargaOptions,
-): TargaBitmap {
+): TargaPixels {
   let bitmap = new Uint8Array((width * height * depth) >> 3)
   view.readBuffer(bitmap)
 
@@ -217,27 +212,33 @@ export function readTargaImage(view: BufferView, options?: TargaOptions): TargaB
   /** Unmapped color bit depth or color map bit depth if present. */
   const depth = view.readUint8()
 
-  /** Descriptor flag. */
-  const _descriptor = view.readUint8()
+  /** Descriptor flag: low nibble is the attribute bit count, bit 5 the vertical origin. */
+  const descriptor = view.readUint8()
 
   // Skip text section.
   view.offset += textLength
+
+  /** Bit 5 clear (the default) puts the origin at the bottom left, so row 0 is the last row. */
+  const flip = (descriptor & 0x20) !== 0
 
   switch (imageType) {
     case ImageType.COLORMAP:
       if (!colorMapType) throw new RangeError('Color-mapped image is missing color map type flag')
 
-      return readUncompressedColorMap(
-        view,
-        width,
-        height,
-        depth,
-        paletteCount,
-        paletteDepth,
-        options,
-      )
+      return {
+        ...readUncompressedColorMap(
+          view,
+          width,
+          height,
+          depth,
+          paletteCount,
+          paletteDepth,
+          options,
+        ),
+        flip,
+      }
     case ImageType.RGB:
-      return readUncompressedRGB(view, width, height, depth, options)
+      return { ...readUncompressedRGB(view, width, height, depth, options), flip }
     default:
       throw new RangeError(`Unsupported targa image type: ${imageType}`)
   }

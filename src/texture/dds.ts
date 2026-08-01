@@ -61,18 +61,27 @@ export const readDirectDrawSurface = (view: BufferView): DirectDrawSurface => {
 
   const mask: ColorMask = { r: 0, g: 0, b: 0, a: 0 }
 
-  // Read color mask.
+  // Read color mask. Unsigned, or an 0xff000000 alpha mask would come back negative and match
+  // no known pixel format. Retail has no 32-bit uncompressed surface to expose that.
   if ((pixelFlags & DDS_PIXELS_RGB) > 0) {
-    mask.r = view.readInt32()
-    mask.g = view.readInt32()
-    mask.b = view.readInt32()
-    mask.a = view.readInt32()
+    mask.r = view.readUint32()
+    mask.g = view.readUint32()
+    mask.b = view.readUint32()
+    mask.a = view.readUint32()
   }
 
   view.offset = mipmapOffset
 
   // Read mipmaps.
   const mipmaps: Uint8Array[] = []
+
+  /**
+   * Block-compressed levels are padded up to whole 4x4 blocks, so a 2x2 or 1x1 level still
+   * occupies one block. Retail never exercises this — every DXT chain in the game stops at
+   * exactly 4x4 — but a chain carried down to 1x1 would otherwise decode as empty levels.
+   */
+  const blocks = (w: number, h: number, bytes: number) =>
+    Math.max(1, (w + 3) >> 2) * Math.max(1, (h + 3) >> 2) * bytes
 
   for (
     let i = 0, w = width, h = height, mipmap: Uint8Array;
@@ -81,14 +90,14 @@ export const readDirectDrawSurface = (view: BufferView): DirectDrawSurface => {
   ) {
     switch (compression) {
       case Compression.NONE:
-        mipmap = new Uint8Array((w * h * bitCount) >>> 3)
+        mipmap = new Uint8Array((Math.max(1, w) * Math.max(1, h) * bitCount) >>> 3)
         break
       case Compression.DXT1:
-        mipmap = new Uint8Array((w >> 2) * (h >> 2) * 8)
+        mipmap = new Uint8Array(blocks(w, h, 8))
         break
       case Compression.DXT3:
       case Compression.DXT5:
-        mipmap = new Uint8Array((w >> 2) * (h >> 2) * 16)
+        mipmap = new Uint8Array(blocks(w, h, 16))
         break
       default:
         throw new RangeError('Invalid mipmap compression type')
