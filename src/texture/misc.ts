@@ -1,14 +1,26 @@
+/**
+ * Swap red and blue channels in a 16-bit integer representing ARGB-1555 channels.
+ *
+ * The layout is the one every 16-bit site in this library stores — alpha `0x8000`, red `0x7c00`,
+ * green `0x3e0`, blue `0x1f` — matching `readPixelFormat` and the 16-bit Targa path. It is *not*
+ * GL's `UNSIGNED_SHORT_5_5_5_1`, which packs the same channels one bit lower with alpha at the
+ * bottom. The alpha bit passes through untouched, as it does in {@link swapRB32}.
+ */
 export const swapRB16 = (c: number): number =>
-  ((c & 0x3e) << 10) | (c & 0x7c0) | ((c & 0xf800) >> 10)
+  ((c & 0x1f) << 10) | (c & 0x3e0) | ((c & 0x7c00) >> 10) | (c & 0x8000)
 
-// 16 bit targa expanded by: 0x7c00, 0x3e0, 0x1f
-
+/** Swap red and blue channels in 24-bit integer representing RGB channels. */
 export const swapRB24 = (c: number): number =>
   ((c & 0x0000ff) << 16) | (c & 0xff00) | ((c & 0xff0000) >> 16)
 
-/** Swap red and blue channels in 32-bit integer representing RGBA channels. */
+/**
+ * Swap red and blue channels in 32-bit integer representing ARGB channels.
+ *
+ * Coerced back to unsigned: the `&` chain yields a signed int32, so any pixel at or above half
+ * alpha would otherwise come back negative.
+ */
 export const swapRB32 = (c: number): number =>
-  ((c & 0x0000ff) << 16) | (c & 0xff00ff00) | ((c & 0xff0000) >> 16)
+  (((c & 0x0000ff) << 16) | (c & 0xff00ff00) | ((c & 0xff0000) >> 16)) >>> 0
 
 /**
  * Converts 16-bit integer (5-6-5) pixel to 24-bit.
@@ -40,9 +52,13 @@ export const expandRGBtoRGBA = (
   height: number,
   alpha = 0xff,
 ) => {
+  // Checked rather than clamped: a source that disagrees with the dimensions would otherwise
+  // truncate silently, since writes past the end of a typed array are discarded without error.
+  if (source.byteLength !== width * height * 3) throw new RangeError('Invalid source array size')
+
   const target = new Uint8Array(width * height * Uint32Array.BYTES_PER_ELEMENT)
 
-  for (let s = 0, d = 0; s < source.byteLength; ) {
+  for (let s = 0, d = 0; s < source.byteLength;) {
     target[d++] = source[s++]!
     target[d++] = source[s++]!
     target[d++] = source[s++]!
