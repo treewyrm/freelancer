@@ -100,5 +100,5 @@ export function readArray<T>(
 
 /** Writes array of elements. */
 export function writeArray<T>(array: T[], write: (value: T) => BufferView): BufferView {
-  return BufferView.join(...array.map((value) => write(value)))
+  return BufferView.concat(array.map((value) => write(value)))
 }

@@ -291,14 +291,23 @@ export default class Directory {
     /** Array of arranged files for data block. */
     const files: File[] = []
 
-    /** Queue of entries of process. */
+    /**
+     * Queue of entries to process, walked by cursor rather than drained from the front.
+     *
+     * A directory's first child jumps ahead of whatever siblings are already queued, which as an
+     * `unshift` moved the entire queue by one slot per directory. That is quadratic, and it cost
+     * seconds apiece on the character animations, whose trees run to 270k entries.
+     */
     const queue: WriteQueueItem[] = [{ target: this, entry: {} }]
+
+    /** Index of the entry to process next. */
+    let head = 0
 
     /** Recursion check set. */
     const targets = new Set<Directory | File>()
 
-    while (queue.length > 0) {
-      const { entry, target, parent, previous } = queue.shift()!
+    while (head < queue.length) {
+      const { entry, target, parent, previous } = queue[head++]!
 
       if (targets.has(target)) throw new Error(`Tree recursion detected on entry: ${target.name}`)
       targets.add(target)
@@ -324,11 +333,12 @@ export default class Directory {
 
         let last: Partial<Entry> | undefined
 
-        // First child is childOffset and subsequent children are siblings.
+        // First child is childOffset and subsequent children are siblings. The slot the cursor
+        // just left holds the first child, so it is read next; the rest go to the back.
         for (const child of target.children)
           last
             ? queue.push({ target: child, previous: last, entry: (last = {}) })
-            : queue.unshift({ target: child, entry: (last = {}), parent: entry })
+            : (queue[--head] = { target: child, entry: (last = {}), parent: entry })
       }
 
       // First child updates parent.
@@ -399,7 +409,7 @@ export default class Directory {
           .writeUint32(toDOSTimestamp(modifyTime)),
     )
 
-    const result = BufferView.join(version, header, ...tree, names, ...files)
+    const result = BufferView.concat([version, header, ...tree, names, ...files])
     return new Uint8Array(result.buffer, result.byteOffset, result.byteLength)
   }
 }

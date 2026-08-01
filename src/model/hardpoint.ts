@@ -22,15 +22,15 @@ interface Revolute extends Base<'revolute'> {
   max: number
 }
 
-/** Prismatic attachment hardpoint. */
-interface Prismatic extends Base<'prismatic'> {
-  axis: Vector3
-  min: number
-  max: number
-}
-
-/** Attachment hardpoint. */
-export type Hardpoint = Fixed | Revolute | Prismatic
+/**
+ * Attachment hardpoint.
+ *
+ * There is no prismatic form. `Hardpoints` holds exactly two subdirectories, `Fixed` and
+ * `Revolute` — 10674 and 1379 of them across retail, and nothing else — matching the two joint
+ * kinds a hardpoint can drive. A third variant here would be a shape no reader can produce and
+ * no writer can place.
+ */
+export type Hardpoint = Fixed | Revolute
 
 export function readPosition(parent: Directory): Vector3 {
   const file = parent.getFile('position')
@@ -132,6 +132,10 @@ export function writeHardpoints(hardpoints: Iterable<Hardpoint>): Directory {
       case 'revolute':
         directory.setDirectory('Revolute').children.push(writeRevolute(hardpoint))
         break
+
+      // A variant added without a branch here would drop out of the file unannounced.
+      default:
+        throw new TypeError(`Unknown hardpoint type: ${(hardpoint as Hardpoint).type}`)
     }
   }
 

@@ -3,7 +3,7 @@ import Directory from '#/directory.js'
 import { readTargaImage } from './targa.js'
 import { type Texture, type TextureType } from './types.js'
 import { Compression, readDirectDrawSurface } from './dds.js'
-import { readAnimatedTexture, type AnimatedTexture } from './animation.js'
+import { readAnimatedTexture, writeAnimatedTexture, type AnimatedTexture } from './animation.js'
 
 /**
  * Reads texture as sequence of uncompressed Targa images.
@@ -141,12 +141,19 @@ export function readTexture(parent: Directory): Texture | AnimatedTexture | unde
   return texture
 }
 
+/**
+ * Writes one texture library entry.
+ *
+ * Only the animation form is implemented. Image entries throw rather than returning the empty
+ * directory this used to: a library that writes without complaint and holds no pixels is harder
+ * to notice than one that refuses.
+ *
+ * TODO: write `MIPS` and `MIP0..n` back out.
+ */
 export function writeTexture(texture: Texture | AnimatedTexture): Directory {
-  const directory = new Directory(texture.name)
+  if (texture.type === 'animated') return writeAnimatedTexture(texture)
 
-  // TODO: Implement writing back textures into UTF.
-
-  return directory
+  throw new Error(`Writing ${texture.type} texture ${texture.name} is not implemented`)
 }
 
 /**

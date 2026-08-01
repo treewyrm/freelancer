@@ -73,7 +73,7 @@ export function writeNodeLibrary({ version, nodes }: NodeLibrary): BufferView {
     .writeFloat32(version)
     .writeUint32(nodes.length)
 
-  return BufferView.join(view, ...nodes.map(writeNode))
+  return BufferView.concat([view, ...nodes.map(writeNode)])
 }
 
 /** Retrieves alchemy node name from property Node_Name. */
@@ -84,17 +84,18 @@ export const getNodeName = ({ properties }: Node) => {
   return property.value
 }
 
-/** Assigns alchemy node name. */
+/**
+ * Assigns alchemy node name.
+ *
+ * The property is replaced rather than retyped in place: switching the discriminant on the
+ * existing object would leave the previous variant's payload — keyframes, easing, blend modes —
+ * attached to something now claiming to be a string, and the writer would emit it.
+ */
 export const setNodeName = ({ properties }: Node, value: string): void => {
-  const property = properties.find(({ name }) => name === 'Node_Name')
+  const property: Property = { name: 'Node_Name', type: PropertyType.String, value }
+  const index = properties.findIndex(({ name }) => name === 'Node_Name')
 
-  if (!property) {
-    properties.push({ name: 'Node_Name', type: PropertyType.String, value })
-    return
-  }
-
-  property.type = PropertyType.String
-  if (property.type === PropertyType.String) property.value = value
+  index >= 0 ? properties.splice(index, 1, property) : properties.push(property)
 }
 
 /** Finds node by name. */

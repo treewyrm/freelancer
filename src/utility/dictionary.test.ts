@@ -44,12 +44,22 @@ describe('Dictionary.push', () => {
     assert.equal(dict.byteLength, 5) // no growth
   })
 
-  it('deduplicates case-insensitively', () => {
+  // 52 retail assets hold a pair of names differing only in case, most of them texture
+  // references. Sharing an entry between them would rewrite one to the other's spelling.
+  it('gives names differing only in case an entry each', () => {
     const dict = new Dictionary()
     const lower = dict.push('root')
     const upper = dict.push('ROOT')
-    assert.equal(lower, upper)
-    assert.equal(dict.byteLength, 5) // only one entry stored
+
+    assert.notEqual(lower, upper)
+    assert.equal(dict.byteLength, 10)
+
+    const view = BufferView.from(new Uint8Array(dict.buffer, dict.byteOffset, dict.byteLength))
+
+    view.offset = lower
+    assert.equal(view.readStringZ(), 'root')
+    view.offset = upper
+    assert.equal(view.readStringZ(), 'ROOT')
   })
 })
 

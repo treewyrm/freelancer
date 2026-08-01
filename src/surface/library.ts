@@ -17,5 +17,5 @@ export function readSurfaceLibrary(view: BufferView): Part[] {
 export function writeSurfaceLibrary(parts: Part[]): BufferView {
   const view = BufferView.allocate(8).writeUint32(SIGNATURE).writeFloat32(VERSION)
 
-  return BufferView.join(view, ...parts.map(writePart))
+  return BufferView.concat([view, ...parts.map(writePart)])
 }

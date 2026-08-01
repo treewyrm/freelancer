@@ -46,15 +46,31 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
   }
 
   /**
+   * Creates new buffer from a list of views.
+   * Data is copied from views to new ArrayBuffer.
+   *
+   * Prefer this to {@link join} wherever the number of views comes from the data rather than the
+   * call site: spreading a long array into arguments overflows the stack, and retail trees reach
+   * 270k entries.
+   * @param views Buffer views
+   * @returns
+   */
+  static concat(views: Iterable<ArrayBufferView>): BufferView<ArrayBuffer> {
+    const items = [...views]
+    const view = this.allocate(items.reduce((total, { byteLength }) => total + byteLength, 0))
+
+    for (const value of items) view.writeBuffer(value)
+    return view.rewind()
+  }
+
+  /**
    * Creates new buffer from view(s).
    * Data is copied from views to new ArrayBuffer.
    * @param views Buffer views
    * @returns
    */
   static join(...views: ArrayBufferView[]): BufferView<ArrayBuffer> {
-    const view = this.allocate(views.reduce((total, { byteLength }) => total + byteLength, 0))
-    for (const value of views) view.writeBuffer(value)
-    return view.rewind()
+    return this.concat(views)
   }
 
   /**

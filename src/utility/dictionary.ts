@@ -1,12 +1,18 @@
 import ChunkView from './chunkview.js'
-import { getResourceId } from '../hash.js'
 
-/** Simple string dictionary. */
+/**
+ * Simple string dictionary.
+ *
+ * Entries are shared between names that match exactly, and only exactly. Path lookups fold case
+ * and so does Freelancer, but the dictionary is the one place the spelling itself is stored:
+ * folding here would hand `fix` the offset of an earlier `Fix` and rewrite the name. 52 retail
+ * assets carry a pair of names differing only in case, most of them texture references.
+ */
 export default class Dictionary implements ArrayBufferView {
   protected words = new ChunkView()
 
-  /** Hash map of string offsets. */
-  protected offsets = new Map<number, number>()
+  /** Offset of every string written so far, keyed by the string itself. */
+  protected offsets = new Map<string, number>()
 
   constructor(
     /** Text encoder. */
@@ -26,13 +32,13 @@ export default class Dictionary implements ArrayBufferView {
   }
 
   push(value: string): number {
-    const crc = getResourceId(value)
-    const offset = this.offsets.get(crc) ?? this.words.byteLength
+    let offset = this.offsets.get(value)
+    if (offset !== undefined) return offset
 
-    if (offset === this.words.byteLength) {
-      this.words.push(this.encoder.encode(value + '\0'))
-      this.offsets.set(crc, offset)
-    }
+    offset = this.words.byteLength
+
+    this.words.push(this.encoder.encode(value + '\0'))
+    this.offsets.set(value, offset)
 
     return offset
   }

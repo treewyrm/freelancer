@@ -108,32 +108,42 @@ const filter = <T>(
   items.filter((item) => hash(predicate(item), caseSensitive) === value)
 )
 
+/**
+ * Replaces entry matching key by hash function, appending it when nothing matches.
+ *
+ * Shared by both key kinds: hashing the value with one function and scanning with the other
+ * matches nothing and appends every time.
+ * @param hash
+ * @param items
+ * @param predicate
+ * @param value
+ * @param caseSensitive
+ */
+const set = <T>(
+  hash: Hash,
+  items: T[],
+  predicate: Hasher<T>,
+  value: T,
+  caseSensitive?: boolean,
+): void => {
+  const match = hash(predicate(value), caseSensitive)
+  const index = items.findIndex((item) => hash(predicate(item), caseSensitive) === match)
+
+  index >= 0 ? items.splice(index, 1, value) : items.push(value)
+}
+
 /** Finds resource matching key value. */
 export const getResource: FindByHash = (...args) => find(getResourceId, ...args)
 
 export const filterResources: FilterByHash = (...args) => filter(getResourceId, ...args)
 
 /** Sets resource in array (replaces existing resource matching key). */
-export const setResource: SetByHash = (items, predicate, value, caseSensitive): void => {
-  const match = getResourceId(predicate(value), caseSensitive)
-  const index = items.findIndex((item) => getResourceId(predicate(item), caseSensitive) === match)
-  index >= 0 ? items.splice(index, 1, value) : items.push(value)
-}
+export const setResource: SetByHash = (...args) => set(getResourceId, ...args)
 
 /** Finds object matching key value. */
 export const getObject: FindByHash = (...args) => find(getObjectId, ...args)
 
 export const filterObjects: FilterByHash = (...args) => filter(getObjectId, ...args)
 
-/**
- * Sets object in array.
- * @param items
- * @param predicate
- * @param value
- * @param caseSensitive
- */
-export const setObject: SetByHash = (items, predicate, value, caseSensitive): void => {
-  const match = getObjectId(predicate(value), caseSensitive)
-  const index = items.findIndex((item) => getResourceId(predicate(item), caseSensitive) === match)
-  index >= 0 ? items.splice(index, 1, value) : items.push(value)
-}
+/** Sets object in array (replaces existing object matching key). */
+export const setObject: SetByHash = (...args) => set(getObjectId, ...args)
