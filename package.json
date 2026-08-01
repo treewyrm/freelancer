@@ -48,6 +48,10 @@
     "./surface": {
       "import": "./dist/surface/index.js",
       "types": "./dist/surface/index.d.ts"
+    },
+    "./texture": {
+      "import": "./dist/texture/index.js",
+      "types": "./dist/texture/index.d.ts"
     }
   },
   "main": "./dist/index.js",

@@ -172,6 +172,54 @@ export function readUncompressedRGB(
   }
 }
 
+/** Fixed 18-byte header preceding the image identification, colour map and pixel data. */
+const TARGA_HEADER_LENGTH = 18
+
+/** Bit 5 of the image descriptor: rows run top to bottom rather than bottom to top. */
+const TARGA_TOP_ORIGIN = 0x20
+
+/**
+ * Writes an uncompressed RGB(A) Targa.
+ *
+ * Only the RGB image type is written. Colour-mapped images decode to plain RGB on read — the
+ * palette is not carried on {@link TargaPixels} — and re-quantizing 16.7M colours back down to
+ * 256 is a lossy operation this library has no business guessing at. Retail's 24- and 32-bit
+ * chains do round-trip byte for byte; its 11,351 colour-mapped and 219 16-bit levels come back
+ * as RGB of the same pixels, in a larger file.
+ *
+ * The image identification field is empty and the origin is 0,0, as they are throughout retail.
+ * @param bitmap Image to write, in RGB(A) order
+ * @returns
+ */
+export function writeTargaImage({ width, height, depth, bitmap, flip }: TargaBitmap): BufferView {
+  if (depth !== 24 && depth !== 32)
+    throw new RangeError(`Cannot write a ${depth}-bit targa image, only 24 and 32`)
+
+  const expected = (width * height * depth) >> 3
+
+  if (bitmap.byteLength !== expected)
+    throw new RangeError(`Bitmap is ${bitmap.byteLength} bytes, expected ${expected}`)
+
+  const view = BufferView.allocate(TARGA_HEADER_LENGTH + expected)
+
+  view
+    .writeUint8(0) // Image identification length.
+    .writeUint8(0) // Colour map absent.
+    .writeUint8(ImageType.RGB)
+    .writeUint16(0) // Colour map offset.
+    .writeUint16(0) // Colour map length.
+    .writeUint8(0) // Colour map entry depth.
+    .writeUint16(0) // Origin X.
+    .writeUint16(0) // Origin Y.
+    .writeUint16(width)
+    .writeUint16(height)
+    .writeUint8(depth)
+    .writeUint8(flip ? TARGA_TOP_ORIGIN : 0)
+    .writeBuffer(swapBGRtoRGB(bitmap, depth))
+
+  return view.rewind()
+}
+
 /**
  * Reads bitmap from targa file.
  * @param view Input buffer view

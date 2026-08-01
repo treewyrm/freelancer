@@ -3,9 +3,20 @@ import { describe, it } from 'node:test'
 import Directory from '../directory.js'
 import File from '../file.js'
 import BufferView from '../utility/bufferview.js'
-import { Compression, readDirectDrawSurface } from './dds.js'
-import { readMIP, readMIPS, readTexture, readTextures } from './library.js'
-import { readTargaImage, swapBGRtoRGB } from './targa.js'
+import { readAnimatedTexture, writeAnimatedTexture, type AnimatedTexture } from './animation.js'
+import { Compression, readDirectDrawSurface, writeDirectDrawSurface } from './dds.js'
+import {
+  readMIP,
+  readMIPS,
+  readTexture,
+  readTextures,
+  writeMIP,
+  writeMIPS,
+  writeTexture,
+  writeTextures,
+} from './library.js'
+import { readTargaImage, swapBGRtoRGB, writeTargaImage } from './targa.js'
+import type { Texture, TextureType } from './types.js'
 
 /**
  * These cover what the retail corpus cannot reach. Every DXT chain in the game stops at 4x4 and
@@ -440,5 +451,340 @@ describe('readTextures', () => {
     )
 
     deepStrictEqual(yielded, ['good'])
+  })
+})
+
+/**
+ * Writing. The retail corpus pins the round-trip for everything the game itself ships; these
+ * cover what it cannot reach — sub-4x4 block levels, the two pixel formats retail never
+ * authored, and every way a caller can hand the writers something incoherent.
+ */
+
+const image = (
+  type: TextureType,
+  {
+    width = 4,
+    height = 4,
+    levels = 1,
+    flip = true,
+    bytes,
+  }: { width?: number; height?: number; levels?: number; flip?: boolean; bytes: number[] },
+): Texture => ({
+  name: 'texture',
+  type,
+  storage: type === 'rgb24_888' || type === 'rgba32_8888' ? 'targa' : 'dds',
+  width,
+  height,
+  flip,
+  levels: Array.from({ length: levels }, (_, level) =>
+    new Uint8Array(bytes[level] ?? bytes[0]!).fill(level + 1),
+  ),
+})
+
+describe('writeDirectDrawSurface', () => {
+  const roundTrip = (options: SurfaceOptions) => {
+    const { mipmaps, ...source } = readDirectDrawSurface(
+      BufferView.from(surface(options).file.data),
+    )
+
+    const written = writeDirectDrawSurface({ ...source, mipmaps })
+
+    return readDirectDrawSurface(written)
+  }
+
+  it('reproduces a block-compressed chain that descends past a single block', () => {
+    for (const compression of [Compression.DXT1, Compression.DXT3, Compression.DXT5]) {
+      const { mipmaps } = roundTrip({ width: 8, height: 8, levels: 4, compression })
+
+      deepStrictEqual(
+        mipmaps.map(({ byteLength }) => byteLength),
+        compression === Compression.DXT1 ? [32, 8, 8, 8] : [64, 16, 16, 16],
+      )
+
+      deepStrictEqual(
+        mipmaps.map((level) => level[0]),
+        [1, 2, 3, 4],
+      )
+    }
+  })
+
+  it('reproduces the uncompressed pixel formats, masks and all', () => {
+    const { bitCount, mask, mipmaps } = roundTrip({
+      width: 4,
+      height: 4,
+      levels: 3,
+      bitCount: 32,
+      mask: [0xff0000, 0xff00, 0xff, 0xff000000],
+    })
+
+    strictEqual(bitCount, 32)
+    deepStrictEqual(mask, { r: 0xff0000, g: 0xff00, b: 0xff, a: 0xff000000 })
+    deepStrictEqual(
+      mipmaps.map(({ byteLength }) => byteLength),
+      [64, 16, 4],
+    )
+  })
+
+  // The header records only the base size, so a chain that does not halve from it would be
+  // walked back at the wrong offsets rather than read as written.
+  it('rejects a level whose buffer does not match the dimensions it will be read at', () => {
+    throws(
+      () =>
+        writeDirectDrawSurface({
+          width: 4,
+          height: 4,
+          bitCount: 32,
+          compression: Compression.NONE,
+          mask: { r: 0xff0000, g: 0xff00, b: 0xff, a: 0xff000000 },
+          mipmaps: [new Uint8Array(64), new Uint8Array(64)],
+        }),
+      RangeError,
+    )
+  })
+
+  it('rejects a surface with no levels at all', () => {
+    throws(
+      () =>
+        writeDirectDrawSurface({
+          width: 4,
+          height: 4,
+          bitCount: 32,
+          compression: Compression.NONE,
+          mask: { r: 0, g: 0, b: 0, a: 0 },
+          mipmaps: [],
+        }),
+      RangeError,
+    )
+  })
+})
+
+describe('writeTargaImage', () => {
+  it('reproduces a 24-bit image, channel order and origin included', () => {
+    for (const flip of [false, true]) {
+      const written = writeTargaImage({
+        width: 2,
+        height: 1,
+        depth: 24,
+        flip,
+        bitmap: new Uint8Array([0x11, 0x22, 0x33, 0x44, 0x55, 0x66]),
+      })
+
+      const image = readTargaImage(written)
+
+      strictEqual(image.width, 2)
+      strictEqual(image.height, 1)
+      strictEqual(image.depth, 24)
+      strictEqual(image.flip, flip)
+      deepStrictEqual([...image.bitmap], [0x11, 0x22, 0x33, 0x44, 0x55, 0x66])
+    }
+  })
+
+  it('reproduces a 32-bit image without disturbing its alpha byte', () => {
+    const bitmap = new Uint8Array([0x11, 0x22, 0x33, 0x44])
+    const image = readTargaImage(
+      writeTargaImage({ width: 1, height: 1, depth: 32, flip: false, bitmap }),
+    )
+
+    strictEqual(image.depth, 32)
+    deepStrictEqual([...image.bitmap], [...bitmap])
+  })
+
+  // 16-bit sources are expanded to 24-bit on read and the palette of a colour-mapped image is
+  // not carried at all, so neither can be written back in its original form.
+  it('refuses a depth it cannot store, rather than guessing at a palette', () => {
+    for (const depth of [8, 16]) {
+      throws(
+        () =>
+          writeTargaImage({
+            width: 1,
+            height: 1,
+            depth,
+            flip: false,
+            bitmap: new Uint8Array(depth >> 3),
+          }),
+        RangeError,
+      )
+    }
+  })
+
+  it('rejects a bitmap that is not the size its dimensions imply', () => {
+    throws(
+      () =>
+        writeTargaImage({ width: 2, height: 2, depth: 24, flip: false, bitmap: new Uint8Array(3) }),
+      RangeError,
+    )
+  })
+})
+
+describe('writeMIPS', () => {
+  it('writes a pixel format each texture type reads back as itself', () => {
+    const sizes: Partial<Record<TextureType, number>> = {
+      dxt1: 8,
+      dxt3: 16,
+      dxt5: 16,
+      rgb16_565: 32,
+      rgba16_4444: 32,
+      rgba16_5551: 32,
+      rgb24_888: 48,
+      rgba32_8888: 64,
+    }
+
+    for (const [type, size] of Object.entries(sizes) as [TextureType, number][]) {
+      const texture = image(type, { bytes: [size] })
+      const written = readMIPS(entry('texture', writeMIPS(texture)))
+
+      strictEqual(written?.type, type, type)
+      strictEqual(written.storage, 'dds', type)
+      strictEqual(written.width, 4, type)
+      strictEqual(written.height, 4, type)
+      deepStrictEqual(written.levels, texture.levels, type)
+    }
+  })
+
+  // DDS stores the top row first, unconditionally, and neither reader reorders rows — so a
+  // bottom-up bitmap written here would silently come back upside down.
+  it('refuses a texture whose rows run bottom-up', () => {
+    throws(() => writeMIPS(image('dxt1', { flip: false, bytes: [8] })), RangeError)
+  })
+
+  it('refuses a texture type no pixel format covers', () => {
+    throws(() => writeMIPS(image('none', { bytes: [8] })), RangeError)
+  })
+})
+
+describe('writeMIP', () => {
+  it('halves the dimensions down the chain, and reads back as it was written', () => {
+    const texture = image('rgb24_888', {
+      width: 4,
+      height: 2,
+      levels: 3,
+      flip: false,
+      bytes: [24, 6, 3],
+    })
+
+    const files = writeMIP(texture)
+
+    deepStrictEqual(
+      files.map(({ name }) => name),
+      ['MIP0', 'MIP1', 'MIP2'],
+    )
+
+    // 4x2, 2x1, then 1x1 — the height has bottomed out while the width is still descending.
+    deepStrictEqual(
+      files.map((file) => {
+        const view = new DataView(file.buffer, file.byteOffset, file.byteLength)
+        return [view.getUint16(12, true), view.getUint16(14, true)]
+      }),
+      [
+        [4, 2],
+        [2, 1],
+        [1, 1],
+      ],
+    )
+
+    const written = readMIP(entry('texture', ...files))
+
+    strictEqual(written?.type, 'rgb24_888')
+    strictEqual(written.storage, 'targa')
+    strictEqual(written.flip, false)
+    deepStrictEqual(written.levels, texture.levels)
+  })
+
+  it('keeps a 32-bit chain 32-bit', () => {
+    const texture = image('rgba32_8888', { width: 2, height: 2, bytes: [16] })
+
+    strictEqual(readMIP(entry('texture', ...writeMIP(texture)))?.type, 'rgba32_8888')
+  })
+
+  it('refuses the types a Targa cannot hold', () => {
+    for (const type of ['dxt1', 'dxt5', 'rgb16_565', 'rgba16_5551'] as const)
+      throws(() => writeMIP(image(type, { bytes: [64] })), RangeError)
+  })
+})
+
+describe('writeAnimatedTexture', () => {
+  const animation = (frames: number[], rate = 15): AnimatedTexture => ({
+    name: 'anim',
+    type: 'animated',
+    rate,
+    frames: frames.map((index) => ({ index, u1: 0, v1: 1, u2: 1, v2: 0 })),
+  })
+
+  const count = (directory: ReturnType<typeof writeAnimatedTexture>, name: string) => {
+    const file = directory.getFile(name)!
+    return new DataView(file.buffer, file.byteOffset, file.byteLength).getInt32(0, true)
+  }
+
+  // Texture count names the sibling atlases, so it follows the highest index rather than the
+  // number of frames — a tiled animation runs many frames off one atlas.
+  it('derives Texture count from the highest frame index, not the frame count', () => {
+    const written = writeAnimatedTexture(animation([0, 0, 0, 0]))
+
+    strictEqual(count(written, 'Texture count'), 1)
+    strictEqual(count(written, 'Frame count'), 4)
+
+    strictEqual(count(writeAnimatedTexture(animation([2, 0, 1])), 'Texture count'), 3)
+  })
+
+  it('counts no atlases when there are no frames', () => {
+    strictEqual(count(writeAnimatedTexture(animation([])), 'Texture count'), 0)
+  })
+
+  it('reads back as the animation it was given', () => {
+    const source = animation([0, 1], 30)
+    const written = readAnimatedTexture(writeAnimatedTexture(source))
+
+    strictEqual(written?.rate, 30)
+    deepStrictEqual(written.frames, source.frames)
+  })
+})
+
+describe('writeTexture', () => {
+  it('picks the on-disk form from storage, not from the texture type', () => {
+    const dds = writeTexture({ ...image('rgb24_888', { bytes: [48] }), storage: 'dds' })
+    const targa = writeTexture({ ...image('rgb24_888', { bytes: [48] }), storage: 'targa' })
+
+    deepStrictEqual(
+      dds.children.map(({ name }) => name),
+      ['MIPS'],
+    )
+
+    deepStrictEqual(
+      targa.children.map(({ name }) => name),
+      ['MIP0'],
+    )
+  })
+
+  it('writes an animated entry without any pixel data', () => {
+    const written = writeTexture({
+      name: 'anim',
+      type: 'animated',
+      rate: 15,
+      frames: [{ index: 0, u1: 0, v1: 0, u2: 1, v2: 1 }],
+    })
+
+    deepStrictEqual(
+      written.children.map(({ name }) => name),
+      ['Texture count', 'Frame count', 'FPS', 'Frame rects'],
+    )
+  })
+})
+
+describe('writeTextures', () => {
+  it('builds a library the reader finds again', () => {
+    const textures = [
+      { ...image('dxt1', { bytes: [8] }), name: 'compressed' },
+      { ...image('rgba32_8888', { bytes: [64] }), name: 'raw' },
+    ]
+
+    const root = new Directory('', [writeTextures(textures)])
+
+    deepStrictEqual(
+      [...readTextures(root)].map(({ name, type }) => [name, type]),
+      [
+        ['compressed', 'dxt1'],
+        ['raw', 'rgba32_8888'],
+      ],
+    )
   })
 })

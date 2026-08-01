@@ -6,7 +6,7 @@ import type File from '../file.js'
 import { getResourceId } from '../hash.js'
 import type { AnimatedTexture } from './animation.js'
 import { readTextures } from './library.js'
-import { readTexture } from './library.js'
+import { readTexture, writeTexture } from './library.js'
 import type { Texture } from './types.js'
 
 /**
@@ -62,6 +62,50 @@ const images = () =>
   })
 
 const named = (list: { where: string }[]) => list.map(({ where }) => where).sort()
+
+const bytes = (file: File) => new Uint8Array(file.buffer, file.byteOffset, file.byteLength)
+
+/**
+ * Whether every file the writer produced matches the source entry byte for byte. Extra files in
+ * the source are not compared — the four entries carrying a dead Targa chain beside their `MIPS`
+ * lose it, which `writeTexture drops...` covers on its own.
+ */
+const same = (source: Directory, written: Directory) => {
+  for (const file of written.files) {
+    const other = source.getFile(file.name)
+
+    if (!other || other.byteLength !== file.byteLength) return false
+
+    const x = bytes(file)
+    const y = bytes(other)
+
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false
+  }
+
+  return true
+}
+
+/**
+ * Why a Targa chain cannot be written back verbatim. Colour maps and 16-bit pixels decode to
+ * plain RGB and the palette is not carried, so re-encoding is a lossy operation the writer does
+ * not attempt; attribute bits in the image descriptor are not modelled either.
+ */
+const lossy = (entry: Directory) => {
+  const reasons = new Set<string>()
+
+  for (let level = 0; ; level++) {
+    const file = entry.getFile(`MIP${level}`)
+    if (!file) break
+
+    const view = new DataView(file.buffer, file.byteOffset, file.byteLength)
+
+    if (view.getUint8(2) === 1) reasons.add('colour map')
+    if (view.getUint8(16) === 16) reasons.add('16-bit')
+    if (view.getUint8(17) & ~0x20) reasons.add('attribute bits')
+  }
+
+  return reasons
+}
 
 /** Raw DirectDrawSurface header fields, read independently of the module under test. */
 const header = (file: File) => {
@@ -402,8 +446,9 @@ describe('retail asset corpus', { skip }, () => {
     })
 
     /**
-     * `Texture count` is not modelled: it is always one more than the highest frame index, and
-     * the atlases it counts are sibling entries named `<entry>_<index>`.
+     * `Texture count` is not carried on {@link AnimatedTexture} but derived on write: it is
+     * always one more than the highest frame index, and the atlases it counts are sibling
+     * entries named `<entry>_<index>`. This is what licenses that derivation.
      */
     it('counts exactly the sibling atlases its frames index into', () => {
       for (const { where, path, entry, texture } of animations()) {
@@ -422,6 +467,120 @@ describe('retail asset corpus', { skip }, () => {
             library.library.getDirectory(`${texture.name}_${index}`),
             `${where}: missing atlas ${texture.name}_${index}`,
           )
+      }
+    })
+  })
+
+  describe('writing back', () => {
+    const rewritten = () =>
+      entries()
+        .filter((entry): entry is Entry & { texture: Texture | AnimatedTexture } => !!entry.texture)
+        .map((entry) => ({ ...entry, written: writeTexture(entry.texture) }))
+
+    it('reproduces every DirectDrawSurface byte for byte', () => {
+      const surfaces = rewritten().filter(({ entry }) => entry.getFile('MIPS'))
+
+      strictEqual(surfaces.length, 4447)
+
+      // The whole 128-byte header is derived, not carried: retail never varies dwDepth, the
+      // reserved dwords, dwCaps2..4, and leaves DDSD_CAPS clear on every single surface.
+      for (const { where, entry, written } of surfaces) ok(same(entry, written), where)
+    })
+
+    it('reproduces every animated texture, Texture count included', () => {
+      const animations = rewritten().filter(({ texture }) => texture.type === 'animated')
+
+      strictEqual(animations.length, 12)
+
+      // Texture count is derived from the highest frame index rather than carried, which is
+      // what makes these round-trip at all — nothing on AnimatedTexture holds it.
+      for (const { where, entry, written } of animations) {
+        ok(written.getFile('Texture count'), `${where}: no Texture count written`)
+        ok(same(entry, written), where)
+      }
+    })
+
+    /**
+     * Targa chains only round-trip where retail already stored them the way the writer emits
+     * them: uncompressed RGB. Colour-mapped and 16-bit levels decode to RGB and cannot go back
+     * without a palette this library does not carry, so their files come back larger.
+     */
+    it('reproduces the Targa chains that were already uncompressed RGB', () => {
+      const chains = rewritten().filter(
+        ({ entry, texture }) => texture.type !== 'animated' && !entry.getFile('MIPS'),
+      )
+
+      strictEqual(chains.length, 2400)
+
+      const exact = chains.filter(({ entry, written }) => same(entry, written))
+
+      strictEqual(exact.length, 629)
+      for (const { where, entry } of exact) strictEqual(lossy(entry).size, 0, `${where}: lossy`)
+
+      // Every one that does not is accounted for, so nothing differs for an unknown reason.
+      const reasons = new Map<string, number>()
+
+      for (const { where, entry } of chains.filter(({ entry, written }) => !same(entry, written))) {
+        const reason = [...lossy(entry)].sort().join(' + ')
+
+        ok(reason, `${where}: differs for no recorded reason`)
+        reasons.set(reason, (reasons.get(reason) ?? 0) + 1)
+      }
+
+      deepStrictEqual(Object.fromEntries([...reasons].sort()), {
+        '16-bit': 102,
+        // SOLAR/RINGS/rings.txm :: ringdetail, the one chain declaring its 8 alpha bits.
+        'attribute bits': 1,
+        'colour map': 1668,
+      })
+    })
+
+    /** Reading prefers `MIPS`, so the Targa chain beside it was already dead weight. */
+    it('drops the dead Targa chain from the four entries that carry both', () => {
+      const both = rewritten().filter(
+        ({ entry }) => entry.getFile('MIPS') && entry.getFile('MIP0'),
+      )
+
+      deepStrictEqual(named(both), [
+        'SHIPS/LIBERTY/li_capships.mat :: Damage_128.tga',
+        'SHIPS/LIBERTY/li_capships.mat :: debris.TGA',
+        'SHIPS/UTILITY/utility_transport.mat :: damage_128.tga',
+        'SHIPS/UTILITY/utility_transport.mat :: utility_dmg.tga',
+      ])
+
+      for (const { where, written } of both)
+        deepStrictEqual(
+          written.children.map(({ name }) => name),
+          ['MIPS'],
+          where,
+        )
+    })
+
+    /**
+     * The invariant that holds where byte-for-byte does not: whatever the writer emits reads
+     * back as the same texture and writes again to the same bytes. Without it, the lossy Targa
+     * cases could drift on every save.
+     */
+    it('is a fixed point, so a second pass changes nothing', () => {
+      for (const { where, texture, written } of rewritten()) {
+        const reread = readTexture(written)
+
+        ok(reread, `${where}: what was written no longer reads`)
+        strictEqual(reread.type, texture.type, where)
+        strictEqual(reread.name, texture.name, where)
+
+        if (reread.type !== 'animated' && texture.type !== 'animated') {
+          strictEqual(reread.storage, texture.storage, where)
+          strictEqual(reread.width, texture.width, where)
+          strictEqual(reread.height, texture.height, where)
+          strictEqual(reread.flip, texture.flip, where)
+          strictEqual(reread.levels.length, texture.levels.length, where)
+
+          for (const [index, level] of reread.levels.entries())
+            deepStrictEqual(level, texture.levels[index], `${where}: level ${index}`)
+        }
+
+        ok(same(written, writeTexture(reread)), `${where}: second write differs`)
       }
     })
   })

@@ -37,7 +37,13 @@ Texture library (UTF directory)
 
 The four forms are mutually exclusive in practice, and `readTexture` tries them in the order
 animated → `CUBE` → `MIPS` → `MIP0..n`. Four entries carry both a `MIPS` and a `MIP0..n` chain;
-`MIPS` wins and the Targa chain is never decoded.
+`MIPS` wins and the Targa chain is never decoded — and, since writing follows what was read, is
+dropped on the way back out.
+
+Which of the two image forms an entry uses is not a function of its pixel format: retail authored
+`rgb24_888` both ways, 1,787 Targa chains against two surfaces. `Texture.storage` (`dds` or
+`targa`) carries it, so `writeTexture` puts a texture back in the form it came from rather than
+guessing.
 
 The directory is spelled three ways in retail — `Texture library`, `texture library` and
 `Texture Library` — so every lookup goes through `getResourceId`, never a string compare.
@@ -92,6 +98,29 @@ mip chain. Fields the reader consumes, at their absolute offsets:
 The masks are read **unsigned**. An `0xff000000` alpha mask read as a signed int32 comes back
 negative and matches no known format, which made every 32-bit uncompressed surface throw. Retail
 has no such surface, so only synthetic content exposes it.
+
+### Writing the header back
+
+Retail's 4,447 surfaces vary in exactly four fields — dimensions, mip count, pixel format and the
+mipmap caps bit — so `writeDirectDrawSurface` derives the whole 128-byte header rather than
+carrying it, and reproduces every one of them byte for byte:
+
+| Field                       | Written as                                                     |
+| --------------------------- | -------------------------------------------------------------- |
+| `dwFlags`                   | `0xa1006` compressed, `0x2100e` otherwise                        |
+| `dwPitchOrLinearSize`       | top level's byte length, or `width * bitCount >> 3`             |
+| `dwDepth`, reserved, `dwCaps2..4` | zero                                                      |
+| `dwMipMapCount`             | number of levels, with `DDSD_MIPMAPCOUNT` set even for one      |
+| `ddspf.dwFlags`             | `DDPF_FOURCC`, or `DDPF_RGB` plus `DDPF_ALPHAPIXELS` if the alpha mask is non-zero |
+| `dwCaps`                    | `0x401008`, or `0x1000` for a single level                       |
+
+Two of those are worth not "fixing": **`DDSD_CAPS` is left clear**, as it is in every retail
+surface despite `dwCaps` being populated, and `DDSD_MIPMAPCOUNT` is set on the single-level
+`plasmaring` too. Both match the game's own writer.
+
+Levels are checked against the dimensions they will be read back at before anything is written —
+the header records only the base size, so a chain that does not halve from it would be walked at
+the wrong offsets rather than read as written.
 
 ### Mip chain sizing
 
@@ -176,6 +205,26 @@ than transforming means a consumer that finds out either way needs no decode cha
 The origin and bit depth are identical across every level of every chain in retail, so `readMIP`
 throws rather than guessing when levels disagree.
 
+### Writing a chain back
+
+`writeTargaImage` only writes the uncompressed RGB image type, with an empty identification field,
+an origin of 0,0 and no attribute bits — which is what retail stores, minus one image. Level
+dimensions are derived by halving, since `readMIP` keeps only the base size.
+
+Of the 2,400 chains, **629 come back byte for byte**. The rest cannot, for reasons that are
+enumerated rather than assumed — the corpus test requires every difference to have one:
+
+| Reason          | Chains | Why                                                            |
+| --------------- | ------ | -------------------------------------------------------------- |
+| Colour map      | 1,668  | The palette is not carried on `TargaPixels`; re-quantizing 16.7M colours down to 256 is a lossy guess this library does not make |
+| 16-bit          | 102    | Expanded to 24-bit on read, and the expansion does not invert   |
+| Attribute bits  | 1      | `SOLAR/RINGS/rings.txm :: ringdetail`, the one chain declaring its 8 alpha bits (and the one carrying a v2 footer) |
+
+Those files come back **larger, with the same pixels** — a colour-mapped 256×256 level becomes a
+24-bit one. What holds everywhere is that **writing is a fixed point**: what the writer emits reads
+back as the same texture, level bytes included, and writes again to identical bytes. Without that,
+the lossy cases would drift on every save.
+
 ---
 
 ## `animation.ts` — Animated textures
@@ -205,8 +254,10 @@ the nine Targas that set the top-left origin bit. Rects authored V-up against a 
 top-down is what you would expect if the descriptor bit is meaningful — suggestive on the open
 question above, though not on its own conclusive.
 
-`Texture count` is not modelled, since it is fully implied by the frame indices. It is also not
-written back, so animated textures do not round-trip.
+`Texture count` is not modelled, since it is fully implied by the frame indices — across all
+twelve it is exactly the highest index plus one. `writeAnimatedTexture` derives it on the way out
+rather than carrying it, which is what lets all twelve round-trip byte for byte while leaving
+`AnimatedTexture` with no field that could disagree with its own frames.
 
 ---
 
@@ -302,33 +353,42 @@ in [MODEL.md](MODEL.md).
 
 ## API
 
-| Function                        | Description                                                   |
-| ------------------------------- | ------------------------------------------------------------- |
-| `readTextures(root)`            | Reads `Texture library` from a file root; yields nothing when absent |
-| `writeTextures(textures)`       | Builds a `Texture library` directory — **stub**               |
-| `readTexture(entry)`            | Reads one entry, trying each form in turn                     |
-| `writeTexture(texture)`         | **Not implemented** — returns an empty directory              |
-| `readMIPS(entry)`               | Reads a `MIPS` DirectDrawSurface                              |
-| `readMIP(entry)`                | Reads a `MIP0..n` Targa chain                                 |
-| `readCUBE(entry)`               | **Not implemented** — always `undefined`                      |
-| `readAnimatedTexture(entry)`    | Reads the frame rectangle list                                |
-| `writeAnimatedTexture(texture)` | Writes `FPS`, `Frame count` and `Frame rects`                 |
-| `readDirectDrawSurface(view)`   | Parses a `.dds` buffer into header fields and mip levels      |
-| `readTargaImage(view)`          | Parses a `.tga` buffer into RGB(A) bytes plus its origin      |
+| Function                          | Description                                                   |
+| --------------------------------- | ------------------------------------------------------------- |
+| `readTextures(root)`              | Reads `Texture library` from a file root; yields nothing when absent |
+| `writeTextures(textures)`         | Builds a `Texture library` directory                          |
+| `readTexture(entry)`              | Reads one entry, trying each form in turn                     |
+| `writeTexture(texture)`           | Writes one entry, in the form `Texture.storage` names         |
+| `readMIPS(entry)` / `writeMIPS`   | Reads / writes a `MIPS` DirectDrawSurface                     |
+| `readMIP(entry)` / `writeMIP`     | Reads / writes a `MIP0..n` Targa chain                        |
+| `readCUBE(entry)`                 | **Not implemented** — always `undefined`                      |
+| `readAnimatedTexture(entry)`      | Reads the frame rectangle list                                |
+| `writeAnimatedTexture(texture)`   | Writes `Texture count`, `Frame count`, `FPS` and `Frame rects` |
+| `getTextureCount(texture)`        | Number of sibling atlases the frames index into               |
+| `readDirectDrawSurface(view)`     | Parses a `.dds` buffer into header fields and mip levels      |
+| `writeDirectDrawSurface(surface)` | Builds a `.dds` buffer, deriving the whole header             |
+| `readTargaImage(view)`            | Parses a `.tga` buffer into RGB(A) bytes plus its origin      |
+| `writeTargaImage(bitmap)`         | Builds an uncompressed RGB(A) `.tga` buffer                   |
 
 `readTextures` collects per-entry failures and throws a single `AggregateError` at the end, so one
 malformed texture does not hide the rest of the library.
 
-Writing is **not implemented**: `writeTexture` returns an empty directory, so nothing round-trips
-and no byte-for-byte corpus assertion exists for this module, unlike `vmesh` and `animation`.
+The writers refuse what they cannot express rather than emitting something plausible: a
+block-compressed or 16-bit texture stored as a Targa chain, a bottom-up bitmap stored as a
+DirectDrawSurface (DDS is top-down unconditionally, and no reader here reorders rows), a mip
+level whose buffer does not match the dimensions it would be read back at, or a `CUBE` — which
+`readCUBE` cannot produce in the first place.
 
 ```ts
 import { Directory } from '@treewyrm/utf2json'
-import { readTextures } from '@treewyrm/utf2json/texture'
+import { readTextures, writeTextures } from '@treewyrm/utf2json/texture'
 
 const root = Directory.read(await readFile('li_ships.txm'))
+const textures = [...readTextures(root)]
 
-for (const texture of readTextures(root))
+for (const texture of textures)
   if (texture.type !== 'animated')
     console.log(texture.name, texture.type, texture.width, texture.height, texture.levels.length)
+
+root.append(writeTextures(textures))
 ```

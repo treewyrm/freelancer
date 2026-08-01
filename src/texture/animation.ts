@@ -65,15 +65,28 @@ export const readAnimatedTexture = (parent: Directory): AnimatedTexture | undefi
   return { name: parent.name, type: 'animated', rate, frames }
 }
 
+/**
+ * Number of sibling atlases the frames index into, written back as `Texture count`.
+ *
+ * Derived rather than modelled: across all twelve retail animations it is exactly one more than
+ * the highest frame index, and the atlases it counts are the sibling entries named
+ * `<name>_<index>`, so carrying it on {@link AnimatedTexture} would only offer a way to disagree
+ * with the frames.
+ */
+export const getTextureCount = ({ frames }: AnimatedTexture): number =>
+  frames.reduce((highest, { index }) => Math.max(highest, index + 1), 0)
+
 export function writeAnimatedTexture(texture: AnimatedTexture): Directory {
-  const fps = new File('FPS').writeFloats(texture.rate)
+  const textures = new File('Texture count').writeIntegers(getTextureCount(texture))
   const count = new File('Frame count').writeIntegers(texture.frames.length)
+  const fps = new File('FPS').writeFloats(texture.rate)
   const view = BufferView.allocate(frameByteLength * texture.frames.length)
 
   for (const { index, u1, v1, u2, v2 } of texture.frames)
     view.writeInt32(index).writeFloat32(u1).writeFloat32(v1).writeFloat32(u2).writeFloat32(v2)
 
-  const rects = new File('Frame rects', view)
+  // Rewound because BufferView.from copies the offset: a view left at its end reads back empty.
+  const rects = new File('Frame rects', view.rewind())
 
-  return new Directory(texture.name, [fps, count, rects])
+  return new Directory(texture.name, [textures, count, fps, rects])
 }

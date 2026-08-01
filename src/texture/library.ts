@@ -1,8 +1,9 @@
 import BufferView from '#/utility/bufferview.js'
 import Directory from '#/directory.js'
-import { readTargaImage } from './targa.js'
+import File from '#/file.js'
+import { readTargaImage, writeTargaImage } from './targa.js'
 import { type Texture, type TextureType } from './types.js'
-import { Compression, readDirectDrawSurface } from './dds.js'
+import { Compression, readDirectDrawSurface, writeDirectDrawSurface } from './dds.js'
 import { readAnimatedTexture, writeAnimatedTexture, type AnimatedTexture } from './animation.js'
 
 /**
@@ -48,7 +49,47 @@ export function readMIP(parent: Directory): Texture | undefined {
   else if (depth === 32) type = 'rgba32_8888'
   else throw new RangeError(`Invalid targa mipmap bit depth: ${depth}`)
 
-  return { name: parent.name, width, height, type, levels, flip: flip ?? false }
+  return { name: parent.name, storage: 'targa', width, height, type, levels, flip: flip ?? false }
+}
+
+/**
+ * Writes texture as a sequence of uncompressed Targa images, one file per level.
+ *
+ * Level dimensions are derived by halving, since {@link readMIP} keeps only the base size: every
+ * retail chain follows that, and a level whose buffer disagrees is rejected by
+ * {@link writeTargaImage} rather than written at the wrong stride.
+ * @param texture Texture to write
+ * @returns
+ */
+export function writeMIP(texture: Texture): File[] {
+  const { type, width, height, flip, levels } = texture
+
+  let depth: number
+
+  switch (type) {
+    case 'rgb24_888':
+      depth = 24
+      break
+    case 'rgba32_8888':
+      depth = 32
+      break
+    default:
+      throw new RangeError(`Cannot store ${type} texture ${texture.name} as a targa chain`)
+  }
+
+  return levels.map(
+    (bitmap, level) =>
+      new File(
+        `MIP${level}`,
+        writeTargaImage({
+          width: Math.max(1, width >> level),
+          height: Math.max(1, height >> level),
+          depth,
+          flip,
+          bitmap,
+        }),
+      ),
+  )
 }
 
 const getTypeByMask = (r: number, g: number, b: number, a: number): TextureType => {
@@ -113,7 +154,67 @@ export function readMIPS(parent: Directory): Texture | undefined {
   }
 
   // DirectDrawSurface is always stored top row first.
-  return { name: parent.name, width, height, type, levels: mipmaps, flip: true }
+  return { name: parent.name, storage: 'dds', width, height, type, levels: mipmaps, flip: true }
+}
+
+/** Pixel format {@link getTypeByMask} would decode back into the given type. */
+const getMaskByType = (type: TextureType) => {
+  switch (type) {
+    case 'rgb16_565':
+      return { bitCount: 16, mask: { r: 0xf800, g: 0x7e0, b: 0x1f, a: 0 } }
+    case 'rgba16_4444':
+      return { bitCount: 16, mask: { r: 0xf00, g: 0xf0, b: 0xf, a: 0xf000 } }
+    case 'rgba16_5551':
+      return { bitCount: 16, mask: { r: 0x7c00, g: 0x3e0, b: 0x1f, a: 0x8000 } }
+    case 'rgb24_888':
+      return { bitCount: 24, mask: { r: 0xff0000, g: 0xff00, b: 0xff, a: 0 } }
+    case 'rgba32_8888':
+      return { bitCount: 32, mask: { r: 0xff0000, g: 0xff00, b: 0xff, a: 0xff000000 } }
+    default:
+      throw new RangeError(`No DirectDrawSurface pixel format for ${type}`)
+  }
+}
+
+/**
+ * Writes texture as mipmaps (uncompressed or DXTn) stored in a DirectDrawSurface.
+ *
+ * `flip` must be set: DDS stores the top row first, unconditionally, so a bottom-up bitmap would
+ * be written upside down. The rows are not reordered here, matching the readers, which report the
+ * vertical origin rather than transforming it.
+ * @param texture Texture to write
+ * @returns
+ */
+export function writeMIPS(texture: Texture): File {
+  const { type, width, height, flip, levels } = texture
+
+  if (!flip)
+    throw new RangeError(
+      `Texture ${texture.name} is stored bottom row first and cannot be written as a DirectDrawSurface`,
+    )
+
+  let compression: Compression
+  let bitCount = 0
+  let mask = { r: 0, g: 0, b: 0, a: 0 }
+
+  switch (type) {
+    case 'dxt1':
+      compression = Compression.DXT1
+      break
+    case 'dxt3':
+      compression = Compression.DXT3
+      break
+    case 'dxt5':
+      compression = Compression.DXT5
+      break
+    default:
+      compression = Compression.NONE
+      ;({ bitCount, mask } = getMaskByType(type))
+  }
+
+  return new File(
+    'MIPS',
+    writeDirectDrawSurface({ width, height, bitCount, compression, mask, mipmaps: levels }),
+  )
 }
 
 /**
@@ -142,18 +243,21 @@ export function readTexture(parent: Directory): Texture | AnimatedTexture | unde
 }
 
 /**
- * Writes one texture library entry.
+ * Writes one texture library entry, in whichever form {@link Texture.storage} names.
  *
- * Only the animation form is implemented. Image entries throw rather than returning the empty
- * directory this used to: a library that writes without complaint and holds no pixels is harder
- * to notice than one that refuses.
- *
- * TODO: write `MIPS` and `MIP0..n` back out.
+ * Cubemaps have no counterpart here, since {@link readCUBE} cannot produce one to write.
  */
 export function writeTexture(texture: Texture | AnimatedTexture): Directory {
   if (texture.type === 'animated') return writeAnimatedTexture(texture)
 
-  throw new Error(`Writing ${texture.type} texture ${texture.name} is not implemented`)
+  switch (texture.storage) {
+    case 'dds':
+      return new Directory(texture.name, [writeMIPS(texture)])
+    case 'targa':
+      return new Directory(texture.name, writeMIP(texture))
+    default:
+      throw new RangeError(`Unknown texture storage in ${texture.name}`)
+  }
 }
 
 /**

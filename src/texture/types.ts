@@ -17,6 +17,16 @@ export type TextureType =
   | 'dxt5' // DXT5 compressed image (s3tc.COMPRESSED_RGBA_S3TC_DXT5_EXT).
 
 /**
+ * Which of the two on-disk forms holds a texture's levels: one `MIPS` DirectDrawSurface, or a
+ * `MIP0..n` chain of uncompressed Targas.
+ *
+ * Not derivable from {@link TextureType}, which is why it is carried rather than inferred on
+ * write. Block compression implies `dds`, but retail authored `rgb24_888` both ways — 1,787
+ * Targa chains against two surfaces.
+ */
+export type TextureStorage = 'dds' | 'targa'
+
+/**
  * Note the absence of a transparency flag. Whether a texture is drawn blended is decided by the
  * material that binds it — the `Oc`/`Ot` tokens in its `Type` string — never by the texture, so
  * a flag here would be both the wrong layer and fully implied by {@link TextureType}.
@@ -26,6 +36,9 @@ export interface Texture {
 
   /** Texture type specifying layout of data buffers.  */
   type: TextureType
+
+  /** Which on-disk form the levels came from, and are written back as. */
+  storage: TextureStorage
 
   /** Texture base width. */
   width: number

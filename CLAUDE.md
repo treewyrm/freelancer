@@ -34,8 +34,7 @@ This is a TypeScript library for reading and writing **UTF (Universal Tree Forma
 | `./model` | `src/model/index.ts` | Rigid models: compound hierarchy, joints, hardpoints |
 | `./animation` | `src/animation/index.ts` | Keyframe animation scripts shared by `.cmp` and `.anm` |
 | `./surface` | `src/surface/index.ts` | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy |
-
-`src/texture/` is **not** a package entry point yet — it is absent from both `package.json` exports and `tsdown.config.ts`, and `writeTexture` is still a stub.
+| `./texture` | `src/texture/index.ts` | `Texture library` entries: DDS surfaces, Targa mip chains, animations |
 
 Module documentation lives in `docs/`: [UTF.md](docs/UTF.md), [VMESH.md](docs/VMESH.md), [MODEL.md](docs/MODEL.md), [ANIMATION.md](docs/ANIMATION.md), [SURFACE.md](docs/SURFACE.md), [ALCHEMY.md](docs/ALCHEMY.md), [TEXTURE.md](docs/TEXTURE.md).
 
@@ -123,7 +122,15 @@ The `surf` chunk is a verbatim memory image of **`IVP_Compact_Surface`** from Ip
 
 ### Texture (`src/texture/`)
 
-`Texture library` directories, found in `.txm` and `.mat` files and embedded in `.3db`/`.cmp`/`.dfm`/`.sph`. `readTextures(root)` takes a file root like `readVMeshLibrary` does. An entry holds one of four forms: a whole DirectDrawSurface in `MIPS`, a chain of uncompressed Targas in `MIP0..n`, an animation over sibling atlas entries (`Frame rects`), or a `CUBE` cubemap. Reading is complete for the first three; **writing is not implemented**.
+`Texture library` directories, found in `.txm` and `.mat` files and embedded in `.3db`/`.cmp`/`.dfm`/`.sph`. `readTextures(root)` takes a file root like `readVMeshLibrary` does. An entry holds one of four forms: a whole DirectDrawSurface in `MIPS`, a chain of uncompressed Targas in `MIP0..n`, an animation over sibling atlas entries (`Frame rects`), or a `CUBE` cubemap. Reading and writing are complete for the first three; `CUBE` is unimplemented in both directions, since `Texture` has nowhere to put six faces.
+
+`Texture.storage` (`dds` or `targa`) says which image form an entry uses, because the pixel format does not: retail authored `rgb24_888` as 1,787 Targa chains and two surfaces. `writeTexture` follows it rather than guessing, and refuses what a form cannot express — a block-compressed texture as a Targa chain, a bottom-up bitmap as a DirectDrawSurface.
+
+What round-trips, all pinned by `corpus.test.ts`:
+
+- **Every one of the 4,447 DirectDrawSurfaces, byte for byte.** The 128-byte header is derived, not carried — retail varies only dimensions, mip count, pixel format and the mipmap caps bit. Two quirks are reproduced deliberately: `DDSD_CAPS` stays clear even though `dwCaps` is populated, and `DDSD_MIPMAPCOUNT` is set on the single-level surface too.
+- **All twelve animated textures**, now that `Texture count` is written. It stays derived (highest frame index plus one, which holds across the corpus) rather than modelled, so `AnimatedTexture` has no field that can disagree with its own frames.
+- **629 of the 2,400 Targa chains.** The rest cannot: 1,668 are colour-mapped and the palette is not carried, 102 are 16-bit and the expansion to 24 does not invert, and one declares attribute bits. Those come back larger with the same pixels. What holds everywhere is that **writing is a fixed point** — what is written reads back identical and writes again to the same bytes. See [TEXTURE.md](docs/TEXTURE.md).
 
 Two decisions worth not re-litigating, both measured against retail and pinned by `corpus.test.ts`:
 
