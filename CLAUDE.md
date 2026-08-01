@@ -39,7 +39,10 @@ This is a TypeScript library for reading and writing **UTF (Universal Tree Forma
 | `./material` | `src/material/index.ts` | `Material library` entries: shader type, colours, texture slots |
 | `./deformable` | `src/deformable/index.ts` | `.dfm` character models: bone table, skinned meshes, detail levels |
 
-Module documentation lives in `docs/`: [UTF.md](docs/UTF.md), [VMESH.md](docs/VMESH.md), [COMPOUND.md](docs/COMPOUND.md), [RIGID.md](docs/RIGID.md), [ANIMATION.md](docs/ANIMATION.md), [SURFACE.md](docs/SURFACE.md), [ALCHEMY.md](docs/ALCHEMY.md), [TEXTURE.md](docs/TEXTURE.md), [MATERIAL.md](docs/MATERIAL.md), [DEFORMABLE.md](docs/DEFORMABLE.md).
+Module documentation lives in `docs/`: [UTF.md](docs/UTF.md), [VMESH.md](docs/VMESH.md), [COMPOUND.md](docs/COMPOUND.md), [RIGID.md](docs/RIGID.md), [ANIMATION.md](docs/ANIMATION.md), [SURFACE.md](docs/SURFACE.md), [ALCHEMY.md](docs/ALCHEMY.md), [TEXTURE.md](docs/TEXTURE.md), [MATERIAL.md](docs/MATERIAL.md), [DEFORMABLE.md](docs/DEFORMABLE.md). [AUDIO.md](docs/AUDIO.md)
+documents the `DATA/AUDIO` voice banks, which have no module — they are flat UTF directories of
+RIFF payloads named by `getObjectId` of the `voices_*.ini` message nickname, read and written with
+`Directory` directly.
 
 ### Binary format overview
 
@@ -180,6 +183,30 @@ File order inside a material is the one thing not reproduced: the writer emits t
 - **`Fractions` folds into the level, `Face_groups/Count` and `UV_vertex_count` are derived.** All three agree with what they count in every retail file.
 
 The one thing that cannot be reproduced belongs to `compound/`, not here: **every retail constraint record leaves stack residue past the terminator of its two 64-byte name fields** — all 9096 here and all 5316 across the rigid models. `writeConstraints` zero-fills, and now writes the retail capitalization (`Fix`, `Rev`, `Pris`, `Sphere`, `Loose`, `Cyl`) rather than lowercase. The eleven `UV_*` files on `Mesh0` of 104 heads drive eye and mouth patches across a sprite sheet from a bone that moves but is never drawn. See [DEFORMABLE.md](docs/DEFORMABLE.md).
+
+### openFLAME leftovers
+
+Five retail files carry trees from **openFLAME**, the engine behind Digital Anvil's earlier *Conquest: Frontier Wars*. They share the UTF container with Freelancer and nothing else: the game cannot load them, no `.ini` names them, and no module here interprets their content. They are listed so a sweep of retail data recognizes them instead of mistaking them for an unread Freelancer structure — **find them, skip them, do not implement them.**
+
+| File | Root nodes | Content |
+|---|---|---|
+| `EQUIPMENT/MODELS/HARDWARE/no_cargo_extender.3db` | `openFLAME 3D N-mesh`, `Rigid body` | Pre-VMesh geometry, plus a nested `Material library` and `Texture library` |
+| `EQUIPMENT/MODELS/HARDWARE/no_invulnerability.3db` | same | same |
+| `EQUIPMENT/MODELS/HARDWARE/no_key.3db` | same | same |
+| `EQUIPMENT/MODELS/HARDWARE/no_power_boost.3db` | same | same |
+| `SOLAR/BLACKHOLE/bh_flute4.pte` | `Particle Event`, `Rigid body` | `particle1.Def`, an `Animation library`, a paletted `Texture library`, `Scale`, `PointExtent` |
+
+The four `.3db` files are openFLAME end to end — their root holds `Exporter Version` and the two trees, and no Freelancer geometry at all. `bh_flute4.pte` is the only `.pte` in the data.
+
+**The vocabulary is the marker, not the extension.** openFLAME geometry is `Vertices` / `Edges` / `Normals` / `Face groups` (a space, where Freelancer writes `Face_groups`) over `Object vertex list`, `Face vertex chain` and `Face D-coefficient`; its materials key on `Material identifier` and nest `Ambient` / `Diffuse` / `Specular` / `Transparency` directories with a `Map` subdirectory, where a Freelancer material holds only flat property files; its textures are `Palette 8 bit` with `Image indices` and `Palette RGB 888`. `Rigid body` wraps `Mass properties` and either an `Extent tree` or, in the `.pte`, an `Extent data` / `Bounding volume` pair. None of these names occurs in a Freelancer-authored asset.
+
+**Every reader already yields nothing on all five, without throwing, and that behaviour is deliberate.** `readVMeshLibrary` reads an openFLAME root as an empty library; `readTextures` and `readMaterials` come back empty because both libraries are nested inside the openFLAME tree rather than sitting at the file root where those readers look. Reaching an entry directly is covered too — `readTexture` returns `undefined` on a paletted entry rather than guessing. See [TEXTURE.md](docs/TEXTURE.md) for the paletted layout, [MATERIAL.md](docs/MATERIAL.md) for the nested library, and [COMPOUND.md](docs/COMPOUND.md) for the shared joint lineage, which is the one place the two engines genuinely overlap.
+
+The two paletted texture forms nest oppositely, so neither reader can assume the other: the `.3db` files put `MIP0..n` **under** `Palette 8 bit`, while the `.pte` puts a `Palette 8 bit` under **each** `MIP0..n` and adds `U wrap mode` / `V wrap mode`.
+
+**`FX/MISC/tlrtube.3db` is not one of these**, though it was grouped with them for a long time. Its root `Mesh` tree uses Freelancer's own deformable vocabulary — `Face_groups/Group0/{Material_name, Face_indices, Edge_indices, Edge_angles}` over `Geometry/{Point_indices, Points, Vertex_normals, UV0_indices, UV0}` — with no bone files, since nothing skins it, and `Face_indices` in place of `Tristrip_indices`, a form `readFaceGroup` already supports. Its `Material library` and `Texture library` are ordinary ones (`Dt_name`, a `MIP0..6` chain), it carries no openFLAME marker at all, and `EXE/dacom.ini` has a hand-written `[MaterialMap]` rule for its sole material (`name = ^tlr_energy$ = NebulaTwo`; `tlr_energy` occurs nowhere else in the retail install).
+
+What it *is* residue of is **`FxMeshAppearance`, an unfinished feature**. `FX/MISC/gf_tlr_tube.ale` holds one naming this model by `MeshApp_MeshName = TLRtube`, registered as a `[VisEffect]` in `FX/MISC/misc_ale.ini`. The node type never worked — Freelancer crashes when a particle spawns for that appearance, and no way to make it work has been found — and the chain is broken independently of that, since no `[Effect]` entry names the `gf_TLR_tube` `[VisEffect]`. Only one other retail `.ale` uses the type (`intro_volcanoplanet.ale`, whose `beryl_asteroid*` values are `[Asteroid]` nicknames from `SOLAR/asteroidarch.ini`, so the property takes an INI nickname rather than a mesh name). Its animated UV set — `UV0_anim`, `UV0_anim_lookup`, `UV0_frame_count`, `UV0_fps`, `UV0_interpolate` — appears in no other asset. **Do not model it**: not because another engine authored it, but because there is no working in-game behaviour to validate a reader against. See [RIGID.md](docs/RIGID.md).
 
 ## Code style
 

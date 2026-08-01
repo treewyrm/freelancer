@@ -331,12 +331,17 @@ describe('retail asset corpus', { skip }, () => {
     })
   })
 
-  // Four files under EQUIPMENT/MODELS/HARDWARE predate VMesh: they are UTF containers
-  // holding an "openFLAME 3D N-mesh" tree left over from Conquest: Frontier Wars, which
-  // Freelancer neither supports nor uses. Reading them must degrade, not throw.
+  // Five retail files hold geometry no VMesh reader can touch. Reading them must degrade,
+  // not throw. They come from two unrelated places, so the grouping is about the required
+  // behaviour, not a shared origin:
   //
-  // FX/MISC/tlrtube.3db carries a "Mesh" tree of the same vintage — different shape, same
-  // story — and is covered by the same expectations.
+  // Four files under EQUIPMENT/MODELS/HARDWARE hold an "openFLAME 3D N-mesh" tree left over
+  // from Conquest: Frontier Wars, which Freelancer neither supports nor uses.
+  //
+  // FX/MISC/tlrtube.3db is Freelancer's own. Its "Mesh" tree uses the deformable vocabulary,
+  // it carries no openFLAME marker, and EXE/dacom.ini has a [MaterialMap] rule for its sole
+  // material. It is residue of FxMeshAppearance, an unfinished feature that crashes the game
+  // on particle spawn — so there is nothing working to model. See docs/RIGID.md.
   describe('pre-VMesh assets', () => {
     const legacy = () =>
       assets().filter(
@@ -345,7 +350,7 @@ describe('retail asset corpus', { skip }, () => {
           root.getDirectory('Mesh') !== undefined,
       )
 
-    it('finds the openFLAME leftovers', () => {
+    it('finds the four openFLAME leftovers and the one Freelancer mesh', () => {
       const paths = legacy().map(({ path }) => path)
 
       deepStrictEqual(

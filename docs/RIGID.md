@@ -219,15 +219,28 @@ The hierarchy a compound model reads into — `Model`, `getModelHardpoint`, `Har
 
 A census over all 1852 retail `.cmp` and `.3db` files turns up 550 distinct node paths. Everything the renderer needs is covered, `MaterialAnim` included; what follows is everything left over, so it does not have to be rediscovered. Material and texture libraries are excluded — they are a separate job.
 
-| Node                          | Files                   | What it is                                                                                                                                                                                          |
-| ----------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Exporter Version`            | 511 root, 1341 fragment | Exporter build timestamp string, 35 distinct values from `Dec 15 1999` to `Nov 5 2002`                                                                                                              |
-| `Extent tree`                 | 14                      | Exporter bounding-volume hierarchy: `Sphere`/`Tube`/`Cylinder`/`Box` nesting through `Children`, bottoming out in a `Convex mesh` of vertex, edge, face and normal lists. Collision ships in `.sur` |
-| `Mass properties`             | 5                       | `Mass` float32, `Center of mass` Vector3, `Inertia tensor` Matrix3 — real values, not placeholders                                                                                                  |
-| `Rigid body`                  | 4                       | Wrapper around `Mass properties` and `Extent tree`                                                                                                                                                  |
-| `openFLAME 3D N-mesh`, `Mesh` | 4 + 1                   | Conquest: Frontier Wars leftovers, neither supported nor used by Freelancer — see [VMESH.md](VMESH.md)                                                                                              |
+| Node                  | Files                   | What it is                                                                                                                                                                                          |
+| --------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Exporter Version`    | 511 root, 1341 fragment | Exporter build timestamp string, 35 distinct values from `Dec 15 1999` to `Nov 5 2002`                                                                                                              |
+| `Extent tree`         | 14                      | Exporter bounding-volume hierarchy: `Sphere`/`Tube`/`Cylinder`/`Box` nesting through `Children`, bottoming out in a `Convex mesh` of vertex, edge, face and normal lists. Collision ships in `.sur` |
+| `Mass properties`     | 5                       | `Mass` float32, `Center of mass` Vector3, `Inertia tensor` Matrix3 — real values, not placeholders                                                                                                  |
+| `Rigid body`          | 4                       | Wrapper around `Mass properties` and `Extent tree`                                                                                                                                                  |
+| `openFLAME 3D N-mesh` | 4                       | Conquest: Frontier Wars leftovers, neither supported nor used by Freelancer — see [VMESH.md](VMESH.md)                                                                                              |
+| `Mesh`                | 1                       | `FX/MISC/tlrtube.3db` only. Freelancer's own, not openFLAME: residue of `FxMeshAppearance`, an unfinished feature — see below                                                                       |
 
 `Extent tree`, `Mass properties` and `Rigid body` look like editor state the exporter failed to strip; the game takes collision from `.sur` and mass from INI files.
+
+### `FX/MISC/tlrtube.3db` is not an openFLAME leftover
+
+It was grouped with the four `openFLAME 3D N-mesh` files here for a long time, on the strength of being pre-VMesh. It is not one of them, and the evidence runs three ways.
+
+**Its vocabulary is Freelancer's.** The root `Mesh` tree is the deformable one — `Face_groups/Group0/{Material_name, Face_indices, Edge_indices, Edge_angles}` over `Geometry/{Point_indices, Points, Vertex_normals, UV0_indices, UV0}` — with no bone files, since nothing skins it, and `Face_indices` in place of `Tristrip_indices`, a form `readFaceGroup` already supports. Not one of the openFLAME marker names appears in it, and its `Material library` and `Texture library` are ordinary ones.
+
+**The engine's own configuration names its material.** `EXE/dacom.ini` carries a hand-written `[MaterialMap]` rule, `name = ^tlr_energy$ = NebulaTwo`, and `tlr_energy` — the sole material in this file — occurs nowhere else in the retail install. No openFLAME asset gets that treatment.
+
+**What it is residue of is `FxMeshAppearance`.** `FX/MISC/gf_tlr_tube.ale` holds one, naming this model by `MeshApp_MeshName = TLRtube`, and `FX/MISC/misc_ale.ini` registers the effect as a `[VisEffect]`. The node type never worked: Freelancer crashes when a particle spawns for that appearance, and no way to make it work has been found. The chain is broken at both ends anyway — no `[Effect]` entry names the `gf_TLR_tube` `[VisEffect]`, and only one other retail `.ale` uses the node type at all (`intro_volcanoplanet.ale`, whose `beryl_asteroid*` names resolve to `[Asteroid]` nicknames in `SOLAR/asteroidarch.ini`, so the property takes an INI nickname rather than a mesh library name).
+
+So it is an unmodelled **Freelancer** structure for an unfinished **Freelancer** feature. Its `UV0_anim`, `UV0_anim_lookup`, `UV0_frame_count`, `UV0_fps` and `UV0_interpolate` files are an animated UV set that occurs in no other retail asset. It stays unread — not because another engine authored it, but because there is no working in-game behaviour to validate a reader against.
 
 ---
 

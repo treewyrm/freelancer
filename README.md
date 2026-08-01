@@ -23,6 +23,10 @@ The package ships several entry points:
 | `@treewyrm/utf2json/material`   | `Material library` entries: shader type, colours, texture slots             | [MATERIAL.md](docs/MATERIAL.md) |
 | `@treewyrm/utf2json/alchemy`    | Alchemy particle effects: node library and effect library                   | [ALCHEMY.md](docs/ALCHEMY.md) |
 
+Freelancer's voice banks under `DATA/AUDIO` need no module of their own — they are flat UTF
+directories of RIFF waveforms, handled with `Directory` and `File` directly. See
+[AUDIO.md](docs/AUDIO.md) for how a line is named and how to read and write one.
+
 ## Installation
 
 ```sh
