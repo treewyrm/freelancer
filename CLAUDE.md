@@ -14,7 +14,7 @@ To run a single test file:
 node --import tsx --test src/directory.test.ts
 ```
 
-The `corpus.test.ts` suites (`src/vmesh/`, `src/animation/`, `src/surface/`, `src/model/`, `src/texture/`, `src/alchemy/`) validate the readers against retail game assets. They look for a
+The `corpus.test.ts` suites (`src/vmesh/`, `src/animation/`, `src/surface/`, `src/model/`, `src/texture/`, `src/material/`, `src/alchemy/`) validate the readers against retail game assets. They look for a
 Freelancer `DATA` directory at `$FREELANCER_DATA`, falling back to `~/Downloads/Freelancer/DATA`,
 and skips itself with a reason when neither exists — the rest of the suite never depends on it.
 
@@ -35,8 +35,9 @@ This is a TypeScript library for reading and writing **UTF (Universal Tree Forma
 | `./animation` | `src/animation/index.ts` | Keyframe animation scripts shared by `.cmp` and `.anm` |
 | `./surface` | `src/surface/index.ts` | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy |
 | `./texture` | `src/texture/index.ts` | `Texture library` entries: DDS surfaces, Targa mip chains, animations |
+| `./material` | `src/material/index.ts` | `Material library` entries: shader type, colours, texture slots |
 
-Module documentation lives in `docs/`: [UTF.md](docs/UTF.md), [VMESH.md](docs/VMESH.md), [MODEL.md](docs/MODEL.md), [ANIMATION.md](docs/ANIMATION.md), [SURFACE.md](docs/SURFACE.md), [ALCHEMY.md](docs/ALCHEMY.md), [TEXTURE.md](docs/TEXTURE.md).
+Module documentation lives in `docs/`: [UTF.md](docs/UTF.md), [VMESH.md](docs/VMESH.md), [MODEL.md](docs/MODEL.md), [ANIMATION.md](docs/ANIMATION.md), [SURFACE.md](docs/SURFACE.md), [ALCHEMY.md](docs/ALCHEMY.md), [TEXTURE.md](docs/TEXTURE.md), [MATERIAL.md](docs/MATERIAL.md).
 
 ### Binary format overview
 
@@ -138,6 +139,24 @@ Two decisions worth not re-litigating, both measured against retail and pinned b
 - **No `alpha` flag on `Texture`.** Blending is decided by the material that binds the texture, through the `Oc`/`Ot` tokens in its `Type` string, never by the texture itself.
 
 `Texture.flip` reports the vertical origin rather than reordering rows — DDS is always top-down, Targa is bottom-up unless descriptor bit 5 is set (nine retail textures). Whether Freelancer honours that bit is still unresolved; see [TEXTURE.md](docs/TEXTURE.md), which also records the openFLAME paletted form as deliberately out of scope.
+
+### Material (`src/material/`)
+
+`Material library` directories, siblings of `Texture library`, found in `.mat` files and embedded in `.3db`/`.cmp`/`.dfm`/`.sph`. `readMaterials(root)` takes a file root like `readTextures` does. A material is a directory of property files: a `Type` string naming the shader, `float[3]` colours, `float` scalars, and texture slots stored as a `<slot>_name` / `<slot>_flags` pair.
+
+**All 7,525 retail materials write back byte for byte, and writing is a fixed point**, both pinned by `corpus.test.ts`. Three decisions worth not re-litigating:
+
+- **The type does not determine the property set, so every property is independently optional.** `DcDtOcOt` occurs in six different property sets, four of which have no `Oc`; 245 `DcDt` materials carry a colour and no texture. A property that was absent stays absent rather than being defaulted, and `readMaterial` omits the key entirely rather than setting it to `undefined`.
+- **`TileRate` is not bound to `Dm`.** The 25 `DetailMap2Dm1Msk2PassMaterial` materials pair a plain `TileRate` with `Dm1`, so the rates are carried flat rather than folded into the slots they scale.
+- **`Material count` is derived, not carried** — it equals the directory count in all 1,428 libraries that have one. `SOLAR/SUNS/sun.sph` is the only library shipped without it and gains one.
+
+File order inside a material is the one thing not reproduced: the writer emits the authored order (`Type` first, each slot name beside its flags), matching 6,569 materials; the other 956 are stored in case-insensitive name order by a second tool. The split falls along asset boundaries — 100 files sorted, 1,329 authored, none mixed.
+
+**A `*_flags` word is three settings, not a flat bitfield.** The engine's property tables (`shading.dll`, and `flmaterials.dll` for `nt_flags`) name one triple per slot — `<Slot> Wrap Mode`, `<Slot> U Address Mode`, `<Slot> V Address Mode` — all sharing the single flags file. The low four bits are the two address modes (mirror/clamp per axis, and no retail material sets either mirror bit); bits 4 and 6 are the wrap mode, taking the value 4 or 5 and nothing else. `TextureFlags` keeps `Unknown0`/`Unknown1` for those two because the DLL proves a wrap mode shares the word without saying where the field ends — the 2+2+n partition is inference. Bit 4 appears only on `Bt` and `Et`, fitting a second UV set.
+
+**Defaults are real and live in the DLLs, not the data.** Property tables run `<label>, <file name>[, <default>]`, and across `flmaterials.dll`, `shading.dll` and `deformable2.dll` exactly one property carries the third string: `nt_name` → `NomadRGB1_NomadAlpha1`, exported as `defaultNomadTextureName`. It resolves to the sole entry of that name in `SHIPS/NOMAD/nomad_fx.txm`, and **no material names it** — the default is the whole mechanism. `readMaterial` deliberately does not apply defaults; doing so would write files that were never there and end the byte-exact round trip. Numeric defaults would be float immediates and are not findable by string scanning.
+
+`Sc`, `Sp` and the nomad slot are modelled from the documented property list but never authored. `EXE/dacom.ini` is **plain text, not BINI** — its `[MaterialMap]` section is directly readable, evaluated in reverse of the listed order, and also rewrites type-to-type (`DcDtEcEt`→`DcDtEt`, `EcEtOcOt`→`DcDtOcOt`), which is why `EcEt` appears in circulated type lists and in no asset. See [MATERIAL.md](docs/MATERIAL.md).
 
 ## Code style
 

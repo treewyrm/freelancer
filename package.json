@@ -52,6 +52,10 @@
     "./texture": {
       "import": "./dist/texture/index.js",
       "types": "./dist/texture/index.d.ts"
+    },
+    "./material": {
+      "import": "./dist/material/index.js",
+      "types": "./dist/material/index.d.ts"
     }
   },
   "main": "./dist/index.js",

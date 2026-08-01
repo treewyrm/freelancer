@@ -10,6 +10,7 @@ export default defineConfig({
     './src/utility/index.ts',
     './src/surface/index.ts',
     './src/texture/index.ts',
+    './src/material/index.ts',
     './src/index.ts',
   ],
   platform: 'neutral',
