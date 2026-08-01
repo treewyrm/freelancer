@@ -15,7 +15,19 @@ export interface Animation<T extends Keyframe> {
   keyframes: T[]
 }
 
-/** Easing animation type. */
+/**
+ * Easing animation type.
+ *
+ * The list may be incomplete. Two retail keyframes — the alpha fade of the motion dust in
+ * `dust.ale` and `motionblur_dust.ale` — hold a 6, one past `Auto`, on a four-keyframe list
+ * where the easing is actually interpolated and on screen for as long as the player is in
+ * space. Those two nodes are the only `FLDustAppearance` in the game and 6 appears nowhere
+ * else, so the value tracks Freelancer's own node type rather than one author's slip. Whether
+ * it names a seventh interpolation or something the dust code reads for another purpose is
+ * unresolved; `ease` falls back to linear. See [Easing outside the enum] in ALCHEMY.md.
+ *
+ * The value is stored as read and written back unchanged either way.
+ */
 export enum EaseType {
   Step,
   Linear,

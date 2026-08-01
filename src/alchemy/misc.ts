@@ -35,7 +35,14 @@ export function readString(view: BufferView): string {
   return decoder.decode(buffer.subarray(0, buffer.indexOf(0)))
 }
 
-/** Writes prefixed NUL-terminated string. */
+/**
+ * Writes prefixed NUL-terminated string.
+ *
+ * Retail encodes the empty string two ways: a lone NUL with its padding byte, which is what
+ * this writes, and a bare zero prefix carrying no payload at all. Both decode to the same
+ * value and the reader accepts either, so the distinction is lost on a round trip — see
+ * `corpus.test.ts` for the two files that use the short form.
+ */
 export function writeString(value: string): BufferView {
   const buffer = encoder.encode(value)
   const length = buffer.byteLength + 1

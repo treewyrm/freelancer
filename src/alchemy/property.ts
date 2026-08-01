@@ -137,7 +137,7 @@ export type Property = (
 /** Reads alchem node property. */
 export function readProperty(view: BufferView): Property | null {
   const type: PropertyType = view.readUint16()
-  if (!(type & 0x7ffff)) return null
+  if (!(type & 0x7fff)) return null
 
   const crc = view.readInt32()
   const name = knownProperties.get(crc) ?? toHex(crc)

@@ -48,9 +48,16 @@ export function writePair({ sourceId, targetId }: Pair): BufferView {
     .writeInt32(targetId)
 }
 
+/** Parent identifier standing in for the world, i.e. the instance is a root. */
 export const WorldId = 0x8000
 
-export const DefaultId = 0xee223b51
+/**
+ * CRC of the root container every effect hangs its instances from. It names no node in the
+ * library, is always a root, always carries `flags` 1, and is never either end of a link.
+ *
+ * Signed, because instance CRCs are read as `int32` and would never compare equal otherwise.
+ */
+export const DefaultId = 0xee223b51 | 0
 
 export interface NodeInstance {
   /** Node name CRC (case-sensitive). */
@@ -61,6 +68,15 @@ export interface NodeInstance {
 
   /** Sorting order. */
   sort: number
+
+  /**
+   * Entry identifier linking this instance to its parent and to pair targets.
+   *
+   * Retail hands out sparse, unordered handles left over from the authoring tool, so it
+   * cannot be derived from the tree. Preserved on read and reused on write; instances
+   * without one are numbered around those that have one.
+   */
+  id?: number
 
   /** Attached node instances. */
   children: NodeInstance[]
@@ -104,6 +120,7 @@ export function readEffect(view: BufferView, version = 1): Effect {
         crc,
         flags,
         sort,
+        id: childId,
         children: [],
         targets: [],
       },
@@ -130,18 +147,33 @@ export const writeEffect = (effect: Effect, version = 1): BufferView => {
   const pairs: Pair[] = []
 
   // Flattens hierarchy of node instances into entry list.
-  const entries: (Entry & { sort: number })[] = [
-    ...flatten(effect.children, ({ children }) => children, 1),
-  ].map((step, _index, array) => {
-    const {
-      child: source,
-      child: { flags, crc, sort },
-      childId,
-      parentId: parentId = WorldId,
-    } = step
+  const steps = [...flatten(effect.children, ({ children }) => children, 1)]
+
+  // Instances keep whatever identifier they were read with; the rest fill the gaps left over.
+  const identifiers = new Map<NodeInstance, number>()
+  const taken = new Set<number>()
+
+  for (const { child } of steps)
+    if (child.id !== undefined && !taken.has(child.id)) {
+      identifiers.set(child, child.id)
+      taken.add(child.id)
+    }
+
+  let next = 1
+
+  for (const { child } of steps)
+    if (!identifiers.has(child)) {
+      while (taken.has(next)) next++
+      identifiers.set(child, next)
+      taken.add(next)
+    }
+
+  const entries: (Entry & { sort: number })[] = steps.map(({ child: source, parent }) => {
+    const { flags, crc, sort } = source
+    const childId = identifiers.get(source)!
 
     for (const target of source.targets) {
-      const targetId = array.find(({ child: value }) => value === target)?.childId
+      const targetId = identifiers.get(target)
 
       if (targetId === undefined) continue
 
@@ -151,7 +183,7 @@ export const writeEffect = (effect: Effect, version = 1): BufferView => {
       })
     }
 
-    return { flags, crc, parentId, childId, sort }
+    return { flags, crc, parentId: parent ? identifiers.get(parent)! : WorldId, childId, sort }
   })
 
   entries.sort(({ sort: a }, { sort: b }) => a - b)

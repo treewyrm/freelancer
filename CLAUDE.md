@@ -14,7 +14,7 @@ To run a single test file:
 node --import tsx --test src/directory.test.ts
 ```
 
-The `corpus.test.ts` suites (`src/vmesh/`, `src/animation/`, `src/surface/`, `src/model/`) validate the readers against retail game assets. They look for a
+The `corpus.test.ts` suites (`src/vmesh/`, `src/animation/`, `src/surface/`, `src/model/`, `src/texture/`, `src/alchemy/`) validate the readers against retail game assets. They look for a
 Freelancer `DATA` directory at `$FREELANCER_DATA`, falling back to `~/Downloads/Freelancer/DATA`,
 and skips itself with a reason when neither exists — the rest of the suite never depends on it.
 
@@ -35,7 +35,9 @@ This is a TypeScript library for reading and writing **UTF (Universal Tree Forma
 | `./animation` | `src/animation/index.ts` | Keyframe animation scripts shared by `.cmp` and `.anm` |
 | `./surface` | `src/surface/index.ts` | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy |
 
-Module documentation lives in `docs/`: [UTF.md](docs/UTF.md), [VMESH.md](docs/VMESH.md), [MODEL.md](docs/MODEL.md), [ANIMATION.md](docs/ANIMATION.md), [SURFACE.md](docs/SURFACE.md), [ALCHEMY.md](docs/ALCHEMY.md).
+`src/texture/` is **not** a package entry point yet — it is absent from both `package.json` exports and `tsdown.config.ts`, and `writeTexture` is still a stub.
+
+Module documentation lives in `docs/`: [UTF.md](docs/UTF.md), [VMESH.md](docs/VMESH.md), [MODEL.md](docs/MODEL.md), [ANIMATION.md](docs/ANIMATION.md), [SURFACE.md](docs/SURFACE.md), [ALCHEMY.md](docs/ALCHEMY.md), [TEXTURE.md](docs/TEXTURE.md).
 
 ### Binary format overview
 
@@ -72,6 +74,23 @@ Particle effect system with two cooperating libraries:
 
 Property system is a discriminated union keyed by `PropertyType`. Boolean values are packed into the type field's bit 15 (no separate payload). Property lists are terminated by a `uint16(0)` sentinel.
 
+Both libraries live in a `.ale` UTF container as `AlchemyNodeLibrary/AlchemyNodeLibrary` and `ALEffectLib/ALEffectLib`. **This is the one module that hashes case-sensitively** — `getResourceId(name, true)`. Most retail node names are mixed case, and folding them the way the rest of the library does strands roughly half the instance references.
+
+Three points settled against retail and pinned by `corpus.test.ts`:
+
+- **`NodeInstance.id` is preserved, not derived.** Retail entry identifiers are sparse and unordered; regenerating them from a traversal changed 567 of the 596 files for no reason.
+- **`DefaultId` is `0xee223b51 | 0`.** Instance CRCs are read as `int32`, so the unsigned literal never compared equal to anything. It marks the root container every effect hangs its instances from, and names no node.
+- **Pair record order is not preserved** (146 files) and the empty string has two retail encodings, only one of which the writer emits (2 files). Both are authoring residue; the links and values are identical either way, and writing is a fixed point everywhere. See [ALCHEMY.md](docs/ALCHEMY.md), which also lists the five property CRCs that match no known name.
+
+`evaluation.ts` samples those properties, and retail data is looser than it first assumed: **a keyframe list of one, or of several sharing a key, spans no range** (11831 of the 27662 looped lists), **nine keyframes carry an easing byte outside `EaseType`**, and **empty keyframe lists are common** (14127 looped, 7 eased). Each used to produce `NaN` or throw; they now evaluate to the single value, to linear, and to `default` or zero respectively. The corpus test samples every animated property over a grid of sparam and time and requires finite results, so this cannot regress.
+
+Two questions are deliberately left open, each marked `TODO` in the source and carried as a `todo` test that reports on every run without failing the suite:
+
+- **`EaseType` may be missing a member.** Seven of the nine out-of-enum easing bytes are junk — bit 3 set, low three bits clear, all in `gf_bolt01.ale`, all on single-keyframe lists where easing is never read, in an effect no `[Effect]` entry names. The other two are a **6**, one past `Auto`, on the four-keyframe alpha envelope of the motion dust in `dust.ale` and `motionblur_dust.ale`. **Easing 6 and `FLDustAppearance` imply one another across the corpus** — that node type has exactly two instances, both use 6, and nothing else does; every other dust builds the same effect from `FxBasicAppearance` with easing 4 over an identical emitter. So it tracks Freelancer's own node type, not an author's slip. Treating it as linear is a placeholder, not a finding; the byte round-trips untouched, so a one-byte edit is a clean in-game experiment.
+- **`limit` folds a key landing exactly on the end of an unflagged curve back to its start**, so the last keyframe is never sampled — right for a looping curve, wrong for a holding one, and unverified against the game.
+
+Both want observing in the field. See [ALCHEMY.md](docs/ALCHEMY.md) for the per-file breakdown and what to compare against.
+
 ### VMesh (`src/vmesh/`)
 
 Reads/writes VMesh geometry: `readVMeshPart`/`writeVMeshPart` for individual mesh parts, `readVMeshWire`/`writeVMeshWire` for the `VMeshWire` line-list overlay, and `readVMeshLibrary`/`writeVMeshLibrary` for the full mesh library. See `src/vmesh/data.ts` for binary layout details.
@@ -101,6 +120,17 @@ Quaternions come in four flavours: full `float32` W-X-Y-Z (`0x04`), implied iden
 `.sur` collision files — a standalone chunked binary, **not** a UTF tree. `readSurfaceLibrary`/`writeSurfaceLibrary` operate on `BufferView` and produce a flat `Part[]`, each part keyed by the CRC of a model part name. A part holds an `Extent` (bounding box), hardpoint IDs, and a `Surface` block whose bounding volume hierarchy (`Node`) has convex `Hull` leaves made of `Face`s indexing shared `Point`s. Chunks are identified by FourCC tags (`!fxd`, `exts`, `surf`, `hpid`).
 
 The `surf` chunk is a verbatim memory image of **`IVP_Compact_Surface`** from Ipion Virtual Physics (later Havok); Freelancer only supplies the FourCC container around it. When touching this module, check the layout against [ChimpsAtSea/Ipion-Virtual-Physics](https://github.com/ChimpsAtSea/Ipion-Virtual-Physics) — `ivp_compact_surface.hxx`, `ivp_compact_ledge.hxx`, `ivp_surbuild_ledge_soup.cxx`. [SURFACE.md](docs/SURFACE.md) maps every field to its IVP name and explains the magic constants (`0xfa` is 250, from IVP's two `1.0f / 250.0f` quantization steps).
+
+### Texture (`src/texture/`)
+
+`Texture library` directories, found in `.txm` and `.mat` files and embedded in `.3db`/`.cmp`/`.dfm`/`.sph`. `readTextures(root)` takes a file root like `readVMeshLibrary` does. An entry holds one of four forms: a whole DirectDrawSurface in `MIPS`, a chain of uncompressed Targas in `MIP0..n`, an animation over sibling atlas entries (`Frame rects`), or a `CUBE` cubemap. Reading is complete for the first three; **writing is not implemented**.
+
+Two decisions worth not re-litigating, both measured against retail and pinned by `corpus.test.ts`:
+
+- **No `dxt1a` texture type.** DXT1's punch-through mode is per block, selected by the endpoint ordering inside the block, and nothing in the container records it — not one retail DXT1 texture sets `DDPF_ALPHAPIXELS`. `COMPRESSED_RGBA_S3TC_DXT1_EXT` decodes both modes correctly, so the distinction buys nothing.
+- **No `alpha` flag on `Texture`.** Blending is decided by the material that binds the texture, through the `Oc`/`Ot` tokens in its `Type` string, never by the texture itself.
+
+`Texture.flip` reports the vertical origin rather than reordering rows — DDS is always top-down, Targa is bottom-up unless descriptor bit 5 is set (nine retail textures). Whether Freelancer honours that bit is still unresolved; see [TEXTURE.md](docs/TEXTURE.md), which also records the openFLAME paletted form as deliberately out of scope.
 
 ## Code style
 
