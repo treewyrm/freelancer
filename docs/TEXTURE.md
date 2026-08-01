@@ -347,7 +347,7 @@ of eight paletted entries:
 Freelancer cannot load these, so neither will this library. `readTexture` returns `undefined`
 rather than throwing. The same files carry openFLAME geometry, covered by the *pre-VMesh assets*
 cases in [`src/vmesh/corpus.test.ts`](../src/vmesh/corpus.test.ts) and by the joint lineage notes
-in [MODEL.md](MODEL.md).
+in [COMPOUND.md](COMPOUND.md).
 
 ---
 

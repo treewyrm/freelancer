@@ -89,26 +89,33 @@ export function* readConstraints(files: Iterable<File>): Generator<Constraint> {
   }
 }
 
+/**
+ * Writes one file per constraint, for a caller to append together by name.
+ *
+ * Names are capitalized the way retail writes them — `Fix`, `Rev`, `Pris`, `Sphere`, `Loose`, and
+ * `Cyl` after CFW's struct. Lookups fold case, so the engine reads either, but 1024 retail files
+ * agree on this one and nothing is gained by writing a spelling none of them use.
+ */
 export function* writeConstraints(constraints: Iterable<Constraint>): Generator<File> {
   for (const { parent, child, joint } of constraints) {
     switch (joint.type) {
       case 'fixed':
-        yield new File('fix', BufferView.join(writeNames(parent, child), writeFixed(joint)))
+        yield new File('Fix', BufferView.join(writeNames(parent, child), writeFixed(joint)))
         break
       case 'revolute':
-        yield new File('rev', BufferView.join(writeNames(parent, child), writeRevolute(joint)))
+        yield new File('Rev', BufferView.join(writeNames(parent, child), writeRevolute(joint)))
         break
       case 'prismatic':
-        yield new File('pris', BufferView.join(writeNames(parent, child), writePrismatic(joint)))
+        yield new File('Pris', BufferView.join(writeNames(parent, child), writePrismatic(joint)))
         break
       case 'sphere':
-        yield new File('sphere', BufferView.join(writeNames(parent, child), writeSphere(joint)))
+        yield new File('Sphere', BufferView.join(writeNames(parent, child), writeSphere(joint)))
         break
       case 'loose':
-        yield new File('loose', BufferView.join(writeNames(parent, child), writeLoose(joint)))
+        yield new File('Loose', BufferView.join(writeNames(parent, child), writeLoose(joint)))
         break
       case 'cylinder':
-        yield new File('cyl', BufferView.join(writeNames(parent, child), writeCylinder(joint)))
+        yield new File('Cyl', BufferView.join(writeNames(parent, child), writeCylinder(joint)))
         break
     }
   }

@@ -379,7 +379,7 @@ describe('retail asset corpus', { skip }, () => {
     })
   })
 
-  // Planet and sun .sph models hold no geometry at all — see model/sphere.test.ts for what
+  // Planet and sun .sph models hold no geometry at all — see rigid/sphere.test.ts for what
   // they do hold. Here they only have to leave the VMesh readers unbothered.
   describe('planet spheres', () => {
     const spheres = () => assets().filter(({ path }) => /\.sph$/i.test(path))

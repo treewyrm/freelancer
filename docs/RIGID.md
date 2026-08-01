@@ -1,8 +1,8 @@
-# Model
+# Rigid
 
-Reader and writer for Freelancer rigid models — the `.3db` (single part), `.cmp` (compound) and `.sph` (procedural sphere) UTF trees. A model is either a **single part** or a **compound**: a hierarchy of named parts, each stored in its own UTF fragment directory and connected to its parent by a **joint**.
+Reader and writer for Freelancer rigid models — the `.3db` (single part), `.cmp` (compound) and `.sph` (procedural sphere) UTF trees. A model is either a **single part** or a **compound**: a hierarchy of named parts, each stored in its own UTF fragment directory and connected to its parent by a joint.
 
-Geometry itself is not handled here; parts delegate to [VMESH.md](VMESH.md) (`VMeshPart` / `MultiLevel`). This module covers the surrounding structure: compound hierarchy, constraints, joints, hardpoints, cameras, and spheres.
+Two layers below this one do the shared work. The hierarchy itself — `Cmpnd`, `Cons`, joints and hardpoints — lives in [COMPOUND.md](COMPOUND.md), which `.dfm` characters use unchanged. Geometry delegates to [VMESH.md](VMESH.md) (`VMeshPart` / `MultiLevel`). What this module adds is the rigid fragment: what a part contains, the two part kinds that contain no geometry at all, and the material UV animation that sits beside the hierarchy.
 
 ## Architecture
 
@@ -32,43 +32,7 @@ Sphere model (.sph)
          └─ Sides  (int32, number of M entries)
 ```
 
-The `Cmpnd` subdirectories carry only names and fragment filenames; the hierarchy itself is reconstructed from the constraint list in `Cons`, which links a parent object name to a child object name via a joint.
-
----
-
-## `model.ts` — Compound Hierarchy
-
-### `Model<T>` interface
-
-```ts
-interface Model<T> extends Compound<Model<T>> {
-  type: 'compound'
-  name: string // part name ("Object name")
-  index: number // part index ("Index")
-  filename: string // fragment directory name ("File name")
-  part: T // fragment payload, produced by the reader callback
-  joint?: Joint // connection to parent; absent on the root
-  children: Model<T>[] // from Compound<T>
-}
-```
-
-`Model` is generic over the fragment payload, so the compound layer is reusable: `readModel`/`writeModel` take a reader/writer pair for whatever lives inside a fragment directory. `rigid.ts` supplies the rigid-model pair.
-
-### Functions
-
-| Function                                     | Description                                                                                         |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `readModel(parent, read)`                    | Reads the `Cmpnd` subtree; calls `read(fragment)` per part and returns the root `Model<T>`          |
-| `writeModel(root, write)`                    | Serializes a `Model<T>` tree into a new `Directory`, calling `write(part)` per fragment             |
-| `isCompoundModel(directory)`                 | True when the directory has a `Cmpnd` child (i.e. compound rather than single-part)                 |
-| `arrangeByConstraints(objects, constraints)` | Links flat objects into a tree by matching constraint parent/child names, assigning `joint`         |
-| `getModelHardpoint(root, predicate, name)`   | Searches the whole tree for a hardpoint by name/CRC; returns `{ hardpoint, parent }` or `undefined` |
-
-`readModel` throws when the `Cmpnd` directory, an `Object name`, a `File name`, the fragment directory, or the root object is missing. The root is the `Root`-prefixed subdirectory; remaining `Part_*` subdirectories become its descendants.
-
-`writeModel` names the root directory `Root` and every other part `Part_<name>`, writes each fragment as a top-level directory beside `Cmpnd`, and throws on empty names, duplicate names, or a non-integer `index`.
-
-> **Name matching** is done through `getResourceId` (CRC32), so constraint and hardpoint lookups are case-insensitive.
+The `Cmpnd` subdirectories carry only names and fragment filenames; the hierarchy itself is reconstructed from the constraint list in `Cons`. See [COMPOUND.md](COMPOUND.md).
 
 ---
 
@@ -100,119 +64,6 @@ A `RigidModel` is either a compound tree of rigid parts or a single bare part �
 | `writeRigid(rigid)`         | Writes geometry and, when present, `Hardpoints` and `VMeshWire`                                |
 | `readPart(directory)`       | Dispatches to `readCamera` or `readSphere` when the directory looks like one, else `readRigid` |
 | `writePart(part)`           | Dispatches by `part.type`                                                                      |
-
----
-
-## `joint.ts` — Joints
-
-A `Joint` describes how a child part is attached to its parent, and which degrees of freedom animation may drive.
-
-| Type          | Fields                                                                           | Animation                                     |
-| ------------- | -------------------------------------------------------------------------------- | --------------------------------------------- |
-| `'fixed'`     | `position`, `rotation`                                                           | None — rigid attachment                       |
-| `'revolute'`  | `position`, `offset`, `rotation`, `axis`, `min`, `max`                           | Angle around `axis`, clamped to `min`/`max`   |
-| `'prismatic'` | `position`, `offset`, `rotation`, `axis`, `min`, `max`                           | Offset along `axis`, clamped to `min`/`max`   |
-| `'cylinder'`  | `position`, `offset`, `rotation`, `axis`, `minPris`/`maxPris`, `minRev`/`maxRev` | Rotation + slide; **not animatable**          |
-| `'sphere'`    | `position`, `offset`, `rotation`, `minX/maxX`, `minY/maxY`, `minZ/maxZ`          | Rotation by quaternion within per-axis limits |
-| `'loose'`     | `position`, `rotation`                                                           | Unconstrained motion (vector + rotation)      |
-
-`position`/`offset`/`axis` are `Vector3`, `rotation` is `Matrix3`; both are read and written through the [`math`](../src/math) helpers. Each joint type has a matching `readX(view)` / `writeX(joint)` pair operating on a `BufferView`.
-
-The keyframes that drive these degrees of freedom live in the `Animation` directory beside `Cmpnd` — see [ANIMATION.md](ANIMATION.md).
-
-> **Cylinder joints read and write, but cannot be animated.** `readCylinder`/`writeCylinder` handle the 216-byte record, whose layout comes from CFW rather than from any measured file — no retail model ships one, so it is the single joint kind with no corpus backing. What is impossible rather than merely absent is driving one: a cylinder's two floats have no representation in the channel type bitfield. See [Why cylinder joints cannot be animated](ANIMATION.md#why-cylinder-joints-cannot-be-animated).
->
-> A record carries no size of its own — the file name is the only thing that gives one — so any constraint file this module does _not_ know is refused rather than skipped, which would silently desynchronize every record after it.
-
-### Where `Cyl` comes from
-
-Every joint record here is **Conquest: Frontier Wars** structure, unchanged. Digital Anvil's earlier game uses the same UTF container and declares these in `Libs/Include/PERSISTCOMPOUND.H` — the same lineage that leaves an `openFLAME 3D N-mesh` tree in four Freelancer `EQUIPMENT/MODELS/HARDWARE` files (see [VMESH.md](VMESH.md)). The record sizes the corpus test measures against retail `.cmp` files match those structs field for field:
-
-| CFW struct      | Layout after the two 64-byte names                                         | Size |
-| --------------- | -------------------------------------------------------------------------- | ---- |
-| `Fix`           | `pos`, `orient`                                                            | 176  |
-| `Rev` / `Pris`  | `parent_point`, `child_point`, `rel_orientation`, `axis`, `min`, `max`     | 208  |
-| `Cyl`           | as `Rev`, then `min_trans`, `max_trans`, `min_rot`, `max_rot`              | 216  |
-| `PersistSphere` | `parent_point`, `child_point`, `rel_orientation`, 3× min/max               | 212  |
-| `Spring`        | `parent_point`, `child_point`, `spring_constant`, `damping`, `rest_length` | 164  |
-| `Loose`/`Trans` | typedefs of `Fix`                                                          | 176  |
-
-So a `Cyl` record is **216 bytes**, and its limits are stored translation-first. Two CFW joint kinds have no Freelancer counterpart and no `Joint` variant here: `Spr` (damped spring) and `Trans` (translational). Neither appears in retail data, and `readConstraints` refuses both along with `Cyl`.
-
-> CFW's own `JointInfo.h` documents `min0`/`max0` as the _rotation_ limits for a cylindrical joint, contradicting the `min_trans`-first field order in `PERSISTCOMPOUND.H`. `Compound.cpp` assigns `min0 = in.min_trans`, siding with the struct — the comment is the odd one out.
-
-`Cyl` is implemented on the strength of that struct. The **animation** is not, and cannot be: a cylinder's two driven floats have no representation in the channel type bitfield, and CFW never animated one either — its exporter has no cylinder branch at all. See [Why cylinder joints cannot be animated](ANIMATION.md#why-cylinder-joints-cannot-be-animated).
-
----
-
-## `constraint.ts` — Compound Constraints
-
-### `Constraint` interface
-
-```ts
-interface Constraint {
-  parent: string // parent object name
-  child: string // child object name
-  joint: Joint
-}
-```
-
-Constraints live in the `Cons` directory, one file per joint kind, each holding a packed array of records. A record is two 64-byte NUL-padded names (parent, then child) followed by the joint payload.
-
-| File     | Joint type    | Record size |
-| -------- | ------------- | ----------- |
-| `Fix`    | `'fixed'`     | 176         |
-| `Rev`    | `'revolute'`  | 208         |
-| `Pris`   | `'prismatic'` | 208         |
-| `Cyl`    | `'cylinder'`  | 216         |
-| `Sphere` | `'sphere'`    | 212         |
-| `Loose`  | `'loose'`     | 176         |
-
-Records are fixed size and the file holds nothing else, so every retail `Cons` file is an exact multiple of the size above — which is what pins the stride down.
-
-| Function                        | Description                                                   |
-| ------------------------------- | ------------------------------------------------------------- |
-| `readConstraints(files)`        | Generator — yields a `Constraint` per record across all files |
-| `writeConstraints(constraints)` | Generator — yields one `File` per constraint record           |
-
-File names are matched case-insensitively on read. A file named anything outside the table above is refused, since its record size is unknowable.
-
-A name occupies its whole 64-byte field and is terminated by the first NUL; retail exporters leave heap residue in the bytes after it, which the reader stops short of and the writer replaces with zeroes. Constraints therefore round-trip by value but not byte for byte.
-
-Names are otherwise taken verbatim, including the leading and trailing spaces a few retail part names carry. One retail model, `trade_turret01.cmp`, constrains a part it never declares; `arrangeByConstraints` drops a constraint it cannot resolve, so the rest of the hierarchy still assembles.
-
----
-
-## `hardpoint.ts` — Hardpoints
-
-Hardpoints are named attachment points (weapon mounts, engine nozzles, docking points) stored per part.
-
-### `Hardpoint` type
-
-```ts
-type Hardpoint = Fixed | Revolute | Prismatic
-
-interface Base<T> {
-  type: T
-  name: string // hardpoint directory name
-  position: Vector3 // Position file, defaults to origin
-  orientation: Matrix3 // Orientation file, defaults to identity
-}
-// Revolute and Prismatic add: axis: Vector3 (defaults to Y), min: number, max: number
-```
-
-### Functions
-
-| Function                                                                                           | Description                                                                                |
-| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `readHardpoints(parent)`                                                                           | Generator — yields hardpoints from the `Hardpoints/Fixed` and `Hardpoints/Revolute` groups |
-| `writeHardpoints(hardpoints)`                                                                      | Builds a `Hardpoints` directory with `Fixed` / `Revolute` subgroups                        |
-| `getHardpoint(hardpoints, name)`                                                                   | Finds a hardpoint by name string or CRC (case-insensitive)                                 |
-| `readFixed` / `writeFixed`                                                                         | Single fixed hardpoint directory                                                           |
-| `readRevolute` / `writeRevolute`                                                                   | Single revolute hardpoint directory                                                        |
-| `readPosition` / `writePosition`, `readOrientation` / `writeOrientation`, `readAxis` / `writeAxis` | Individual hardpoint files                                                                 |
-
-> Prismatic hardpoints exist in the type union but are neither read from nor written to the `Hardpoints` directory.
 
 ---
 
@@ -287,7 +138,7 @@ interface Sphere {
 
 ## `materialanim.ts` — Material UV Animation
 
-Animates a material's UV transform over time. `MaterialAnim` is a root-level sibling of `Cmpnd`, never nested inside a part fragment, so `readMaterialAnimLibrary(root)` takes a file root the way `readVMeshLibrary` and `readAnimationLibrary` do — it is not part of `RigidModel`.
+Animates a material's UV transform over time. `MaterialAnim` is a root-level sibling of `Cmpnd`, never nested inside a part fragment, so `readMaterialAnimLibrary(root)` takes a file root the way `readVMeshLibrary` and `readAnimationLibrary` do — it is not part of `RigidModel`. No `.dfm` carries one, which is why it belongs here rather than in the compound layer.
 
 ```ts
 interface MaterialAnim {
@@ -334,7 +185,7 @@ Key differences and segment displacements (`speed × time`) are drawn from the s
 
 `br_01_avalon_cityscape.cmp`'s six-segment `monster` shows the problem plainly: its stored `vOffset` keys run `0.1751, 0.3502, 0.1318, 0, 0` while the segment displacements are `0, 0.3502, 0, −0.2185, −0.1318, 0`. The magnitudes line up — `0.2185 + 0.1318 = 0.3503` closes the loop that `0.3502` opened — but the first key is half the first displacement, and no shift accounts for that.
 
-So `MAKeys` is stored, not computed. `src/model/corpus.test.ts` pins the counterexamples down so a future attempt at deriving it has to confront them.
+So `MAKeys` is stored, not computed. `src/rigid/corpus.test.ts` pins the counterexamples down so a future attempt at deriving it has to confront them.
 
 `MAFlags` is the other unexplained field. It does not track `MACount`, the presence of `MAKeys`, or the containing file: the four `0` entries span a one-keyframe rock material and the 340-keyframe fountain alike, and `li_resort_waterscape.cmp` holds both values at once.
 
@@ -344,23 +195,23 @@ So `MAKeys` is stored, not computed. `src/model/corpus.test.ts` pins the counter
 
 ```ts
 import {
-  type Joint,
-  type Hardpoint,
-  type Model,
+  type Camera,
+  type Rigid,
   type RigidModel,
   type RigidPart,
   type Sphere,
+  isCamera,
   isSphere,
-  readSphere,
-  writeSphere,
-  getHardpoint,
-  getModelHardpoint,
-  readModel,
-  writeModel,
+  readCamera,
   readRigidModel,
+  readSphere,
+  writeCamera,
   writeRigidModel,
-} from '@treewyrm/utf2json/model'
+  writeSphere,
+} from '@treewyrm/utf2json/rigid'
 ```
+
+The hierarchy a compound model reads into — `Model`, `getModelHardpoint`, `Hardpoint`, `Joint`, `Constraint` — comes from `@treewyrm/utf2json/compound`.
 
 ---
 
@@ -384,7 +235,8 @@ A census over all 1852 retail `.cmp` and `.3db` files turns up 550 distinct node
 
 ```ts
 import { Directory } from '@treewyrm/utf2json'
-import { readRigidModel, getModelHardpoint } from '@treewyrm/utf2json/model'
+import { getModelHardpoint } from '@treewyrm/utf2json/compound'
+import { readRigidModel } from '@treewyrm/utf2json/rigid'
 import { readFileSync } from 'node:fs'
 
 const root = Directory.read(readFileSync('ships/li_fighter.cmp'))

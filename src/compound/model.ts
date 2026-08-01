@@ -1,11 +1,11 @@
-import { type Compound, listCompoundElements } from '#/utility/compound.js'
+import { type Tree, listTreeElements } from '#/utility/tree.js'
 import Directory from '#/directory.js'
 import { getResource, getResourceId, type Hashable } from '#/hash.js'
 import { readConstraints, writeConstraints, type Constraint } from './constraint.js'
 import { getHardpoint, type Hardpoint } from './hardpoint.js'
 import type { Joint } from './joint.js'
 
-export interface Model<T> extends Compound<Model<T>> {
+export interface Model<T> extends Tree<Model<T>> {
   type: 'compound'
 
   /** Part name. */
@@ -121,7 +121,7 @@ export function writeModel<T>(root: Model<T>, write: (value: T) => Directory): D
   /** Unique object names. */
   const names = new Set<string>()
 
-  for (const object of listCompoundElements(root)) {
+  for (const object of listTreeElements(root)) {
     const { name, filename, index, part } = object
 
     if (!name.length) throw new RangeError(`Compound part has empty object name`)
@@ -159,6 +159,6 @@ export function getModelHardpoint<T>(
   let hardpoint: Hardpoint | undefined
   name = getResourceId(name)
 
-  for (const parent of listCompoundElements(root))
+  for (const parent of listTreeElements(root))
     if ((hardpoint = getHardpoint(predicate(parent.part), name))) return { hardpoint, parent }
 }

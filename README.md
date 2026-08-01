@@ -11,12 +11,16 @@ The package ships several entry points:
 | Import                          | Contents                                                                    | Documentation                |
 | ------------------------------- | ----------------------------------------------------------------------------- | ---------------------------- |
 | `@treewyrm/utf2json`            | `Directory`, `File`, hash helpers                                           | [UTF.md](docs/UTF.md)        |
-| `@treewyrm/utf2json/utility`    | `BufferView`, compound hierarchy, timestamp and string helpers              | [UTF.md](docs/UTF.md)        |
+| `@treewyrm/utf2json/utility`    | `BufferView`, tree hierarchy, timestamp and string helpers                  | [UTF.md](docs/UTF.md)        |
 | `@treewyrm/utf2json/math`       | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Transform`, scalar and keyframe helpers | —                       |
 | `@treewyrm/utf2json/vmesh`      | VMesh geometry parts and mesh library                                       | [VMESH.md](docs/VMESH.md)    |
-| `@treewyrm/utf2json/model`      | Rigid models: compound hierarchy, joints, hardpoints                        | [MODEL.md](docs/MODEL.md)    |
+| `@treewyrm/utf2json/compound`   | The `Cmpnd` hierarchy shared by rigid and deformable models: parts, constraints, joints, hardpoints | [COMPOUND.md](docs/COMPOUND.md) |
+| `@treewyrm/utf2json/rigid`      | Rigid `.3db`/`.cmp`/`.sph` models: parts, cameras, spheres, material animation | [RIGID.md](docs/RIGID.md)  |
 | `@treewyrm/utf2json/animation`  | Keyframe animation scripts, shared by `.cmp` and `.anm`                     | [ANIMATION.md](docs/ANIMATION.md) |
+| `@treewyrm/utf2json/deformable` | Deformable `.dfm` character models: bones, skinned meshes, detail levels     | [DEFORMABLE.md](docs/DEFORMABLE.md) |
 | `@treewyrm/utf2json/surface`    | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy          | [SURFACE.md](docs/SURFACE.md) |
+| `@treewyrm/utf2json/texture`    | `Texture library` entries: DDS surfaces, Targa mip chains, animations       | [TEXTURE.md](docs/TEXTURE.md) |
+| `@treewyrm/utf2json/material`   | `Material library` entries: shader type, colours, texture slots             | [MATERIAL.md](docs/MATERIAL.md) |
 | `@treewyrm/utf2json/alchemy`    | Alchemy particle effects: node library and effect library                   | [ALCHEMY.md](docs/ALCHEMY.md) |
 
 ## Installation
@@ -108,9 +112,19 @@ const files = root.files // File[]
 
 ```ts
 import { Directory } from '@treewyrm/utf2json'
-import { readRigidModel } from '@treewyrm/utf2json/model'
+import { readRigidModel } from '@treewyrm/utf2json/rigid'
 
 const model = readRigidModel(Directory.read(readFileSync('ships/li_fighter.cmp')))
+```
+
+### Reading a character model
+
+```ts
+import { Directory } from '@treewyrm/utf2json'
+import { getBoneModel, readDeformableModel } from '@treewyrm/utf2json/deformable'
+
+const model = readDeformableModel(Directory.read(readFileSync('characters/bodies/br_darcy_body.dfm')))
+const skeleton = getBoneModel(model) // the bone hierarchy, as a Model<Bone> tree
 ```
 
 ### Reading a collision surface

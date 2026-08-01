@@ -14,7 +14,7 @@ To run a single test file:
 node --import tsx --test src/directory.test.ts
 ```
 
-The `corpus.test.ts` suites (`src/vmesh/`, `src/animation/`, `src/surface/`, `src/model/`, `src/texture/`, `src/material/`, `src/alchemy/`) validate the readers against retail game assets. They look for a
+The `corpus.test.ts` suites (`src/vmesh/`, `src/animation/`, `src/surface/`, `src/rigid/`, `src/texture/`, `src/material/`, `src/deformable/`, `src/alchemy/`) validate the readers against retail game assets. They look for a
 Freelancer `DATA` directory at `$FREELANCER_DATA`, falling back to `~/Downloads/Freelancer/DATA`,
 and skips itself with a reason when neither exists — the rest of the suite never depends on it.
 
@@ -27,17 +27,19 @@ This is a TypeScript library for reading and writing **UTF (Universal Tree Forma
 | Export path | Source | Description |
 |---|---|---|
 | `.` (default) | `src/index.ts` | Core: `Directory` and `File` classes |
-| `./utility` | `src/utility/index.ts` | `BufferView`, `Compound`, string/timestamp helpers |
+| `./utility` | `src/utility/index.ts` | `BufferView`, `Tree`, string/timestamp helpers |
 | `./math` | `src/math/index.ts` | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Transform`, scalar math |
 | `./alchemy` | `src/alchemy/index.ts` | Alchemy particle effect system (node library + effect library) |
 | `./vmesh` | `src/vmesh/index.ts` | VMesh geometry part/library serialization |
-| `./model` | `src/model/index.ts` | Rigid models: compound hierarchy, joints, hardpoints |
+| `./compound` | `src/compound/index.ts` | The `Cmpnd` hierarchy shared by rigid and deformable models: parts, constraints, joints, hardpoints |
+| `./rigid` | `src/rigid/index.ts` | Rigid `.3db`/`.cmp`/`.sph` models: parts, cameras, spheres, material animation |
 | `./animation` | `src/animation/index.ts` | Keyframe animation scripts shared by `.cmp` and `.anm` |
 | `./surface` | `src/surface/index.ts` | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy |
 | `./texture` | `src/texture/index.ts` | `Texture library` entries: DDS surfaces, Targa mip chains, animations |
 | `./material` | `src/material/index.ts` | `Material library` entries: shader type, colours, texture slots |
+| `./deformable` | `src/deformable/index.ts` | `.dfm` character models: bone table, skinned meshes, detail levels |
 
-Module documentation lives in `docs/`: [UTF.md](docs/UTF.md), [VMESH.md](docs/VMESH.md), [MODEL.md](docs/MODEL.md), [ANIMATION.md](docs/ANIMATION.md), [SURFACE.md](docs/SURFACE.md), [ALCHEMY.md](docs/ALCHEMY.md), [TEXTURE.md](docs/TEXTURE.md), [MATERIAL.md](docs/MATERIAL.md).
+Module documentation lives in `docs/`: [UTF.md](docs/UTF.md), [VMESH.md](docs/VMESH.md), [COMPOUND.md](docs/COMPOUND.md), [RIGID.md](docs/RIGID.md), [ANIMATION.md](docs/ANIMATION.md), [SURFACE.md](docs/SURFACE.md), [ALCHEMY.md](docs/ALCHEMY.md), [TEXTURE.md](docs/TEXTURE.md), [MATERIAL.md](docs/MATERIAL.md), [DEFORMABLE.md](docs/DEFORMABLE.md).
 
 ### Binary format overview
 
@@ -61,7 +63,7 @@ A UTF file has three data regions, preceded by a fixed header:
 
 - **`BufferView`** — stateful `DataView` subclass with internal `#offset` pointer; `allocate(n)` creates a zeroed buffer, `join(...views)` concatenates views, `from(view)` wraps an existing `ArrayBufferView`. All data is little-endian by default.
 - **`Dictionary`** — accumulates NUL-terminated entry names for the names block during serialization.
-- **`compound.ts`** — generic `Compound<T>` (`{ children: T[] }`) tree helpers: `listCompoundElements`, `listCompoundPairs`, `findCompoundElement`, `reduceCompount`. Used by `src/model/` for the `Cmpnd` hierarchy.
+- **`tree.ts`** — generic `Tree<T>` (`{ children: T[] }`) tree helpers: `listTreeElements`, `listTreePairs`, `findTreeElement`, `reduceTree`. Used by `src/compound/` for the `Cmpnd` hierarchy.
 - **`timestamp.ts`** — conversions between `Date` and DOS timestamps / Windows 64-bit FILETIMEs.
 - **`string.ts`** — `toHex`, `isHex`, `parseHex` utilities.
 - **`hierarchy.ts`** — generic `assemble`/`flatten` for tree-to-flat-list conversions (used by alchemy effect library).
@@ -95,19 +97,26 @@ Both want observing in the field. See [ALCHEMY.md](docs/ALCHEMY.md) for the per-
 
 Reads/writes VMesh geometry: `readVMeshPart`/`writeVMeshPart` for individual mesh parts, `readVMeshWire`/`writeVMeshWire` for the `VMeshWire` line-list overlay, and `readVMeshLibrary`/`writeVMeshLibrary` for the full mesh library. See `src/vmesh/data.ts` for binary layout details.
 
-### Model (`src/model/`)
+### Compound (`src/compound/`)
 
-Rigid models (`.3db` single part, `.cmp` compound), layered on top of VMesh geometry:
-- **`model.ts`** — generic `Model<T>` compound node (extends `Compound<Model<T>>`); `readModel`/`writeModel` take a fragment reader/writer callback. Hierarchy is reconstructed from the `Cons` constraint list, not from directory nesting.
-- **`rigid.ts`** — `readRigidModel`/`writeRigidModel` dispatch between compound and single-part forms; a part is `Rigid` (hardpoints + `MultiLevel`/`VMeshPart`) or `Camera`.
-- **`joint.ts`** / **`constraint.ts`** — parent↔child joints (`fixed`, `revolute`, `prismatic`, `cylinder`, `sphere`, `loose`) stored as fixed-size records in `Cons/Fix`, `Cons/Rev`, etc. Cylinder joints are unimplemented.
-- **`hardpoint.ts`** — named attachment points under `Hardpoints/Fixed` and `Hardpoints/Revolute`.
+The `Cmpnd` hierarchy, **shared byte-for-byte by rigid `.cmp` models and deformable `.dfm` characters**. It is its own module rather than part of either because both consume it: `rigid/` supplies mesh parts as the fragment payload, `deformable/` supplies bones. Nothing here knows what a fragment contains.
+- **`model.ts`** — generic `Model<T>` compound node (extends `Tree<Model<T>>`); `readModel`/`writeModel` take a fragment reader/writer callback. Hierarchy is reconstructed from the `Cons` constraint list, not from directory nesting. `arrangeByConstraints` is the part `deformable/` uses on its own.
+- **`joint.ts`** / **`constraint.ts`** — parent↔child joints (`fixed`, `revolute`, `prismatic`, `cylinder`, `sphere`, `loose`) stored as fixed-size records in `Cons/Fix`, `Cons/Rev`, etc.
+- **`hardpoint.ts`** — named attachment points under `Hardpoints/Fixed` and `Hardpoints/Revolute`. Carried by rigid parts and by `.dfm` bones alike.
+
+See [COMPOUND.md](docs/COMPOUND.md).
+
+### Rigid (`src/rigid/`)
+
+Rigid models (`.3db` single part, `.cmp` compound, `.sph` sphere), layered on `compound/` for the hierarchy and VMesh for geometry:
+- **`rigid.ts`** — `readRigidModel`/`writeRigidModel` dispatch between compound and single-part forms; a part is `Rigid` (hardpoints + `MultiLevel`/`VMeshPart`), `Camera` or `Sphere`.
 - **`camera.ts`** — cockpit view frustum, detected via the `Camera` subdirectory. `Fovx`/`Fovy` are half-angles in radians.
-- **`materialanim.ts`** — `MaterialAnim`, a root-level sibling of `Cmpnd` animating material UV transforms. Read from the file root like `readVMeshLibrary`, not part of `RigidModel`. `MAKeys` is stored rather than derived from `MADeltas`; see [MODEL.md](docs/MODEL.md) for the counterexamples.
+- **`sphere.ts`** — `.sph` planets and suns: one material name per cube face, a radius, no geometry.
+- **`materialanim.ts`** — `MaterialAnim`, a root-level sibling of `Cmpnd` animating material UV transforms. Read from the file root like `readVMeshLibrary`, not part of `RigidModel`. Lives here rather than in `compound/` because no `.dfm` carries one. `MAKeys` is stored rather than derived from `MADeltas`; see [RIGID.md](docs/RIGID.md) for the counterexamples.
 
 ### Animation (`src/animation/`)
 
-Keyframe animation "scripts". Rigid compound models embed the `Animation` directory in the `.cmp` next to `Cmpnd`; deformable models keep it in a standalone `.anm`. Both use the same structures, so this module is a sibling of `model/` rather than part of it — `readAnimationLibrary(root)` takes a file root directory, like `readVMeshLibrary` does.
+Keyframe animation "scripts". Rigid compound models embed the `Animation` directory in the `.cmp` next to `Cmpnd`; deformable models keep it in a standalone `.anm`. Both use the same structures, so this module is a sibling of `rigid/` rather than part of it — `readAnimationLibrary(root)` takes a file root directory, like `readVMeshLibrary` does.
 
 - **`channel.ts`** — `Header` (count, interval, type) + `Frames` (packed keyframes). `ChannelType` is a byte-wide bitfield; `keyframeByteLength` derives the stride from it. A negative interval means each keyframe carries its own timestamp.
 - **`map.ts`** — `ObjectMap` (root object, `Parent name` only) and `JointMap` (`Parent name` + `Child name`, drives the joint between them).
@@ -157,6 +166,20 @@ File order inside a material is the one thing not reproduced: the writer emits t
 **Defaults are real and live in the DLLs, not the data.** Property tables run `<label>, <file name>[, <default>]`, and across `flmaterials.dll`, `shading.dll` and `deformable2.dll` exactly one property carries the third string: `nt_name` → `NomadRGB1_NomadAlpha1`, exported as `defaultNomadTextureName`. It resolves to the sole entry of that name in `SHIPS/NOMAD/nomad_fx.txm`, and **no material names it** — the default is the whole mechanism. `readMaterial` deliberately does not apply defaults; doing so would write files that were never there and end the byte-exact round trip. Numeric defaults would be float immediates and are not findable by string scanning.
 
 `Sc`, `Sp` and the nomad slot are modelled from the documented property list but never authored. `EXE/dacom.ini` is **plain text, not BINI** — its `[MaterialMap]` section is directly readable, evaluated in reverse of the listed order, and also rewrites type-to-type (`DcDtEcEt`→`DcDtEt`, `EcEtOcOt`→`DcDtOcOt`), which is why `EcEt` appears in circulated type lists and in no asset. See [MATERIAL.md](docs/MATERIAL.md).
+
+### Deformable (`src/deformable/`)
+
+`.dfm` character models — one skinned mesh per detail level under `MultiLevel`, plus a tree of bones that poses it. `readDeformableModel(root)` takes a file root like `readTextures` does. Retail ships 204: 104 heads, 88 bodies, 12 hands, assembled into a character at load time through the hardpoints of the bones they share.
+
+**The compound layer is byte-for-byte the rigid one** — the same `Object name`/`File name`/`Index` triples, the same `Cons` records read by `readConstraints` — so `compound/` is reused wholesale and `getBoneModel` hands back the same `Model<T>` tree a `.cmp` reads into. Only `Sphere` and `Loose` joints occur across the 9096 records.
+
+**All 204 write back byte for byte, and writing is a fixed point**, both pinned by `corpus.test.ts`. Node order is uniform across the corpus down to the file order inside a `Geometry` directory, and the writer reproduces it. Three decisions worth not re-litigating:
+
+- **Bones are an ordered table, not just a tree.** `Index` equals the bone's `.3db` directory position in all 204 files and all 9456 bones, and that position is what `Bone_id_chain` skins to — so it is derived on write, and a read whose two disagree throws. **156 bone directories have no `Cmpnd` part at all**: every one a single fixed hardpoint named `Neck`, `UpperTorso`, `LCollarBone`, `RCollarBone`, `L Wrist` or `R Wrist`, filling exactly the gaps the part numbering leaves. They belong to the host skeleton, are still skinned to, and are carried as bones with no `name`.
+- **`Lod Bits` is a permission, not a usage mask.** All bits or none — 2237 bones with every bit set appear in no `Bone_id_chain`.
+- **`Fractions` folds into the level, `Face_groups/Count` and `UV_vertex_count` are derived.** All three agree with what they count in every retail file.
+
+The one thing that cannot be reproduced belongs to `compound/`, not here: **every retail constraint record leaves stack residue past the terminator of its two 64-byte name fields** — all 9096 here and all 5316 across the rigid models. `writeConstraints` zero-fills, and now writes the retail capitalization (`Fix`, `Rev`, `Pris`, `Sphere`, `Loose`, `Cyl`) rather than lowercase. The eleven `UV_*` files on `Mesh0` of 104 heads drive eye and mouth patches across a sprite sheet from a bone that moves but is never drawn. See [DEFORMABLE.md](docs/DEFORMABLE.md).
 
 ## Code style
 

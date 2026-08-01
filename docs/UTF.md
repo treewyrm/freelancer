@@ -126,8 +126,8 @@ Both accept `number | string | ArrayBufferView | ArrayBufferLike` and default to
 ```ts
 import {
   BufferView,
-  type Compound,
-  listCompoundElements,
+  type Tree,
+  listTreeElements,
   toDOSTimestamp,
   fromDOSTimestamp,
   toFileTime,
@@ -158,16 +158,16 @@ A stateful `DataView` subclass with an internal offset pointer, little-endian by
 
 Write methods chain.
 
-### Compound hierarchies
+### Tree hierarchies
 
-`Compound<T>` (`{ children: T[] }`) is the shape shared by tree-structured records such as `Model` in the [model](MODEL.md) module.
+`Tree<T>` (`{ children: T[] }`) is the shape shared by tree-structured records such as `Model` in the [compound](COMPOUND.md) module.
 
 | Export                                    | Description                                              |
 | ----------------------------------------- | ---------------------------------------------------------- |
-| `listCompoundElements(parent)`            | Generator — depth-first walk including `parent` itself    |
-| `listCompoundPairs(parent)`               | Generator — yields `{ parent, child }` links              |
-| `findCompoundElement(root, predicate)`    | First element matching a predicate                        |
-| `reduceCompount(root, reducer, initial)`  | Folds the tree, passing `(accumulator, child, parent)`    |
+| `listTreeElements(parent)`            | Generator — depth-first walk including `parent` itself    |
+| `listTreePairs(parent)`               | Generator — yields `{ parent, child }` links              |
+| `findTreeElement(root, predicate)`    | First element matching a predicate                        |
+| `reduceTree(root, reducer, initial)`  | Folds the tree, passing `(accumulator, child, parent)`    |
 | `Parenthesis<T>`                          | The `{ parent, child }` pair type                         |
 
 ### Timestamps and strings

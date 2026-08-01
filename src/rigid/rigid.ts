@@ -3,8 +3,8 @@ import { readMultiLevel, writeMultiLevel, type MultiLevel } from '#/vmesh/multil
 import { readVMeshPart, writeVMeshPart, type VMeshPart } from '#/vmesh/part.js'
 import { readVMeshWire, writeVMeshWire, type VMeshWire } from '#/vmesh/wireframe.js'
 import { isCamera, readCamera, writeCamera, type Camera } from './camera.js'
-import { isCompoundModel, type Model, readModel, writeModel } from './model.js'
-import { readHardpoints, writeHardpoints, type Hardpoint } from './hardpoint.js'
+import { isCompoundModel, type Model, readModel, writeModel } from '#/compound/model.js'
+import { readHardpoints, writeHardpoints, type Hardpoint } from '#/compound/hardpoint.js'
 import { isSphere, readSphere, writeSphere, type Sphere } from './sphere.js'
 
 export interface Rigid {

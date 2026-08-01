@@ -43,7 +43,7 @@ sequentially within each kind rather than preserving the original numbers.
 
 Applying an object map to a subpart or a joint map to the root does nothing.
 
-Which keyframe fields a joint map consumes depends on the joint in [`src/model/joint.ts`](../src/model/joint.ts):
+Which keyframe fields a joint map consumes depends on the joint in [`src/compound/joint.ts`](../src/compound/joint.ts):
 
 | Joint       | Keyframe field used                                                    |
 | ----------- | ---------------------------------------------------------------------- |

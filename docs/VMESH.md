@@ -276,7 +276,7 @@ Every date-stamped build string is an original Digital Anvil exporter, and all o
 
 `readVMeshWire` returns `undefined` when `parent` has no `VMeshWire` subdirectory, throws when that directory exists without a `VWireData` file, and throws `RangeError` if the leading size field is not `0x10`. `writeVMeshWire` returns a fresh `VMeshWire` directory, recomputes `indexCount` from `indices.length`, and writes the three vertex fields unchanged.
 
-Rigid parts read and write this through `Rigid.wireframe` — see [MODEL.md](MODEL.md).
+Rigid parts read and write this through `Rigid.wireframe` — see [RIGID.md](RIGID.md).
 
 ---
 

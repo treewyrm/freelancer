@@ -41,9 +41,13 @@
       "import": "./dist/vmesh/index.js",
       "types": "./dist/vmesh/index.d.ts"
     },
-    "./model": {
-      "import": "./dist/model/index.js",
-      "types": "./dist/model/index.d.ts"
+    "./compound": {
+      "import": "./dist/compound/index.js",
+      "types": "./dist/compound/index.d.ts"
+    },
+    "./rigid": {
+      "import": "./dist/rigid/index.js",
+      "types": "./dist/rigid/index.d.ts"
     },
     "./surface": {
       "import": "./dist/surface/index.js",
@@ -56,6 +60,10 @@
     "./material": {
       "import": "./dist/material/index.js",
       "types": "./dist/material/index.d.ts"
+    },
+    "./deformable": {
+      "import": "./dist/deformable/index.js",
+      "types": "./dist/deformable/index.d.ts"
     }
   },
   "main": "./dist/index.js",

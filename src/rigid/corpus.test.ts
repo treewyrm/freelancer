@@ -3,10 +3,10 @@ import { describe, it } from 'node:test'
 import { load, skip } from '../corpus.js'
 import type Directory from '../directory.js'
 import type File from '../file.js'
-import { listCompoundElements } from '../utility/compound.js'
-import { readConstraints, writeConstraints, type Constraint } from './constraint.js'
+import { listTreeElements } from '../utility/tree.js'
+import { readConstraints, writeConstraints, type Constraint } from '../compound/constraint.js'
 import { readMaterialAnimLibrary, writeMaterialAnim } from './materialanim.js'
-import { isCompoundModel } from './model.js'
+import { isCompoundModel } from '../compound/model.js'
 import { readRigidModel, writeRigidModel } from './rigid.js'
 
 /** Record size of each constraint file, the two 0x40-byte name fields included. */
@@ -104,7 +104,7 @@ describe('retail asset corpus', { skip }, () => {
       const model = readRigidModel(root)
       if (model.type !== 'compound') continue
 
-      strictEqual([...listCompoundElements(model)].length, partNames(root).size, path)
+      strictEqual([...listTreeElements(model)].length, partNames(root).size, path)
     }
   })
 
@@ -124,7 +124,7 @@ describe('retail asset corpus', { skip }, () => {
       const model = readRigidModel(root)
       if (model.type !== 'compound') continue
 
-      for (const { filename, part } of listCompoundElements(model)) {
+      for (const { filename, part } of listTreeElements(model)) {
         if (part.type !== 'camera') continue
         cameras++
 
@@ -149,7 +149,7 @@ describe('retail asset corpus', { skip }, () => {
       const model = readRigidModel(root)
       if (model.type !== 'compound') continue
 
-      for (const { part } of listCompoundElements(model)) {
+      for (const { part } of listTreeElements(model)) {
         if (part.type !== 'camera') continue
 
         const aspect = Math.tan(part.fovX) / Math.tan(part.fovY)
@@ -170,7 +170,7 @@ describe('retail asset corpus', { skip }, () => {
       const model = readRigidModel(root)
       if (model.type !== 'compound') continue
 
-      for (const { filename } of listCompoundElements(model))
+      for (const { filename } of listTreeElements(model))
         for (const child of root.getDirectory(filename)?.children ?? [])
           if (!read.test(child.name)) names.add(child.name)
     }

@@ -47,7 +47,7 @@ export interface MaterialKey {
  * The two are related but not redundant: key magnitudes match segment displacements
  * (`speed × time`) closely enough that they clearly describe the same motion, yet no single
  * alignment between them reproduces every retail entry, so `keys` must be read rather than
- * derived. See [What `MAKeys` is not](../../docs/MODEL.md#what-makeys-is-not).
+ * derived. See [What `MAKeys` is not](../../docs/RIGID.md#what-makeys-is-not).
  */
 export interface MaterialAnim {
   /** Material name. */
