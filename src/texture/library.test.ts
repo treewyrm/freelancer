@@ -6,6 +6,7 @@ import BufferView from '../utility/bufferview.js'
 import { readAnimatedTexture, writeAnimatedTexture, type AnimatedTexture } from './animation.js'
 import { Compression, readDirectDrawSurface, writeDirectDrawSurface } from './dds.js'
 import {
+  readCUBE,
   readMIP,
   readMIPS,
   readTexture,
@@ -31,9 +32,18 @@ interface SurfaceOptions {
   compression?: Compression
   bitCount?: number
   mask?: [r: number, g: number, b: number, a: number]
+
+  /** Six writes a cubemap, into a `CUBE` file rather than a `MIPS` one. */
+  faces?: number
+
+  /** Face bits to declare, when they should not be all six. */
+  caps2?: number
 }
 
-/** Builds a DirectDrawSurface whose payload is filled with a per-level marker byte. */
+/**
+ * Builds a DirectDrawSurface whose payload is filled with a marker byte unique to each level of
+ * each face, so a misread stride or a face read at the wrong offset shows up as the wrong marker.
+ */
 const surface = ({
   width,
   height,
@@ -41,6 +51,8 @@ const surface = ({
   compression = Compression.NONE,
   bitCount = 32,
   mask = [0xff0000, 0xff00, 0xff, 0xff000000],
+  faces = 1,
+  caps2 = faces > 1 ? 0xfe00 : 0,
 }: SurfaceOptions) => {
   const sizes: number[] = []
 
@@ -54,7 +66,7 @@ const surface = ({
     )
   }
 
-  const payload = sizes.reduce((sum, size) => sum + size, 0)
+  const payload = sizes.reduce((sum, size) => sum + size, 0) * faces
   const buffer = new Uint8Array(128 + payload)
   const view = new DataView(buffer.buffer)
   const u32 = (offset: number, value: number) => view.setUint32(offset, value, true)
@@ -79,13 +91,15 @@ const surface = ({
     u32(84, compression)
   }
 
-  // Fill each level with its own index, so a misread stride shows up as the wrong marker.
-  for (let i = 0, offset = 128; i < sizes.length; i++) {
-    buffer.fill(i + 1, offset, offset + sizes[i]!)
-    offset += sizes[i]!
-  }
+  u32(112, caps2)
 
-  return { file: new File('MIPS', buffer), sizes }
+  for (let face = 0, offset = 128; face < faces; face++)
+    for (let i = 0; i < sizes.length; i++) {
+      buffer.fill(face * levels + i + 1, offset, offset + sizes[i]!)
+      offset += sizes[i]!
+    }
+
+  return { file: new File(faces > 1 ? 'CUBE' : 'MIPS', buffer), sizes }
 }
 
 interface TargaOptions {
@@ -141,7 +155,7 @@ describe('readDirectDrawSurface', () => {
 
     deepStrictEqual(sizes, [32, 8, 8, 8])
 
-    const { mipmaps } = readDirectDrawSurface(BufferView.from(file.data))
+    const mipmaps = readDirectDrawSurface(BufferView.from(file.data)).surfaces[0]!
 
     deepStrictEqual(
       mipmaps.map(({ byteLength }) => byteLength),
@@ -159,7 +173,7 @@ describe('readDirectDrawSurface', () => {
   it('gives sub-4x4 DXT3 and DXT5 levels a whole 16-byte block each', () => {
     for (const compression of [Compression.DXT3, Compression.DXT5]) {
       const { file } = surface({ width: 8, height: 8, levels: 4, compression })
-      const { mipmaps } = readDirectDrawSurface(BufferView.from(file.data))
+      const mipmaps = readDirectDrawSurface(BufferView.from(file.data)).surfaces[0]!
 
       deepStrictEqual(
         mipmaps.map(({ byteLength }) => byteLength),
@@ -171,7 +185,7 @@ describe('readDirectDrawSurface', () => {
   // A non-square chain hits 1 on one axis while the other is still descending.
   it('keeps rounding up once one axis reaches a single block', () => {
     const { file } = surface({ width: 16, height: 4, levels: 5, compression: Compression.DXT1 })
-    const { mipmaps } = readDirectDrawSurface(BufferView.from(file.data))
+    const mipmaps = readDirectDrawSurface(BufferView.from(file.data)).surfaces[0]!
 
     // 16x4 -> 4 blocks, 8x2 -> 2, 4x1 -> 1, 2x0 -> 1, 1x0 -> 1
     deepStrictEqual(
@@ -182,7 +196,7 @@ describe('readDirectDrawSurface', () => {
 
   it('carries an uncompressed chain down to a single pixel', () => {
     const { file } = surface({ width: 4, height: 4, levels: 3, bitCount: 32 })
-    const { mipmaps } = readDirectDrawSurface(BufferView.from(file.data))
+    const mipmaps = readDirectDrawSurface(BufferView.from(file.data)).surfaces[0]!
 
     deepStrictEqual(
       mipmaps.map(({ byteLength }) => byteLength),
@@ -193,7 +207,7 @@ describe('readDirectDrawSurface', () => {
   it('reads a single level when DDSD_MIPMAPCOUNT is absent', () => {
     const { file } = surface({ width: 4, height: 4, levels: 1, bitCount: 32 })
 
-    strictEqual(readDirectDrawSurface(BufferView.from(file.data)).mipmaps.length, 1)
+    strictEqual(readDirectDrawSurface(BufferView.from(file.data)).surfaces[0]!.length, 1)
   })
 
   it('throws on a buffer that is not a DirectDrawSurface', () => {
@@ -258,6 +272,62 @@ describe('readMIPS', () => {
 
   it('returns undefined when there is no MIPS file', () => {
     strictEqual(readMIPS(entry('texture')), undefined)
+  })
+
+  // Retail files one under `MIPS` and the other under `CUBE`, so the surface a `MIPS` file holds
+  // is always flat. Reading one anyway would drop five faces without saying so.
+  it('refuses a cubemap filed under MIPS rather than dropping five faces', () => {
+    const { file } = surface({ width: 4, height: 4, levels: 1, faces: 6 })
+
+    throws(() => readMIPS(entry('texture', new File('MIPS', file.data))), RangeError)
+  })
+})
+
+describe('readCUBE', () => {
+  const cube = (options: Omit<SurfaceOptions, 'faces'>) =>
+    readCUBE(entry('texture', surface({ ...options, faces: 6 }).file))
+
+  it('splits the surface into six faces, each with its own chain', () => {
+    const texture = cube({ width: 4, height: 4, levels: 3 })
+
+    strictEqual(texture?.storage, 'cube')
+    strictEqual(texture.type, 'rgba32_8888')
+    strictEqual(texture.width, 4)
+    strictEqual(texture.height, 4)
+    strictEqual(texture.faces.length, 6)
+
+    for (const [face, chain] of texture.faces.entries()) {
+      deepStrictEqual(
+        chain.map(({ byteLength }) => byteLength),
+        [64, 16, 4],
+      )
+
+      // Markers run face by face, so a face cut at the wrong offset carries another's bytes.
+      deepStrictEqual(
+        chain.map((level) => level[0]),
+        [face * 3 + 1, face * 3 + 2, face * 3 + 3],
+      )
+    }
+  })
+
+  it('always reports a top-down origin, since that is how DDS stores rows', () => {
+    strictEqual(cube({ width: 4, height: 4, levels: 1 })?.flip, true)
+  })
+
+  /** A missing face bit would leave every later face at the wrong offset. */
+  it('refuses a partial cubemap rather than reading the faces at the wrong offsets', () => {
+    // DDSCAPS2_CUBEMAP with the negative Z face missing.
+    throws(() => cube({ width: 4, height: 4, levels: 1, caps2: 0x7e00 }), RangeError)
+  })
+
+  it('refuses a CUBE file whose surface declares no faces at all', () => {
+    const { file } = surface({ width: 4, height: 4, levels: 1 })
+
+    throws(() => readCUBE(entry('texture', new File('CUBE', file.data))), RangeError)
+  })
+
+  it('returns undefined when there is no CUBE file', () => {
+    strictEqual(readCUBE(entry('texture')), undefined)
   })
 })
 
@@ -483,18 +553,15 @@ const image = (
 
 describe('writeDirectDrawSurface', () => {
   const roundTrip = (options: SurfaceOptions) => {
-    const { mipmaps, ...source } = readDirectDrawSurface(
-      BufferView.from(surface(options).file.data),
-    )
-
-    const written = writeDirectDrawSurface({ ...source, mipmaps })
+    const source = readDirectDrawSurface(BufferView.from(surface(options).file.data))
+    const written = writeDirectDrawSurface(source)
 
     return readDirectDrawSurface(written)
   }
 
   it('reproduces a block-compressed chain that descends past a single block', () => {
     for (const compression of [Compression.DXT1, Compression.DXT3, Compression.DXT5]) {
-      const { mipmaps } = roundTrip({ width: 8, height: 8, levels: 4, compression })
+      const mipmaps = roundTrip({ width: 8, height: 8, levels: 4, compression }).surfaces[0]!
 
       deepStrictEqual(
         mipmaps.map(({ byteLength }) => byteLength),
@@ -509,7 +576,7 @@ describe('writeDirectDrawSurface', () => {
   })
 
   it('reproduces the uncompressed pixel formats, masks and all', () => {
-    const { bitCount, mask, mipmaps } = roundTrip({
+    const { bitCount, mask, surfaces } = roundTrip({
       width: 4,
       height: 4,
       levels: 3,
@@ -520,8 +587,55 @@ describe('writeDirectDrawSurface', () => {
     strictEqual(bitCount, 32)
     deepStrictEqual(mask, { r: 0xff0000, g: 0xff00, b: 0xff, a: 0xff000000 })
     deepStrictEqual(
-      mipmaps.map(({ byteLength }) => byteLength),
+      surfaces[0]!.map(({ byteLength }) => byteLength),
       [64, 16, 4],
+    )
+  })
+
+  it('reproduces all six faces of a cubemap, in order', () => {
+    const { surfaces } = roundTrip({ width: 4, height: 4, levels: 1, faces: 6 })
+
+    strictEqual(surfaces.length, 6)
+
+    // Every face carries its own marker, so a face read or written at the wrong offset shows up
+    // as another face's bytes rather than as the right size in the wrong place.
+    deepStrictEqual(
+      surfaces.map((face) => face[0]![0]),
+      [1, 2, 3, 4, 5, 6],
+    )
+  })
+
+  it('rejects a surface count that is neither one nor six', () => {
+    for (const count of [2, 5, 7])
+      throws(
+        () =>
+          writeDirectDrawSurface({
+            width: 4,
+            height: 4,
+            bitCount: 32,
+            compression: Compression.NONE,
+            mask: { r: 0xff0000, g: 0xff00, b: 0xff, a: 0xff000000 },
+            surfaces: Array.from({ length: count }, () => [new Uint8Array(64)]),
+          }),
+        RangeError,
+      )
+  })
+
+  // One header describes every face, so a shorter chain would leave the rest misaligned.
+  it('rejects cubemap faces whose chains disagree in length', () => {
+    throws(
+      () =>
+        writeDirectDrawSurface({
+          width: 4,
+          height: 4,
+          bitCount: 32,
+          compression: Compression.NONE,
+          mask: { r: 0xff0000, g: 0xff00, b: 0xff, a: 0xff000000 },
+          surfaces: Array.from({ length: 6 }, (_, face) =>
+            face === 3 ? [new Uint8Array(64)] : [new Uint8Array(64), new Uint8Array(16)],
+          ),
+        }),
+      RangeError,
     )
   })
 
@@ -536,7 +650,7 @@ describe('writeDirectDrawSurface', () => {
           bitCount: 32,
           compression: Compression.NONE,
           mask: { r: 0xff0000, g: 0xff00, b: 0xff, a: 0xff000000 },
-          mipmaps: [new Uint8Array(64), new Uint8Array(64)],
+          surfaces: [[new Uint8Array(64), new Uint8Array(64)]],
         }),
       RangeError,
     )
@@ -551,7 +665,7 @@ describe('writeDirectDrawSurface', () => {
           bitCount: 32,
           compression: Compression.NONE,
           mask: { r: 0, g: 0, b: 0, a: 0 },
-          mipmaps: [],
+          surfaces: [],
         }),
       RangeError,
     )
@@ -767,6 +881,31 @@ describe('writeTexture', () => {
       written.children.map(({ name }) => name),
       ['Texture count', 'Frame count', 'FPS', 'Frame rects'],
     )
+  })
+
+  it('writes a cubemap into a CUBE file that reads back face for face', () => {
+    const texture = readCUBE(
+      entry('texture', surface({ width: 4, height: 4, levels: 2, faces: 6 }).file),
+    )
+    ok(texture)
+
+    const written = writeTexture(texture)
+
+    deepStrictEqual(
+      written.children.map(({ name }) => name),
+      ['CUBE'],
+    )
+
+    deepStrictEqual(readCUBE(written), texture)
+  })
+
+  it('refuses a cubemap whose rows run bottom-up', () => {
+    const texture = readCUBE(
+      entry('texture', surface({ width: 4, height: 4, levels: 1, faces: 6 }).file),
+    )
+    ok(texture)
+
+    throws(() => writeTexture({ ...texture, flip: false }), RangeError)
   })
 })
 

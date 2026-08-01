@@ -2,8 +2,15 @@ import BufferView from '#/utility/bufferview.js'
 import Directory from '#/directory.js'
 import File from '#/file.js'
 import { readTargaImage, writeTargaImage } from './targa.js'
-import { type Texture, type TextureType } from './types.js'
-import { Compression, readDirectDrawSurface, writeDirectDrawSurface } from './dds.js'
+import {
+  type CubeFaces,
+  type CubeTexture,
+  type Texture,
+  type TextureEntry,
+  type TextureStorage,
+  type TextureType,
+} from './types.js'
+import { Compression, CUBEMAP_FACES, readDirectDrawSurface, writeDirectDrawSurface } from './dds.js'
 import { readAnimatedTexture, writeAnimatedTexture, type AnimatedTexture } from './animation.js'
 
 /**
@@ -109,16 +116,54 @@ const getTypeByMask = (r: number, g: number, b: number, a: number): TextureType 
   }
 }
 
+/** Texture type a surface's compression and pixel format decode to. */
+const getSurfaceType = (
+  compression: Compression,
+  mask: { r: number; g: number; b: number; a: number },
+): TextureType => {
+  switch (compression) {
+    case Compression.DXT1:
+      return 'dxt1'
+    case Compression.DXT3:
+      return 'dxt3'
+    case Compression.DXT5:
+      return 'dxt5'
+    case Compression.NONE:
+      return getTypeByMask(mask.r, mask.g, mask.b, mask.a)
+    default:
+      throw new RangeError(`Unsupported compression method in texture`)
+  }
+}
+
 /**
- * Cubemaps, stored as a DirectDrawSurface holding all six faces. Retail has exactly two —
- * `FX/envmapbasic.mat` and `FX/envmapglass.txm` — both 64x64 A8R8G8B8 with a single level and
- * `DDSCAPS2_CUBEMAP_ALL_FACES`. Not implemented; {@link Texture} has nowhere to put six faces.
+ * Reads a cubemap, stored as one DirectDrawSurface holding all six faces. Retail has exactly two —
+ * `FX/envmapbasic.mat` and `FX/envmapglass.txm` — both 64x64 A8R8G8B8 with a single level per
+ * face and `DDSCAPS2_CUBEMAP_ALL_FACES`.
+ * @param parent Texture directory
+ * @returns
  */
-export function readCUBE(parent: Directory): Texture | undefined {
+export function readCUBE(parent: Directory): CubeTexture | undefined {
   const file = parent.getFile('CUBE')
   if (!file) return
 
-  return
+  const { width, height, mask, compression, surfaces } = readDirectDrawSurface(
+    BufferView.from(file.data),
+  )
+
+  // A `CUBE` file whose surface declares no faces is not a cubemap, whatever it is filed as.
+  if (surfaces.length !== CUBEMAP_FACES)
+    throw new RangeError(`Cubemap ${parent.name} holds ${surfaces.length} faces`)
+
+  // DirectDrawSurface is always stored top row first.
+  return {
+    name: parent.name,
+    storage: 'cube',
+    width,
+    height,
+    type: getSurfaceType(compression, mask),
+    faces: surfaces as CubeFaces,
+    flip: true,
+  }
 }
 
 /**
@@ -130,31 +175,25 @@ export function readMIPS(parent: Directory): Texture | undefined {
   const file = parent.getFile('MIPS')
   if (!file) return
 
-  const { width, height, mask, compression, mipmaps } = readDirectDrawSurface(
+  const { width, height, mask, compression, surfaces } = readDirectDrawSurface(
     BufferView.from(file.data),
   )
 
-  let type: TextureType = 'none'
-
-  switch (compression) {
-    case Compression.DXT1:
-      type = 'dxt1'
-      break
-    case Compression.DXT3:
-      type = 'dxt3'
-      break
-    case Compression.DXT5:
-      type = 'dxt5'
-      break
-    case Compression.NONE:
-      type = getTypeByMask(mask.r, mask.g, mask.b, mask.a)
-      break
-    default:
-      throw new RangeError(`Unsupported compression method in texture`)
-  }
+  // Nothing in retail stores a cubemap under `MIPS`, and the extra faces would be dropped
+  // silently if one did.
+  if (surfaces.length !== 1)
+    throw new RangeError(`Texture ${parent.name} holds ${surfaces.length} surfaces under MIPS`)
 
   // DirectDrawSurface is always stored top row first.
-  return { name: parent.name, storage: 'dds', width, height, type, levels: mipmaps, flip: true }
+  return {
+    name: parent.name,
+    storage: 'dds',
+    width,
+    height,
+    type: getSurfaceType(compression, mask),
+    levels: surfaces[0]!,
+    flip: true,
+  }
 }
 
 /** Pixel format {@link getTypeByMask} would decode back into the given type. */
@@ -175,45 +214,61 @@ const getMaskByType = (type: TextureType) => {
   }
 }
 
+/** Compression and pixel format a texture type is stored back as. */
+const getSurfaceFormat = (type: TextureType) => {
+  switch (type) {
+    case 'dxt1':
+      return { compression: Compression.DXT1, bitCount: 0, mask: { r: 0, g: 0, b: 0, a: 0 } }
+    case 'dxt3':
+      return { compression: Compression.DXT3, bitCount: 0, mask: { r: 0, g: 0, b: 0, a: 0 } }
+    case 'dxt5':
+      return { compression: Compression.DXT5, bitCount: 0, mask: { r: 0, g: 0, b: 0, a: 0 } }
+    default:
+      return { compression: Compression.NONE, ...getMaskByType(type) }
+  }
+}
+
+/**
+ * DDS stores the top row first, unconditionally, so a bottom-up bitmap would be written upside
+ * down. The rows are not reordered here, matching the readers, which report the vertical origin
+ * rather than transforming it.
+ */
+const assertTopDown = ({ name, flip }: Texture | CubeTexture) => {
+  if (!flip)
+    throw new RangeError(
+      `Texture ${name} is stored bottom row first and cannot be written as a DirectDrawSurface`,
+    )
+}
+
 /**
  * Writes texture as mipmaps (uncompressed or DXTn) stored in a DirectDrawSurface.
- *
- * `flip` must be set: DDS stores the top row first, unconditionally, so a bottom-up bitmap would
- * be written upside down. The rows are not reordered here, matching the readers, which report the
- * vertical origin rather than transforming it.
  * @param texture Texture to write
  * @returns
  */
 export function writeMIPS(texture: Texture): File {
-  const { type, width, height, flip, levels } = texture
+  const { type, width, height, levels } = texture
 
-  if (!flip)
-    throw new RangeError(
-      `Texture ${texture.name} is stored bottom row first and cannot be written as a DirectDrawSurface`,
-    )
-
-  let compression: Compression
-  let bitCount = 0
-  let mask = { r: 0, g: 0, b: 0, a: 0 }
-
-  switch (type) {
-    case 'dxt1':
-      compression = Compression.DXT1
-      break
-    case 'dxt3':
-      compression = Compression.DXT3
-      break
-    case 'dxt5':
-      compression = Compression.DXT5
-      break
-    default:
-      compression = Compression.NONE
-      ;({ bitCount, mask } = getMaskByType(type))
-  }
+  assertTopDown(texture)
 
   return new File(
     'MIPS',
-    writeDirectDrawSurface({ width, height, bitCount, compression, mask, mipmaps: levels }),
+    writeDirectDrawSurface({ width, height, ...getSurfaceFormat(type), surfaces: [levels] }),
+  )
+}
+
+/**
+ * Writes a cubemap as one DirectDrawSurface holding all six faces.
+ * @param texture Cubemap to write
+ * @returns
+ */
+export function writeCUBE(texture: CubeTexture): File {
+  const { type, width, height, faces } = texture
+
+  assertTopDown(texture)
+
+  return new File(
+    'CUBE',
+    writeDirectDrawSurface({ width, height, ...getSurfaceFormat(type), surfaces: faces }),
   )
 }
 
@@ -222,8 +277,8 @@ export function writeMIPS(texture: Texture): File {
  * cannot load: the eight paletted textures under the `openFLAME 3D N-mesh` trees left over from
  * Conquest: Frontier Wars are deliberately unsupported, not merely unimplemented.
  */
-export function readTexture(parent: Directory): Texture | AnimatedTexture | undefined {
-  let texture: Texture | AnimatedTexture | undefined
+export function readTexture(parent: Directory): TextureEntry | undefined {
+  let texture: TextureEntry | undefined
 
   // Try to read animated texture.
   texture = readAnimatedTexture(parent)
@@ -242,21 +297,23 @@ export function readTexture(parent: Directory): Texture | AnimatedTexture | unde
   return texture
 }
 
-/**
- * Writes one texture library entry, in whichever form {@link Texture.storage} names.
- *
- * Cubemaps have no counterpart here, since {@link readCUBE} cannot produce one to write.
- */
-export function writeTexture(texture: Texture | AnimatedTexture): Directory {
+/** Writes one texture library entry, in whichever form {@link TextureStorage} names. */
+export function writeTexture(texture: TextureEntry): Directory {
   if (texture.type === 'animated') return writeAnimatedTexture(texture)
+
+  // Captured before the switch narrows the union away, so the unreachable branch still reports
+  // which entry carried the bad storage.
+  const { name } = texture
 
   switch (texture.storage) {
     case 'dds':
       return new Directory(texture.name, [writeMIPS(texture)])
     case 'targa':
       return new Directory(texture.name, writeMIP(texture))
+    case 'cube':
+      return new Directory(texture.name, [writeCUBE(texture)])
     default:
-      throw new RangeError(`Unknown texture storage in ${texture.name}`)
+      throw new RangeError(`Unknown texture storage in ${name}`)
   }
 }
 
@@ -266,7 +323,7 @@ export function writeTexture(texture: Texture | AnimatedTexture): Directory {
  * @param parent Parent directory (typically root)
  * @returns
  */
-export function* readTextures(parent: Directory): Generator<Texture | AnimatedTexture> {
+export function* readTextures(parent: Directory): Generator<TextureEntry> {
   const library = parent.getDirectory('Texture library')
   if (!library) return
 
@@ -284,7 +341,7 @@ export function* readTextures(parent: Directory): Generator<Texture | AnimatedTe
   if (errors.length) throw new AggregateError(errors, 'Error reading one or more textures')
 }
 
-export function writeTextures(textures: Iterable<Texture | AnimatedTexture>): Directory {
+export function writeTextures(textures: Iterable<TextureEntry>): Directory {
   return new Directory(
     'Texture library',
     [...textures].map((texture) => writeTexture(texture)),

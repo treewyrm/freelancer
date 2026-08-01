@@ -27,7 +27,7 @@ Texture library (UTF directory)
        │
        ├─ MIP0, MIP1, … MIPn ─────── one uncompressed Targa per mip level
        │
-       ├─ CUBE (UTF file) ────────── a DirectDrawSurface cubemap (unimplemented)
+       ├─ CUBE (UTF file) ────────── a DirectDrawSurface holding all six cubemap faces
        │
        └─ Texture count ─────────┐   an animation over sibling atlas entries
           Frame count            │
@@ -40,9 +40,9 @@ animated → `CUBE` → `MIPS` → `MIP0..n`. Four entries carry both a `MIPS` a
 `MIPS` wins and the Targa chain is never decoded — and, since writing follows what was read, is
 dropped on the way back out.
 
-Which of the two image forms an entry uses is not a function of its pixel format: retail authored
-`rgb24_888` both ways, 1,787 Targa chains against two surfaces. `Texture.storage` (`dds` or
-`targa`) carries it, so `writeTexture` puts a texture back in the form it came from rather than
+Which image form an entry uses is not a function of its pixel format: retail authored
+`rgb24_888` both ways, 1,787 Targa chains against two surfaces. `TextureStorage` (`dds`, `targa`
+or `cube`) carries it, so `writeTexture` puts a texture back in the form it came from rather than
 guessing.
 
 The directory is spelled three ways in retail — `Texture library`, `texture library` and
@@ -60,8 +60,8 @@ unreachable. Retail has none.
 | `MIPS`              | 4,447   | `readMIPS`          |
 | `MIP0..n`           | 2,400   | `readMIP`           |
 | Animated            | 12      | `readAnimatedTexture` |
+| `CUBE`              | 2       | `readCUBE`          |
 | `Palette 8 bit`     | 8       | — out of scope      |
-| `CUBE`              | 2       | — unimplemented     |
 
 Which decode into eight pixel formats:
 
@@ -109,14 +109,16 @@ carrying it, and reproduces every one of them byte for byte:
 | --------------------------- | -------------------------------------------------------------- |
 | `dwFlags`                   | `0xa1006` compressed, `0x2100e` otherwise                        |
 | `dwPitchOrLinearSize`       | top level's byte length, or `width * bitCount >> 3`             |
-| `dwDepth`, reserved, `dwCaps2..4` | zero                                                      |
+| `dwDepth`, reserved, `dwCaps3..4` | zero                                                      |
 | `dwMipMapCount`             | number of levels, with `DDSD_MIPMAPCOUNT` set even for one      |
 | `ddspf.dwFlags`             | `DDPF_FOURCC`, or `DDPF_RGB` plus `DDPF_ALPHAPIXELS` if the alpha mask is non-zero |
 | `dwCaps`                    | `0x401008`, or `0x1000` for a single level                       |
+| `dwCaps2`                   | zero, or the cubemap and face bits when six surfaces are written |
 
-Two of those are worth not "fixing": **`DDSD_CAPS` is left clear**, as it is in every retail
+Two of those are worth not "fixing": **`DDSD_CAPS` is left clear**, as it is in every retail flat
 surface despite `dwCaps` being populated, and `DDSD_MIPMAPCOUNT` is set on the single-level
-`plasmaring` too. Both match the game's own writer.
+`plasmaring` too. Both match the game's own writer. The two cubemaps reverse the first and drop
+the second — see [Cubemaps](#cubemaps).
 
 Levels are checked against the dimensions they will be read back at before anything is written —
 the header records only the base size, so a chain that does not halve from it would be walked at
@@ -322,12 +324,47 @@ The embedded digits appear to be an export timestamp in `YYMMDDHHMMSS` form — 
 2002-11-21 17:48:11, `Pylon.avi010829125438` is 2001-08-29 12:54:38 — which fits the game's
 development window. Names are opaque identifiers matched by CRC; none of this is parsed.
 
-## Out of scope
+## Cubemaps
 
-**Cubemaps.** Two entries — `FX/envmapbasic.mat` and `FX/envmapglass.txm` — store a `CUBE` file
-holding a 64×64 A8R8G8B8 DirectDrawSurface with a single level and `DDSCAPS2_CUBEMAP` plus all six
-face bits, 98,432 bytes of `128 + 6 × 64 × 64 × 4`. `readCUBE` returns `undefined`; `Texture` has
-nowhere to put six faces.
+Two entries — `FX/envmapbasic.mat` and `FX/envmapglass.txm` — store a `CUBE` file holding a 64×64
+A8R8G8B8 DirectDrawSurface with a single level and `DDSCAPS2_CUBEMAP` plus all six face bits,
+98,432 bytes of `128 + 6 × 64 × 64 × 4`. Nothing else in the corpus carries the file, and neither
+of the two also carries a `MIPS`.
+
+The container is one ordinary surface whose payload is six whole mip chains back to back, in the
+order the face bits are numbered: **+X, −X, +Y, −Y, +Z, −Z**. One header describes all of them, so
+every face shares the dimensions, pixel format and level count. `readDirectDrawSurface` returns
+them as `surfaces`, one chain per face — a plain texture has one, a cubemap six — and a partial
+cubemap is refused rather than read at offsets its missing faces would have shifted.
+
+`CubeTexture` is a separate interface from `Texture` rather than a flag on it, discriminated by
+`storage: 'cube'`. Putting the faces in `levels` would mean one face standing in for the whole
+with the other five hidden behind it; as it is, uploading a cubemap as a 2D texture is a type
+error instead of a silently wrong render.
+
+**Both write back byte for byte**, which needs the writer to know that the cubemap header is not
+the one `writeMIPS` emits. The two forms disagree on four fields, and each follows the retail
+files it has:
+
+| Field                  | `MIPS` (4,447 files)          | `CUBE` (2 files)                        |
+| ---------------------- | ----------------------------- | --------------------------------------- |
+| `DDSD_CAPS`            | clear                         | **set**                                 |
+| `DDSD_MIPMAPCOUNT`     | set, even for a single level  | **absent**, `dwMipMapCount` zero        |
+| `dwPitchOrLinearSize`  | one row, or the top level     | **zero**, with neither pitch flag       |
+| `dwCaps`               | `DDSCAPS_TEXTURE`             | plus `DDSCAPS_COMPLEX` and `DDSCAPS_ALPHA` |
+
+None of that is a rule the format imposes; it is what the two tools that wrote this data did.
+`DDSCAPS_ALPHA` is emitted for a cubemap whose pixel format has an alpha mask, mirroring
+`DDPF_ALPHAPIXELS` — but **both retail cubemaps are A8R8G8B8, so "when the format has alpha" and
+"always, on a cubemap" fit the evidence equally**. The flat surfaces settle nothing either: the
+`rgba16_5551` ones carry an alpha mask and set no such bit. A cubemap with an opaque pixel format
+would decide it, and retail has none.
+
+A cubemap carrying more than one level per face is likewise unattested. The writer flags the mip
+count when there is a chain to count and leaves it zero otherwise, which reproduces what retail
+has and generalizes the way the flat form does.
+
+## Out of scope
 
 **openFLAME paletted textures.** The four `EQUIPMENT/MODELS/HARDWARE/no_*.3db` files hold an
 `openFLAME 3D N-mesh` tree left over from *Conquest: Frontier Wars*, with a nested texture library
@@ -358,10 +395,10 @@ in [COMPOUND.md](COMPOUND.md).
 | `readTextures(root)`              | Reads `Texture library` from a file root; yields nothing when absent |
 | `writeTextures(textures)`         | Builds a `Texture library` directory                          |
 | `readTexture(entry)`              | Reads one entry, trying each form in turn                     |
-| `writeTexture(texture)`           | Writes one entry, in the form `Texture.storage` names         |
+| `writeTexture(texture)`           | Writes one entry, in the form `TextureStorage` names          |
 | `readMIPS(entry)` / `writeMIPS`   | Reads / writes a `MIPS` DirectDrawSurface                     |
 | `readMIP(entry)` / `writeMIP`     | Reads / writes a `MIP0..n` Targa chain                        |
-| `readCUBE(entry)`                 | **Not implemented** — always `undefined`                      |
+| `readCUBE(entry)` / `writeCUBE`   | Reads / writes a `CUBE` cubemap, six faces in one surface      |
 | `readAnimatedTexture(entry)`      | Reads the frame rectangle list                                |
 | `writeAnimatedTexture(texture)`   | Writes `Texture count`, `Frame count`, `FPS` and `Frame rects` |
 | `getTextureCount(texture)`        | Number of sibling atlases the frames index into               |
@@ -376,8 +413,8 @@ malformed texture does not hide the rest of the library.
 The writers refuse what they cannot express rather than emitting something plausible: a
 block-compressed or 16-bit texture stored as a Targa chain, a bottom-up bitmap stored as a
 DirectDrawSurface (DDS is top-down unconditionally, and no reader here reorders rows), a mip
-level whose buffer does not match the dimensions it would be read back at, or a `CUBE` — which
-`readCUBE` cannot produce in the first place.
+level whose buffer does not match the dimensions it would be read back at, a surface count that
+is neither one nor six, or a set of cubemap faces whose chains disagree in length.
 
 ```ts
 import { Directory } from '@treewyrm/utf2json'
@@ -387,8 +424,9 @@ const root = Directory.read(await readFile('li_ships.txm'))
 const textures = [...readTextures(root)]
 
 for (const texture of textures)
-  if (texture.type !== 'animated')
-    console.log(texture.name, texture.type, texture.width, texture.height, texture.levels.length)
+  if (texture.type === 'animated') console.log(texture.name, texture.frames.length, 'frames')
+  else if (texture.storage === 'cube') console.log(texture.name, texture.type, '6 faces')
+  else console.log(texture.name, texture.type, texture.width, texture.height, texture.levels.length)
 
 root.append(writeTextures(textures))
 ```

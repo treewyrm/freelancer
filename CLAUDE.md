@@ -135,13 +135,16 @@ The `surf` chunk is a verbatim memory image of **`IVP_Compact_Surface`** from Ip
 
 ### Texture (`src/texture/`)
 
-`Texture library` directories, found in `.txm` and `.mat` files and embedded in `.3db`/`.cmp`/`.dfm`/`.sph`. `readTextures(root)` takes a file root like `readVMeshLibrary` does. An entry holds one of four forms: a whole DirectDrawSurface in `MIPS`, a chain of uncompressed Targas in `MIP0..n`, an animation over sibling atlas entries (`Frame rects`), or a `CUBE` cubemap. Reading and writing are complete for the first three; `CUBE` is unimplemented in both directions, since `Texture` has nowhere to put six faces.
+`Texture library` directories, found in `.txm` and `.mat` files and embedded in `.3db`/`.cmp`/`.dfm`/`.sph`. `readTextures(root)` takes a file root like `readVMeshLibrary` does. An entry holds one of four forms: a whole DirectDrawSurface in `MIPS`, a chain of uncompressed Targas in `MIP0..n`, an animation over sibling atlas entries (`Frame rects`), or a `CUBE` cubemap. **All four read and write.**
 
-`Texture.storage` (`dds` or `targa`) says which image form an entry uses, because the pixel format does not: retail authored `rgb24_888` as 1,787 Targa chains and two surfaces. `writeTexture` follows it rather than guessing, and refuses what a form cannot express — a block-compressed texture as a Targa chain, a bottom-up bitmap as a DirectDrawSurface.
+`TextureStorage` (`dds`, `targa` or `cube`) says which image form an entry uses, because the pixel format does not: retail authored `rgb24_888` as 1,787 Targa chains and two surfaces. `writeTexture` follows it rather than guessing, and refuses what a form cannot express — a block-compressed texture as a Targa chain, a bottom-up bitmap as a DirectDrawSurface.
+
+**A cubemap is `CubeTexture`, a sibling of `Texture` rather than a flag on it**, discriminated by `storage: 'cube'` and holding `faces` — six mip chains, `+X, -X, +Y, -Y, +Z, -Z` — where a flat texture holds `levels`. Folding them into `levels` would mean one face standing in for the whole with the other five hidden behind it; as it is, uploading a cubemap as a 2D texture is a type error. `readDirectDrawSurface` returns `surfaces`, one chain per face, and a partial cubemap is refused rather than read at the offsets its missing faces would have shifted. The union of all three entry kinds is `TextureEntry`.
 
 What round-trips, all pinned by `corpus.test.ts`:
 
 - **Every one of the 4,447 DirectDrawSurfaces, byte for byte.** The 128-byte header is derived, not carried — retail varies only dimensions, mip count, pixel format and the mipmap caps bit. Two quirks are reproduced deliberately: `DDSD_CAPS` stays clear even though `dwCaps` is populated, and `DDSD_MIPMAPCOUNT` is set on the single-level surface too.
+- **Both cubemaps, byte for byte** — which needs the writer to know the `CUBE` header is not the `MIPS` one. They reverse both quirks above (`DDSD_CAPS` set, no mip count and a zero `dwMipMapCount`), carry no pitch, and add `DDSCAPS_COMPLEX` and `DDSCAPS_ALPHA` to `dwCaps`. Neither is a rule the format imposes; each form follows the tool that wrote it. **`DDSCAPS_ALPHA` is written when the pixel format has an alpha mask, but both retail cubemaps are A8R8G8B8, so that rule and "always, on a cubemap" fit the evidence equally** — and the flat surfaces contradict the first, since the `rgba16_5551` ones carry an alpha mask and set no such bit. A multi-level cubemap is unattested too; the writer flags the mip count when there is a chain to count.
 - **All twelve animated textures**, now that `Texture count` is written. It stays derived (highest frame index plus one, which holds across the corpus) rather than modelled, so `AnimatedTexture` has no field that can disagree with its own frames.
 - **629 of the 2,400 Targa chains.** The rest cannot: 1,668 are colour-mapped and the palette is not carried, 102 are 16-bit and the expansion to 24 does not invert, and one declares attribute bits. Those come back larger with the same pixels. What holds everywhere is that **writing is a fixed point** — what is written reads back identical and writes again to the same bytes. See [TEXTURE.md](docs/TEXTURE.md).
 
@@ -150,7 +153,7 @@ Two decisions worth not re-litigating, both measured against retail and pinned b
 - **No `dxt1a` texture type.** DXT1's punch-through mode is per block, selected by the endpoint ordering inside the block, and nothing in the container records it — not one retail DXT1 texture sets `DDPF_ALPHAPIXELS`. `COMPRESSED_RGBA_S3TC_DXT1_EXT` decodes both modes correctly, so the distinction buys nothing.
 - **No `alpha` flag on `Texture`.** Blending is decided by the material that binds the texture, through the `Oc`/`Ot` tokens in its `Type` string, never by the texture itself.
 
-`Texture.flip` reports the vertical origin rather than reordering rows — DDS is always top-down, Targa is bottom-up unless descriptor bit 5 is set (nine retail textures). Whether Freelancer honours that bit is still unresolved; see [TEXTURE.md](docs/TEXTURE.md), which also records the openFLAME paletted form as deliberately out of scope.
+`flip` reports the vertical origin rather than reordering rows — DDS is always top-down, Targa is bottom-up unless descriptor bit 5 is set (nine retail textures). Whether Freelancer honours that bit is still unresolved; see [TEXTURE.md](docs/TEXTURE.md), which also records the openFLAME paletted form as deliberately out of scope — now the only form `readTexture` returns `undefined` for.
 
 ### Material (`src/material/`)
 

@@ -7,7 +7,7 @@ import { getResourceId } from '../hash.js'
 import type { AnimatedTexture } from './animation.js'
 import { readTextures } from './library.js'
 import { readTexture, writeTexture } from './library.js'
-import type { Texture } from './types.js'
+import type { CubeTexture, Texture, TextureEntry } from './types.js'
 
 /**
  * Every UTF container that carries a texture library. Libraries live in `.txm` and `.mat` files
@@ -36,7 +36,7 @@ interface Entry {
   where: string
   path: string
   entry: Directory
-  texture: Texture | AnimatedTexture | undefined
+  texture: TextureEntry | undefined
 }
 
 /**
@@ -55,11 +55,23 @@ const entries = () =>
     })),
   ))
 
+/**
+ * Every flat texture: neither an animation, which carries no pixels, nor a cubemap, which has
+ * six mip chains where these have one.
+ */
 const images = () =>
   entries().filter((entry): entry is Entry & { texture: Texture } => {
     const { texture } = entry
-    return texture !== undefined && texture.type !== 'animated'
+    return texture !== undefined && texture.type !== 'animated' && texture.storage !== 'cube'
   })
+
+const cubemaps = () =>
+  entries().filter(
+    (entry): entry is Entry & { texture: CubeTexture } =>
+      entry.texture !== undefined &&
+      entry.texture.type !== 'animated' &&
+      entry.texture.storage === 'cube',
+  )
 
 const named = (list: { where: string }[]) => list.map(({ where }) => where).sort()
 
@@ -222,7 +234,7 @@ describe('retail asset corpus', { skip }, () => {
 
       for (const { root } of assets()) count += [...readTextures(root)].length
 
-      strictEqual(count, 6859)
+      strictEqual(count, 6861)
     })
   })
 
@@ -246,7 +258,8 @@ describe('retail asset corpus', { skip }, () => {
         rgb16_565: 20,
         rgb24_888: 1789,
         rgba16_5551: 24,
-        rgba32_8888: 613,
+        // 613 flat textures, plus the two cubemaps.
+        rgba32_8888: 615,
       })
     })
 
@@ -317,10 +330,11 @@ describe('retail asset corpus', { skip }, () => {
           }),
       )
 
-      deepStrictEqual(
-        [...formats].sort(),
-        ['16:7c00,3e0,1f,8000', '16:f800,7e0,1f,0', '24:ff0000,ff00,ff,0'],
-      )
+      deepStrictEqual([...formats].sort(), [
+        '16:7c00,3e0,1f,8000',
+        '16:f800,7e0,1f,0',
+        '24:ff0000,ff00,ff,0',
+      ])
     })
   })
 
@@ -474,7 +488,7 @@ describe('retail asset corpus', { skip }, () => {
   describe('writing back', () => {
     const rewritten = () =>
       entries()
-        .filter((entry): entry is Entry & { texture: Texture | AnimatedTexture } => !!entry.texture)
+        .filter((entry): entry is Entry & { texture: TextureEntry } => !!entry.texture)
         .map((entry) => ({ ...entry, written: writeTexture(entry.texture) }))
 
     it('reproduces every DirectDrawSurface byte for byte', () => {
@@ -507,7 +521,8 @@ describe('retail asset corpus', { skip }, () => {
      */
     it('reproduces the Targa chains that were already uncompressed RGB', () => {
       const chains = rewritten().filter(
-        ({ entry, texture }) => texture.type !== 'animated' && !entry.getFile('MIPS'),
+        ({ entry, texture }) =>
+          texture.type !== 'animated' && texture.storage !== 'cube' && !entry.getFile('MIPS'),
       )
 
       strictEqual(chains.length, 2400)
@@ -537,9 +552,7 @@ describe('retail asset corpus', { skip }, () => {
 
     /** Reading prefers `MIPS`, so the Targa chain beside it was already dead weight. */
     it('drops the dead Targa chain from the four entries that carry both', () => {
-      const both = rewritten().filter(
-        ({ entry }) => entry.getFile('MIPS') && entry.getFile('MIP0'),
-      )
+      const both = rewritten().filter(({ entry }) => entry.getFile('MIPS') && entry.getFile('MIP0'))
 
       deepStrictEqual(named(both), [
         'SHIPS/LIBERTY/li_capships.mat :: Damage_128.tga',
@@ -574,10 +587,19 @@ describe('retail asset corpus', { skip }, () => {
           strictEqual(reread.width, texture.width, where)
           strictEqual(reread.height, texture.height, where)
           strictEqual(reread.flip, texture.flip, where)
-          strictEqual(reread.levels.length, texture.levels.length, where)
 
-          for (const [index, level] of reread.levels.entries())
-            deepStrictEqual(level, texture.levels[index], `${where}: level ${index}`)
+          // Compared as chains so a cubemap's six are all checked, not just the first.
+          const before = texture.storage === 'cube' ? texture.faces : [texture.levels]
+          const after = reread.storage === 'cube' ? reread.faces : [reread.levels]
+
+          strictEqual(after.length, before.length, where)
+
+          for (const [face, chain] of after.entries()) {
+            strictEqual(chain.length, before[face]!.length, `${where}: face ${face}`)
+
+            for (const [index, level] of chain.entries())
+              deepStrictEqual(level, before[face]![index], `${where}: face ${face} level ${index}`)
+          }
         }
 
         ok(same(written, writeTexture(reread)), `${where}: second write differs`)
@@ -585,28 +607,24 @@ describe('retail asset corpus', { skip }, () => {
     })
   })
 
-  /**
-   * The two forms `readTexture` deliberately returns undefined for. Cubemaps are unimplemented;
-   * the openFLAME paletted textures are out of scope because Freelancer cannot load them either.
-   */
-  describe('unsupported entries', () => {
-    const unsupported = () => entries().filter(({ texture }) => texture === undefined)
-
-    it('degrades to undefined rather than throwing', () => {
-      strictEqual(unsupported().length, 10)
-    })
-
-    it('is two cubemaps, both single-level 64x64 A8R8G8B8 with all six faces', () => {
-      const cubes = unsupported().filter(({ entry }) => entry.getFile('CUBE'))
-
-      deepStrictEqual(named(cubes), [
+  describe('cubemaps', () => {
+    it('is two entries, and they are the only ones storing a CUBE file', () => {
+      deepStrictEqual(named(cubemaps()), [
         'FX/envmapbasic.mat :: envmapbasic',
         'FX/envmapglass.txm :: envmapglass',
       ])
 
-      for (const { where, entry } of cubes) {
-        const file = entry.getFile('CUBE')!
-        const { width, height, bitCount, compressed, caps2, payload } = header(file)
+      // Nothing else in the corpus carries the file, so `MIPS` never has to compete with it.
+      const files = entries().filter(({ entry }) => entry.getFile('CUBE'))
+      strictEqual(files.length, 2)
+      for (const { where, entry } of cubemaps()) ok(!entry.getFile('MIPS'), `${where}: also MIPS`)
+    })
+
+    it('decodes six single-level 64x64 A8R8G8B8 faces from one surface', () => {
+      for (const { where, entry, texture } of cubemaps()) {
+        const { width, height, bitCount, compressed, caps2, payload } = header(
+          entry.getFile('CUBE')!,
+        )
 
         strictEqual(width, 64, where)
         strictEqual(height, 64, where)
@@ -615,10 +633,70 @@ describe('retail asset corpus', { skip }, () => {
         // DDSCAPS2_CUBEMAP plus all six face bits.
         strictEqual(caps2, 0xfe00, where)
         strictEqual(payload, 6 * 64 * 64 * 4, `${where}: expected six uncompressed faces`)
+
+        strictEqual(texture.type, 'rgba32_8888', where)
+        strictEqual(texture.width, 64, where)
+        strictEqual(texture.height, 64, where)
+        ok(texture.flip, where)
+
+        // The whole payload is accounted for: six faces of one level each, no bytes left over.
+        strictEqual(texture.faces.length, 6, where)
+
+        for (const [face, chain] of texture.faces.entries()) {
+          strictEqual(chain.length, 1, `${where}: face ${face}`)
+          strictEqual(chain[0]!.byteLength, 64 * 64 * 4, `${where}: face ${face}`)
+        }
       }
     })
 
-    it('is otherwise the eight openFLAME paletted textures, which stay out of scope', () => {
+    /**
+     * The header a cubemap carries is not the one `writeMIPS` emits — `DDSD_CAPS` is set, the mip
+     * count is absent and zero, there is no pitch, and `dwCaps` adds `DDSCAPS_COMPLEX` and
+     * `DDSCAPS_ALPHA`. Both files come back byte for byte only because the writer follows them
+     * rather than the flat form.
+     */
+    it('writes back byte for byte', () => {
+      for (const { where, entry, texture } of cubemaps()) {
+        const written = writeTexture(texture)
+
+        deepStrictEqual(
+          written.children.map(({ name }) => name),
+          ['CUBE'],
+          where,
+        )
+        ok(same(entry, written), where)
+      }
+    })
+
+    /** Faces are stored +X, -X, +Y, -Y, +Z, -Z, and nothing else in the file says so. */
+    it('keeps the faces distinct and in the order the surface stores them', () => {
+      for (const { where, entry, texture } of cubemaps()) {
+        const file = entry.getFile('CUBE')!
+        const source = new Uint8Array(file.buffer, file.byteOffset, file.byteLength)
+        const size = 64 * 64 * 4
+
+        for (const [face, chain] of texture.faces.entries())
+          deepStrictEqual(
+            chain[0]!,
+            source.slice(128 + face * size, 128 + (face + 1) * size),
+            `${where}: face ${face} decoded from the wrong offset`,
+          )
+      }
+    })
+  })
+
+  /**
+   * The one form `readTexture` deliberately returns undefined for: the openFLAME paletted
+   * textures are out of scope because Freelancer cannot load them either.
+   */
+  describe('unsupported entries', () => {
+    const unsupported = () => entries().filter(({ texture }) => texture === undefined)
+
+    it('degrades to undefined rather than throwing', () => {
+      strictEqual(unsupported().length, 8)
+    })
+
+    it('is the eight openFLAME paletted textures, which stay out of scope', () => {
       const paletted = unsupported().filter(({ entry }) => entry.getDirectory('Palette 8 bit'))
 
       strictEqual(paletted.length, 8)

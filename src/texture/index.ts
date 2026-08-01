@@ -1,4 +1,11 @@
-export { type Texture, type TextureType, type TextureStorage } from './types.js'
+export {
+  type CubeFaces,
+  type CubeTexture,
+  type Texture,
+  type TextureEntry,
+  type TextureType,
+  type TextureStorage,
+} from './types.js'
 export {
   type AnimatedTexture,
   type AnimatedTextureFrame,
@@ -9,6 +16,7 @@ export {
 export {
   type DirectDrawSurface,
   Compression,
+  CUBEMAP_FACES,
   readDirectDrawSurface,
   writeDirectDrawSurface,
 } from './dds.js'
@@ -25,6 +33,7 @@ export {
   readMIPS,
   readTexture,
   readTextures,
+  writeCUBE,
   writeMIP,
   writeMIPS,
   writeTexture,
