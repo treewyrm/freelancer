@@ -81,7 +81,7 @@ The keyframes that drive these degrees of freedom live in the `Animation` direct
 
 ### Where `Cyl` comes from
 
-Every joint record here is **Conquest: Frontier Wars** structure, unchanged. Digital Anvil's earlier game uses the same UTF container and declares these in `Libs/Include/PERSISTCOMPOUND.H` — the same lineage that leaves an `openFLAME 3D N-mesh` tree in four Freelancer `EQUIPMENT/MODELS/HARDWARE` files (see [VMESH.md](VMESH.md)). The record sizes the corpus test measures against retail `.cmp` files match those structs field for field:
+Every joint record here is **Conquest: Frontier Wars** structure, unchanged. Digital Anvil's earlier game uses the same UTF container and declares these in `Libs/Include/PERSISTCOMPOUND.H` — the same lineage that leaves an `openFLAME 3D N-mesh` tree in four Freelancer `EQUIPMENT/MODELS/HARDWARE` files (see [RETAIL.md](RETAIL.md)). The record sizes the corpus test measures against retail `.cmp` files match those structs field for field:
 
 | CFW struct      | Layout after the two 64-byte names                                         | Size |
 | --------------- | -------------------------------------------------------------------------- | ---- |

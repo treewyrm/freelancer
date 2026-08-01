@@ -72,6 +72,10 @@ export interface TransformPoint {
   z: AnimatedCurve
 }
 
+// TODO: observe in game. Retail carries exactly two words here — 0x00050304 and 0x80050304 — so
+// only the enable bit is ever varied and the rest cannot be read off the data. They select neither
+// which channels are present (the payload is always nine curves) nor which are used (the same word
+// covers every combination of populated channels). See the TODO section in docs/ALCHEMY.md.
 export const enum TransformFlags {
   None = 0,
   Unknown1 = 1 << 2,

@@ -225,7 +225,7 @@ A census over all 1852 retail `.cmp` and `.3db` files turns up 550 distinct node
 | `Extent tree`         | 14                      | Exporter bounding-volume hierarchy: `Sphere`/`Tube`/`Cylinder`/`Box` nesting through `Children`, bottoming out in a `Convex mesh` of vertex, edge, face and normal lists. Collision ships in `.sur` |
 | `Mass properties`     | 5                       | `Mass` float32, `Center of mass` Vector3, `Inertia tensor` Matrix3 — real values, not placeholders                                                                                                  |
 | `Rigid body`          | 4                       | Wrapper around `Mass properties` and `Extent tree`                                                                                                                                                  |
-| `openFLAME 3D N-mesh` | 4                       | Conquest: Frontier Wars leftovers, neither supported nor used by Freelancer — see [VMESH.md](VMESH.md)                                                                                              |
+| `openFLAME 3D N-mesh` | 4                       | Conquest: Frontier Wars leftovers, neither supported nor used by Freelancer — see [RETAIL.md](RETAIL.md)                                                                                            |
 | `Mesh`                | 1                       | `FX/MISC/tlrtube.3db` only. Freelancer's own, not openFLAME: residue of `FxMeshAppearance`, an unfinished feature — see below                                                                       |
 
 `Extent tree`, `Mass properties` and `Rigid body` look like editor state the exporter failed to strip; the game takes collision from `.sur` and mass from INI files.
@@ -264,3 +264,23 @@ if (model.type === 'compound') {
   console.log(mount?.parent.name, mount?.hardpoint.position)
 }
 ```
+
+---
+
+## TODO
+
+### What `MAFlags` selects
+
+`MAFlags` is a `uint32` on every `MaterialAnim` entry, `2` in 78 of the 82 and `0` in the other four. The value round-trips untouched and nothing in this module reads it. Two settings across 82 entries is too little to correlate against anything in the file, so the reading has to come from the game.
+
+The four zero entries are the test: set each to `2`, and set a couple of the `2`s to `0`, and watch the surface they drive. A looping banner that stops looping, an animation that stops playing, or a scroll that reverses each names the bit directly. Until then `flags` stays a bare number rather than a named enum.
+
+### What the engine does with `MAKeys`
+
+`MAKeys` is not `MADeltas` integrated — [What `MAKeys` is not](#what-makeys-is-not) shows no fixed alignment between the two survives the corpus, so both are read and neither is derived. What is still unknown is which of them actually drives the UV transform in game, and what the other contributes: whether `MAKeys` sets the absolute offset and scale at each segment boundary with `MADeltas` interpolating between, or whether the velocities drive continuously and the keys are a correction the engine snaps to.
+
+`BASES/RHEINLAND/rh_01_bizmark_cityscape.cmp` is the readable subject — a banner that holds a frame for 3.3 seconds and flips in 0.0667 — because a wrong reading there is visible as a mistimed flip rather than a subtly wrong scroll rate. Zeroing `MADeltas` while leaving `MAKeys` intact, and then the reverse, says which file the animation is actually coming from.
+
+### `FX/MISC/tlrtube.3db`'s animated UV set
+
+`UV0_anim`, `UV0_anim_lookup`, `UV0_frame_count`, `UV0_fps` and `UV0_interpolate` occur in no other retail asset, and the layout is plain enough to guess at. It stays unread because the feature it belongs to — `FxMeshAppearance` — crashes Freelancer when a particle spawns for it, so there is no in-game behaviour to validate a reader against. **This one is blocked rather than pending**: it needs the crash understood first, not an experiment designed.

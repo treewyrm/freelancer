@@ -384,7 +384,9 @@ of eight paletted entries:
 Freelancer cannot load these, so neither will this library. `readTexture` returns `undefined`
 rather than throwing. The same files carry openFLAME geometry, covered by the *pre-VMesh assets*
 cases in [`src/vmesh/corpus.test.ts`](../src/vmesh/corpus.test.ts) and by the joint lineage notes
-in [COMPOUND.md](COMPOUND.md).
+in [COMPOUND.md](COMPOUND.md). [RETAIL.md](RETAIL.md) lists all five openFLAME files and the
+vocabulary that identifies them; note that `SOLAR/BLACKHOLE/bh_flute4.pte` nests the palette the
+other way round, one `Palette 8 bit` under **each** `MIP0..n`, plus `U wrap mode` / `V wrap mode`.
 
 ---
 
@@ -430,3 +432,34 @@ for (const texture of textures)
 
 root.append(writeTextures(textures))
 ```
+
+---
+
+## TODO
+
+### Does Freelancer honour the Targa origin bit?
+
+Nine retail Targa chains set bit 5 of the image descriptor, selecting a top-left origin against
+Targa's bottom-left default. The reader reports it through `Texture.flip` rather than reordering
+rows, so a consumer that finds out either way needs no decode change — but which way is right is
+unresolved, and the nine are conspicuous: HUD backdrops, lightning, flares, an explosion impact.
+
+They are their own test. If Freelancer honours the bit, those nine appear the same way up as
+everything else; if it ignores the bit and always reads bottom-up, they appear flipped in game, and
+being sprites and flares is exactly why nobody would have noticed while authoring them. Compare one
+against its own pixels — `INTERFACE/HUD/hud.txm :: backdrop` has an unambiguous up.
+
+Clearing the bit on a chain and reading the pixels back the other way is the confirming edit, but
+the observation alone settles it.
+
+### `DDSCAPS_ALPHA` on a cubemap
+
+`writeDirectDrawSurface` emits it for a cubemap whose pixel format carries an alpha mask, mirroring
+`DDPF_ALPHAPIXELS`. Both retail cubemaps are A8R8G8B8, so *"when the format has alpha"* and
+*"always, on a cubemap"* fit the two files equally, and the flat surfaces settle nothing — the
+`rgba16_5551` ones carry an alpha mask and set no such bit.
+
+Retail has no opaque cubemap and no cubemap with more than one level per face, so both generalizations
+are unattested. Writing a DXT1 or `rgb16_565` cube into `FX/envmapbasic.mat` and seeing whether the
+game loads it, renders it, or refuses is the only way to learn which rule its loader applies —
+and the same edit with a full mip chain per face tests the second.

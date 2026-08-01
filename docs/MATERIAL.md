@@ -261,3 +261,31 @@ groups bound to a transparent material kept in parts separate from the opaque on
 in its own part, not merged into the hull. Opaque groups are drawn front to back, then transparent
 groups back to front with depth writes disabled. This is a constraint on how assets are built, not
 something this module enforces.
+
+---
+
+## TODO
+
+### The wrap mode in `*_flags` — bits 4 and 6
+
+`flmaterials.dll` proves the word is *wrap mode, U address mode, V address mode*, and the two
+address modes account for the low four bits. That leaves bits 4 and 6 as the wrap mode, and their
+behaviour across 8,208 slots is described but not explained:
+
+- **bit 6 is set on every slot**, in every slot kind — nothing distinguishes it from a constant.
+- **bit 4 appears only on `Bt` and `Et`**, never on `Dt`, `Dm`, `Dm0` or `Dm1` — exactly where a
+  second texture coordinate set is wanted, and matching the second UV set `BtDetailMapMaterial`
+  is documented to use.
+
+Both bits round-trip untouched, so the experiment is direct and safe:
+
+1. Clear bit 4 on a `Bt_flags` of a detail material and look at the surface in game. If the detail
+   layer starts sampling the base UV set — tiling at the wrong rate rather than disappearing — the
+   bit selects the coordinate set.
+2. Set bit 4 on a `Dt_flags`, where retail never has it. A base map that starts sampling UV1 on a
+   mesh that has one confirms the same reading from the other side.
+3. Clear bit 6 anywhere. If nothing changes it is a constant the exporter writes; if the slot stops
+   sampling, it is an enable.
+
+Until one of those runs, `TextureFlags` keeps the neutral names `Unknown0` (bit 4) and `Unknown1`
+(bit 6), and the partition of the word into 2 + 2 + n bits stays inference.

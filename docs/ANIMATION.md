@@ -250,3 +250,29 @@ const script = getScript(readAnimationLibrary(root), 'Sc_open dock')
 for (const map of script?.maps ?? [])
   console.log(map.parent, sampleChannel(map.channel, 1.25))
 ```
+
+---
+
+## TODO
+
+### Does Freelancer's loader accept an event channel?
+
+`0x08` is `PersistDT_EVENT`, inherited from Conquest: Frontier Wars along with the rest of the low
+nibble, and paired there with an `Event map` directory beside `Object map` and `Joint map`.
+Freelancer authored none: across 3117 retail scripts no channel sets the bit and no third map stem
+occurs, so its payload layout is unknown here and `validateChannelType` rejects it.
+
+What retail cannot say is whether the *engine* still decodes it. The code descends from the same
+source, and an unused branch is cheaper to leave in than to remove. Authoring a script that sets
+`0x08` and loading the model answers it three ways: the game refuses the file, or it loads and
+ignores the channel, or it loads and something fires. Only the third is worth chasing, and it would
+give the payload layout the corpus cannot.
+
+Note that MAXLancer repurposes the bit to write a pair of floats for cylinder joints. Anything
+observed has to be checked against a file this library wrote, not one MAXLancer did, or the two
+conventions get confused.
+
+Cylinder joints themselves are **not** on this list — see
+[Why cylinder joints cannot be animated](#why-cylinder-joints-cannot-be-animated). A cylinder needs
+2 floats and no combination of the type bits comes to 2; CFW's own exporter has no cylinder branch
+either. That question is closed, not pending.

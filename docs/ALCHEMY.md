@@ -459,3 +459,60 @@ Re-exports the public surface of the module:
 ;(EaseType, WrapFlags)
 ;(floatAt, colorAt, curveAt, transformAt)
 ```
+
+---
+
+## TODO
+
+Open questions this module cannot settle from the data. Each one is an experiment in the running game, not a gap in the reader: everything below reads and writes correctly and round-trips byte for byte, so a one-byte edit is a controlled test. Items that a `todo` test reports on every run are marked.
+
+### `TransformFlags` — what the low bits do
+
+`Node_Transform` carries a `uint32` of flags before its nine curves. Only bit 31 is understood: it gates whether any data follows. The rest are named `Unknown1..5` and combined as `Default`.
+
+**Retail never varies them.** A sweep over all 5,590 transform properties in the corpus turns up exactly **two** words:
+
+| Word         | Bits set           | Count | Payload   |
+| ------------ | ------------------ | ----- | --------- |
+| `0x00050304` | 2, 8, 9, 16, 18    | 4,301 | none      |
+| `0x80050304` | the same, plus 31  | 1,289 | nine curves |
+
+They fall on `Node_Transform` (5,575 — one per node), the unnamed `0x0BA0B3BB` on `FLBeamAppearance` (11, never enabled) and `MeshApp_ParticleTransform` (4, one enabled).
+
+Two things follow. **The low bits cannot be selecting which channels are present**: the payload is nine curves whenever bit 31 is set, and the whole library round-trips byte for byte, which a size-varying field could not do. **They are not selecting which channels are *used* either**, at least not in any way the data records — the word is constant while the set of channels that actually carry keyframes varies seven ways beneath it:
+
+| Populated channels | Enabled transforms |
+| ------------------ | ------------------ |
+| rotation only      | 595                |
+| position, rotation | 471                |
+| position only      | 207                |
+| scale only         | 7                  |
+| all three          | 4                  |
+| rotation, scale    | 3                  |
+| position, scale    | 2                  |
+
+So what is left for the bits is *how* the curves are applied — space (node-local against emitter or world), rotation order or units, whether the transform tracks the emitter after spawn — none of which the file distinguishes, because every file makes the same choice.
+
+That leaves flipping them. `FX/EXPLOSIONS/gf_explosion_debris_trail01.ale` is the best subject: three `FxConeEmitter` nodes with position, rotation and scale all animated, on an effect that plays whenever anything blows up. `FX/MISC/gf_contrail01.ale` (rotation and scale) and `FX/MISC/gravity_well.ale` (scale alone) isolate fewer channels.
+
+1. Clear one low bit at a time on `Node_Transform` and fly. A bit that changes nothing on a node using all three channels is not a channel or space selector.
+2. If the effect stops rendering or the node snaps to the origin, the bit is a required enable of some kind, and the pairing tells which channel or which space.
+3. Setting a bit retail never sets (anything outside `0x80050304`) tests whether the engine masks the word or validates it.
+
+Until then `Default` stays a single opaque constant rather than five separately meaningful names, and `transformAt` ignores the low bits entirely.
+
+### Easing type 6
+
+Two `FLDustAppearance` alpha envelopes use an easing byte the `EaseType` enum does not define, and easing 6 and `FLDustAppearance` imply one another across the whole corpus. `ease` treats it as `Linear` — a placeholder, not a reading. The controlled one-byte experiment on `dust.ale` is written out in [Easing outside the enum](#easing-outside-the-enum). `evaluation.test.ts` carries the `todo` test *names easing type 6*.
+
+### A key landing on the end of a wrap-free curve
+
+`limit` folds such a key back to the start, so the last keyframe of a curve carrying no wrap flags is never sampled — right for a curve meant to loop, wrong for one meant to hold, and the data does not say which. Marked `TODO` in `evaluation.ts` and carried as a `todo` test.
+
+### The four `Effect` floats
+
+Version 1.1 libraries carry `unknown1..4` per effect. `unknown4` is never negative and ranges to 56 while the other three are unconstrained in sign — consistent with a centre and radius bounding the effect, unconfirmed. An in-game test is to inflate `unknown4` on a small effect and see whether it survives being culled at a distance or off the edge of the screen where it previously vanished.
+
+### The five unnamed property hashes
+
+Four on `FLBeamAppearance`, one on `FLDustField` — types recovered from the stream, labels missing. Three are booleans that never vary, so only editing them says anything: flip each on a beam effect and watch what changes.

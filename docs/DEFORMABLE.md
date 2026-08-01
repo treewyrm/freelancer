@@ -188,6 +188,32 @@ case, so the engine reads either.
   `torture_root.cmp` on one test asset) and the animation scripts live in that file. See
   [ANIMATION.md](ANIMATION.md).
 
+## TODO
+
+### Does anything read `Edge_angles`?
+
+Two files carry `Edge_indices` and `Edge_angles` on 36 face groups, the angles descending within a
+group — the shape a mesh simplifier leaves behind when it ranks edges by crease sharpness. Nothing
+is known to read them: Librelancer's face group parser does not, and the other 202 models do without
+them. They are carried only because dropping them would silently shrink two files.
+
+The experiment is subtractive. `br_female_elite_body.dfm` and `br_female_guard_body.dfm` both write
+back byte for byte, so deleting the two files from one group and loading the character says whether
+the engine wants them: if it is a simplifier artefact nothing changes, and if the engine uses them
+for LOD collapse or for smoothing normals across the crease, that group will look different at
+distance or under a moving light. Doing it on the elite and leaving the guard intact keeps a control
+standing next to it.
+
+If it turns out nothing reads them, they stay carried anyway — round-trip fidelity is the reason
+they are here, not a belief that they matter.
+
+### The four-level models
+
+`Fractions` runs `1, 0.8, 0.6, 0.4, 0.2, 0.1` on 202 models and `1, 0.8, 0.6, 0.2` on two. What
+distance each fraction stands for comes from the INI that places the character, not from the file,
+so how the engine maps a four-entry set onto the same distance bands is not derivable here — it
+wants watching a four-level character switch levels as the camera pulls back.
+
 ## References
 
 - [Librelancer `src/LibreLancer/Utf/Dfm`](https://github.com/Librelancer/Librelancer/tree/main/src/LibreLancer/Utf/Dfm)
