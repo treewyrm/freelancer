@@ -54,55 +54,97 @@ Sampling 382,231 triangles across every rigid part that carries vertex normals: 
 `(b-a) × (c-a)` agrees with the stored vertex normal in **381,539** of them and opposes it in 692,
 with one degenerate triangle. Not one part of 6,962 is majority-reversed.
 
-So the index order is counter-clockwise when read with a right-handed cross product, and
-`gl.frontFace(gl.CCW)` — the default — is correct **as long as you upload positions unchanged**.
+So the index order is counter-clockwise when read with a right-handed cross product. That does
+**not** make `gl.frontFace(gl.CCW)` — the default — correct, and an earlier revision of this
+document said it did.
 
 Freelancer's space is left-handed (D3D, +Z into the screen). Two consistent choices, and only two:
 
 | Import | Projection | Front face | Notes |
 |---|---|---|---|
-| Positions verbatim | left-handed (map +Z to increasing depth) | `gl.CCW` | Hardpoint axes, joint axes and `.sur` hulls stay comparable to the data |
+| Positions verbatim | left-handed (map +Z to increasing depth) | `gl.CW` | Hardpoint axes, joint axes and `.sur` hulls stay comparable to the data |
 | Negate Z on import | ordinary right-handed GL | `gl.CW` | Every axis, normal and matrix must be mirrored too, consistently |
 
-Mirroring one and not the other is the classic failure: the model renders inside-out, and turning
-culling off "fixes" it while leaving the lighting wrong.
+**Both rows are `gl.CW`**, and the front face is the one thing the choice does not change: negating
+Z mirrors the scene *and* the camera that looks at it, and a mirror of both renders the identical
+image. What the rows really trade off is whether the imported data still matches the file.
+
+Why a right-handed winding presents clockwise: GL's NDC is left-handed — x right, y up, z
+increasing away from the viewer. In the pipeline GL is usually described with, view space is
+right-handed, so the projection reverses handedness exactly once, and that reversal is what makes
+the `CCW` default right. Here view space is already left-handed, the reversal never happens, and a
+triangle whose right-handed normal faces the camera stays clockwise in window coordinates.
+
+Measured by projecting retail triangles through an actual left-handed `lookAt`/`perspective` pair
+with the camera placed out along each stored normal: **18,268 clockwise against 2**, and the mirror
+image of that with the camera on the far side.
+
+Getting it wrong renders the model inside-out, and turning culling off "fixes" it while leaving the
+lighting wrong. Mirroring positions without mirroring the axes and matrices with them fails the
+same way.
 
 **No part transform mirrors.** Every joint rotation (14,412 records) and every hardpoint orientation
 (12,053) has determinant **+1** to within 1e-2, and all are orthonormal. So winding never flips
 per-part, and a rotation's inverse is its transpose.
 
-### Matrices upload verbatim — but the JS helpers disagree about rotation sense
+### Matrices upload transposed, and `Matrix3.transform` is the odd one out
 
-A `Matrix3` on disk is nine floats: `x.x x.y x.z`, `y.x y.y y.z`, `z.x z.y z.z`. In D3D's row-vector
-convention those are the three **rows**, and `e1 · M` is the first row. In GLSL's column-vector
-convention `mat3(...)` from the same nine floats has those triples as **columns**, and `M * e1` is
-the first column — the same vector. The two conventions are transposes of each other twice over, so:
+A `Matrix3` on disk is nine floats: `x.x x.y x.z`, `y.x y.y y.z`, `z.x z.y z.z`. Those triples are
+the **rows** of an ordinary column-vector rotation matrix. The part's axes are therefore the
+*columns* of the stored triples, not the triples themselves, and reaching GLSL means a transpose:
 
 ```js
-// correct: no transpose, no reordering
-gl.uniformMatrix3fv(loc, false, new Float32Array([x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z]))
+// correct: the triples become the rows of the mat3
+gl.uniformMatrix3fv(loc, true, new Float32Array([x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z]))
+
+// same thing written out, transpose flag off
+gl.uniformMatrix3fv(loc, false, new Float32Array([x.x, y.x, z.x, x.y, y.y, z.y, x.z, y.z, z.z]))
 ```
 
-For a 4×4 with translation, those go in columns 0–2 and `position` in column 3.
+For a 4×4 with translation, those nine go in as rows and `position` in column 3.
 
-Two measured traps inside [`src/math/`](../src/math):
+> An earlier revision of this document said the opposite — "no transpose, no reordering" — on the
+> grounds that D3D's row-vector rows and GLSL's column-vector columns are the same nine floats. The
+> identity is real but it answers a different question: it says *if* the triples are the images of
+> the basis vectors then either convention reproduces them, and the measurement below is that they
+> are not. Uploading untransposed rotates backwards every part whose rest rotation is not identity
+> — among the 929 driven joints alone that is 635 of them — and it reads as a misassembled model
+> rather than as a mirror, which is what makes it slow to place.
 
-- **`Quat.transform` rotates the opposite way from `Matrix3.transform`.** They are self-consistent
-  within their own families — `Quat.fromMatrix(Matrix3.fromQuaternion(q))` round-trips `q` exactly —
-  but `Matrix3.transform(v, Matrix3.fromQuaternion(q))` equals `Quat.transform(v, Quat.conjugate(q))`.
-  Crossing between them, which a renderer does the moment it slerps an animation keyframe onto a
-  joint's rest matrix, silently reverses the rotation. Pick one family, convert at the boundary with
-  `Matrix3.fromQuaternion`, and let only matrices reach the shader.
+Measured on ships whose weapon hardpoints span both the hull, whose part carries no joint, and
+rotated wings: guns fire forward whichever part holds them, so the two must agree in root space.
+Transposed they come out **exactly parallel on every ship measured**; untransposed three of seven
+scatter, one to 0.631. Confirmed visually across the Liberty ships.
+
+**A hardpoint's `orientation` is the same `Matrix3` from the same exporter and wants the same
+treatment.** Its local Z axis is the third *column* of the triples-as-rows. Reading one of the two
+matrices each way is a trap worth naming: it cancels along any chain that uses both, which can make
+a wrong convention look right, or a right one look wrong.
+
+Three consequences for [`src/math/`](../src/math), given that reading — two traps and one
+retraction:
+
+- **`Matrix3.transform` and `Matrix3.lookAt` apply the inverse of what the file means.** They take
+  the triples for the axes, so `Matrix3.transform(v, M)` rotates by the transpose of `M`.
+  `Matrix3.fromQuaternion` and `Matrix3.axisAngle` are the ones that agree with the file — they
+  emit rows. So of the two families it is **`Matrix3.transform` that is the deviant, not `Quat`**,
+  which an earlier revision had the other way round. Convert at the boundary with
+  `Matrix3.fromQuaternion` and let only matrices reach the shader; just do not use
+  `Matrix3.transform` to check your work.
 
   ```js
   Quat.transform({x:1,y:0,z:0}, Quat.axisAngle({axis: Vector3.z, angle: Math.PI/2}))  // (0,  1, 0)
   Matrix3.transform({x:1,y:0,z:0}, Matrix3.axisAngle(Vector3.z, Math.PI/2))          // (0, -1, 0)
   ```
 
-- **`Matrix3.push` and `Transform.push` compose in opposite orders.** `Transform.push` yields
-  `parent ∘ child`, which is what a hierarchy wants; `Matrix3.push` yields `child ∘ parent`. Both
-  unit tests happen to use commuting inputs, so neither pins the order down. Do not accumulate a
-  joint chain with `Matrix3.push`.
+- **`Matrix3.multiply` and `Quat.multiply` take their arguments in opposite orders.**
+  `Quat.multiply(a, b)` applies `b` first; `Matrix3.multiply(a, b)` applies `a` first. Neither is
+  wrong, and both unit tests use commuting inputs, so nothing in the suite pins either down.
+
+- **`Matrix3.push` and `Transform.push` agree**, and both yield `parent ∘ child`, which is what a
+  hierarchy wants — a joint chain can be accumulated with either. An earlier revision claimed
+  `Matrix3.push` yields `child ∘ parent`; that followed from taking the triples for axes, and under
+  the reading above it does not. Verified against `Quat.multiply` as an independent reference.
 
 ---
 
@@ -358,6 +400,10 @@ no reason to reach for instancing before profiling says so.
 then the part's world transform. They are what equipment, effects and (for characters) whole body
 parts attach to. All 12,053 have determinant +1, so an attached model never mirrors.
 
+`orientation` is a `Matrix3` and takes the same transpose as a joint's `rotation` (§2) — its local
+axes are the columns of the stored triples. Reading the two matrices with different conventions
+cancels out along the chain, so a mounted gun can point the right way for the wrong reason.
+
 ---
 
 ## 6. Materials
@@ -488,12 +534,13 @@ find:
 2. Diffuse colour read as RGBA instead of BGRA (§3.1).
 3. `TEXTURE_MAX_LEVEL` unset on a chain that stops at 4×4 — black textures (§7).
 4. `UNPACK_ALIGNMENT` left at 4 for `rgb24_888` — sheared image (§7).
-5. Z negated for a right-handed projection without flipping `frontFace` — inside-out hull (§2).
+5. `frontFace` left at the `gl.CCW` default — inside-out hull. Neither import convention wants it;
+   both are `gl.CW` (§2).
 6. `vertexEnd` treated as exclusive — the last vertex of every group missing (§3.2).
-7. A quaternion crossed into matrix space without `Matrix3.fromQuaternion` — joints animate
-   backwards (§2).
-8. `Matrix3.push` used for the joint chain — wrong composition order wherever rotations do not
-   commute (§2).
+7. A `Matrix3` uploaded untransposed — every part whose rest rotation is not identity assembles
+   rotated backwards, which reads as a broken model rather than as a mirror (§2).
+8. A joint's `rotation` and a hardpoint's `orientation` read with different conventions — the error
+   cancels along a chain that uses both, so it can hide, or frame the wrong suspect (§2).
 9. UV `v` flipped in some paths and not others — textures upside down only on the Targa half of a
    model (§7).
 10. `Two` ignored — one-sided cockpit glass and foliage (§6).
