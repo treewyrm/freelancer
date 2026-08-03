@@ -161,8 +161,23 @@ export function hermiteAt(animation: LoopAnimation<VectorKeyframe>, key: number)
   /** Continue effect. */
   const accumulate = (last.value.x - first.value.x) * count
 
+  // Tangents are stored per unit of key, and `hermite` takes them per unit of `span`, so they
+  // convert by the width of the interval being crossed. Retail key axes are not normalized —
+  // 9322 of 9324 adjacent intervals are something other than 1, and one rotation curve in
+  // `gf_neutronstar.ale` is keyed over 0..360 — so dropping this scales every tangent by
+  // 1/delta. Only 562 of 25081 keyframes carry a tangent at all, which is why it stayed
+  // invisible: the rest are flat and reduce to the same smooth step either way.
+  //
+  // Degenerate lists need no guard. `at` skips zero-length spans, and a single keyframe comes
+  // back as `start === end`, making delta zero while span is 0 or 1 — where `hermite` returns
+  // the endpoint and never reads a tangent. That is 11791 of the retail lists.
+  const delta = end.key - start.key
+
   // Add loop distance for accumulative result.
-  return hermite(start.value.x, start.value.z, end.value.x, end.value.y, span) + accumulate
+  return (
+    hermite(start.value.x, start.value.z * delta, end.value.x, end.value.y * delta, span) +
+    accumulate
+  )
 }
 
 export function curveAt(animation: AnimatedCurve, p: number, t: number): number {

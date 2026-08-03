@@ -52,6 +52,17 @@ export function writeString(value: string): BufferView {
     .writeBuffer(buffer)
 }
 
+/**
+ * Blend factor, which is `D3DBLEND` verbatim: `Zero` is 1 against `D3DBLEND_ZERO` = 1, and every
+ * entry lines up from there. Zero itself is not a D3D value — the enum starts at 1 — so it stands
+ * for the property being unset.
+ *
+ * `BothSourceAlpha` and `BothInverseSourceAlpha` are the two D3D8 modes that set the destination
+ * factor implicitly, and Direct3D accepts them only as a source. Retail uses one of them once, as a
+ * *target*: `gf_small_damage.ale`'s `gf_small_damage_smoke2.app` writes 13. That is an authoring
+ * slip rather than a mode — the artist picked a dropdown entry the API would refuse — but the byte
+ * is real, and naming it is better than handing back a number that matches nothing.
+ */
 export enum BlendingMode {
   None,
   Zero,
@@ -65,6 +76,8 @@ export enum BlendingMode {
   DestinationColor,
   InverseDestinationColor,
   SourceAlphaSAT,
+  BothSourceAlpha,
+  BothInverseSourceAlpha,
 }
 
 export interface Blending {

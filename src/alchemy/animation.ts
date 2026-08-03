@@ -76,7 +76,7 @@ export interface TransformPoint {
 // only the enable bit is ever varied and the rest cannot be read off the data. They select neither
 // which channels are present (the payload is always nine curves) nor which are used (the same word
 // covers every combination of populated channels). See the TODO section in docs/ALCHEMY.md.
-export const enum TransformFlags {
+export enum TransformFlags {
   None = 0,
   Unknown1 = 1 << 2,
   Unknown2 = 1 << 8,
