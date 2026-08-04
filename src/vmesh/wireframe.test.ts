@@ -1,8 +1,8 @@
 import { deepStrictEqual, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import Directory from '../utf/directory.js'
-import File from '../utf/file.js'
-import BufferView from '../utility/bufferview.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
+import BufferView from '#/utility/bufferview.js'
 import { readVMeshWire, writeVMeshWire, type VMeshWire } from './wireframe.js'
 
 /** Canonical wireframe: indices relative to vertexStart, so they begin at 0. */

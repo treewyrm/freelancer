@@ -1,10 +1,10 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { load, skip } from '../corpus.js'
-import type Directory from '../utf/directory.js'
-import type File from '../utf/file.js'
-import BufferView from '../utility/bufferview.js'
-import Vector4 from '../math/vector4.js'
+import { load, skip } from '#/corpus.js'
+import type Directory from '#/utf/directory.js'
+import type File from '#/utf/file.js'
+import BufferView from '#/utility/bufferview.js'
+import Vector4 from '#/math/vector4.js'
 import {
   ChannelType,
   keyframeByteLength,

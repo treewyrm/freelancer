@@ -1,11 +1,11 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
-import * as corpus from '../../corpus.js'
-import { read as readDocument } from '../index.js'
+import * as corpus from '#/corpus.js'
+import { read as readDocument } from '#/thn/index.js'
 import { read } from './read.js'
 import { write } from './write.js'
 import { ENTITY_TYPES, EVENT_TYPES } from './data.js'
-import type { Document, Value } from '../types.js'
+import type { Document, Value } from '#/thn/types.js'
 import type { Entity, Event, Script } from './types.js'
 
 /**

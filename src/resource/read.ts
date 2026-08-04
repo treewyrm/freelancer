@@ -1,5 +1,5 @@
 import type { Resource, ResourceId } from './types.js'
-import BufferView from '../utility/bufferview.js'
+import BufferView from '#/utility/bufferview.js'
 import {
   DIRECTORY_RESOURCE,
   DOS_SIGNATURE,

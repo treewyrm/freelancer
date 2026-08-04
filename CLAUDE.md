@@ -315,6 +315,7 @@ RIGID, MATERIAL, TEXTURE, DEFORMABLE, RENDERER, INI, SCHEMA, THN, THORN and RESO
 - All imports use `.js` extensions (NodeNext resolution, even for `.ts` sources).
 - `noUncheckedIndexedAccess` — array indexing returns `T | undefined`.
 - Internal package imports use the `#/*` alias (`./src/*` in development, `./dist/*` at runtime).
-  Within a module, relative imports; across modules, the alias.
+  **`../` never appears in an import** — `./` only for a sibling or a child, `#/` for anything else,
+  including a nested module reaching its own parent (`ini/binary/read.ts` imports `#/ini/types.js`).
 - Prefer type-enforced invariants over redundant fields: model distinctions as discriminated unions
   so a wrong consumer breaks at compile time.

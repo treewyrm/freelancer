@@ -1,6 +1,6 @@
 import type { Document, Property, Section, Value } from './types.js'
 import { getObjectId } from '#/hash.js'
-import { equals as sameName } from '../utility/string.js'
+import { equals as sameName } from '#/utility/string.js'
 import { toText } from './value.js'
 
 /**

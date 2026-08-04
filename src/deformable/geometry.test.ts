@@ -1,7 +1,7 @@
 import { deepStrictEqual, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import Directory from '../utf/directory.js'
-import File from '../utf/file.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
 import { writeFloat32Array, writeUint32Array } from './arrays.js'
 import { readGeometry, writeGeometry, type Geometry, type UVBone } from './geometry.js'
 

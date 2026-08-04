@@ -1,12 +1,12 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { load, skip } from '../corpus.js'
-import type Directory from '../utf/directory.js'
-import type File from '../utf/file.js'
-import { listTreeElements } from '../utility/tree.js'
-import { readConstraints, writeConstraints, type Constraint } from '../compound/constraint.js'
+import { load, skip } from '#/corpus.js'
+import type Directory from '#/utf/directory.js'
+import type File from '#/utf/file.js'
+import { listTreeElements } from '#/utility/tree.js'
+import { readConstraints, writeConstraints, type Constraint } from '#/compound/constraint.js'
 import { readMaterialAnimLibrary, writeMaterialAnim } from './materialanim.js'
-import { isCompoundModel } from '../compound/model.js'
+import { isCompoundModel } from '#/compound/model.js'
 import { readRigidModel, writeRigidModel } from './rigid.js'
 
 /** Record size of each constraint file, the two 0x40-byte name fields included. */

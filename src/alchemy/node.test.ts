@@ -1,7 +1,7 @@
 import { deepStrictEqual, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { getResourceId } from '../hash.js'
-import BufferView from '../utility/bufferview.js'
+import { getResourceId } from '#/hash.js'
+import BufferView from '#/utility/bufferview.js'
 import { writeString } from './misc.js'
 import {
   getNodeByCRC,

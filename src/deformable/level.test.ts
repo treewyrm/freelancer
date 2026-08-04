@@ -1,6 +1,6 @@
 import { deepStrictEqual, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import Directory from '../utf/directory.js'
+import Directory from '#/utf/directory.js'
 import type { Geometry } from './geometry.js'
 import { readLevel, readLevels, writeLevel, writeLevels, type Level } from './level.js'
 

@@ -20,7 +20,7 @@
  *   literals, because a number here is a `number` and not the text it was written as.
  */
 
-import type { Value } from '../types.js'
+import type { Value } from '#/thn/types.js'
 import type {
   AxisName,
   EntityTypeName,

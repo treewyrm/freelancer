@@ -16,7 +16,7 @@
  */
 import crc32 from './crc32.js'
 import id32 from './id32.js'
-import { encode } from './utility/encoding.js'
+import { encode } from '#/utility/encoding.js'
 
 export type Hashable = number | string | ArrayBufferView | ArrayBufferLike
 

@@ -1,6 +1,6 @@
 import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import BufferView from '../utility/bufferview.js'
+import BufferView from '#/utility/bufferview.js'
 import { readSurfaceLibrary, writeSurfaceLibrary } from './library.js'
 import { readExtent, writeExtent, type Extent } from './extent.js'
 import { readPoint, writePoint, type Point } from './point.js'

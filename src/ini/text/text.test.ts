@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import { read } from './read.js'
 import { write } from './write.js'
-import * as value from '../value.js'
+import * as value from '#/ini/value.js'
 
 describe('read', () => {
   it('reads sections and properties in order', () => {

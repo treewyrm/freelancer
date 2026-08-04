@@ -1,7 +1,7 @@
 import * as bytecode from './bytecode/index.js'
 import * as text from './text/index.js'
 import type { Document } from './types.js'
-import { decode, encode } from '../utility/encoding.js'
+import { decode, encode } from '#/utility/encoding.js'
 
 export * from './types.js'
 export * as value from './value.js'

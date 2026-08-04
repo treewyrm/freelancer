@@ -1,10 +1,10 @@
 import { deepStrictEqual, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import Directory from '../utf/directory.js'
-import File from '../utf/file.js'
-import Matrix3 from '../math/matrix3.js'
-import Vector3 from '../math/vector3.js'
-import BufferView from '../utility/bufferview.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
+import Matrix3 from '#/math/matrix3.js'
+import Vector3 from '#/math/vector3.js'
+import BufferView from '#/utility/bufferview.js'
 import { getBone, readBone, writeBone, type Bone } from './bone.js'
 
 const rotation: Matrix3 = {

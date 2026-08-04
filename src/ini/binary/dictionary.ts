@@ -1,4 +1,4 @@
-import { byteLengthOf, encode } from '../../utility/encoding.js'
+import { byteLengthOf, encode } from '#/utility/encoding.js'
 
 /**
  * The names-and-values block at the end of a BINI, built the way the original compiler built it.

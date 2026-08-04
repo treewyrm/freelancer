@@ -1,7 +1,7 @@
 import { deepStrictEqual, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import Directory from '../utf/directory.js'
-import BufferView from '../utility/bufferview.js'
+import Directory from '#/utf/directory.js'
+import BufferView from '#/utility/bufferview.js'
 import { readVMeshRef, writeVMeshRef, type VMeshRef } from './ref.js'
 import { readVMeshPart, writeVMeshPart, type VMeshPart } from './part.js'
 

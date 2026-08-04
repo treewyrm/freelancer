@@ -1,6 +1,6 @@
 import { deepStrictEqual, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import BufferView from '../utility/bufferview.js'
+import BufferView from '#/utility/bufferview.js'
 import { byteLength, readVMeshGroup, writeVMeshGroup, type VMeshGroup } from './group.js'
 
 const sample = (): VMeshGroup => ({

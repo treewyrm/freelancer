@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import { isBytecode, read } from './read.js'
 import { ConstantTag, OPCODE_BYTES, OPCODES } from './data.js'
-import * as value from '../value.js'
+import * as value from '#/thn/value.js'
 
 /**
  * A constant pool entry: a number as decimal ASCII, or a string with a length that counts the NUL.

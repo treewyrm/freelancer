@@ -1,5 +1,5 @@
-import type { Document, Section, Value } from '../types.js'
-import BufferView from '../../utility/bufferview.js'
+import type { Document, Section, Value } from '#/ini/types.js'
+import BufferView from '#/utility/bufferview.js'
 import {
   HEADER_BYTE_LENGTH,
   MAX_NAME_OFFSET,

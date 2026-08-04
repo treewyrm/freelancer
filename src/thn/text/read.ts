@@ -1,5 +1,5 @@
-import type { Document, Entry, Value } from '../types.js'
-import { identifier, number, string } from '../value.js'
+import type { Document, Entry, Value } from '#/thn/types.js'
+import { identifier, number, string } from '#/thn/value.js'
 
 /**
  * Parses a plain-text scene script.

@@ -2,8 +2,8 @@ import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import { read } from './read.js'
 import { write } from './write.js'
-import type { Document } from '../types.js'
-import * as value from '../value.js'
+import type { Document } from '#/thn/types.js'
+import * as value from '#/thn/value.js'
 
 describe('read', () => {
   it('reads assignments in order', () => {

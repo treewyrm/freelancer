@@ -1,6 +1,6 @@
 import type { Value } from './types.js'
-import { atof, atoi, formatFloat32, formatInt32, isInt32 } from '../utility/number.js'
-import { fold } from '../utility/string.js'
+import { atof, atoi, formatFloat32, formatInt32, isInt32 } from '#/utility/number.js'
+import { fold } from '#/utility/string.js'
 
 /** A `boolean` value. Retail contains none — see {@link boolean} in the binary writer's notes. */
 export const boolean = (value: boolean): Value => ({ type: 'boolean', value })

@@ -1,9 +1,9 @@
 import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { load, skip } from '../corpus.js'
-import Directory from '../utf/directory.js'
-import File from '../utf/file.js'
-import BufferView from '../utility/bufferview.js'
+import { load, skip } from '#/corpus.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
+import BufferView from '#/utility/bufferview.js'
 import { readRigidModel, writeRigidModel } from './rigid.js'
 import { isSphere, readSphere, writeSphere, type Sphere } from './sphere.js'
 

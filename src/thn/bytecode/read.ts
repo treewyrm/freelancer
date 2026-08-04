@@ -1,7 +1,7 @@
-import type { Document, Entry, Value } from '../types.js'
-import { identifier, number, string } from '../value.js'
-import BufferView from '../../utility/bufferview.js'
-import { decode } from '../../utility/encoding.js'
+import type { Document, Entry, Value } from '#/thn/types.js'
+import { identifier, number, string } from '#/thn/value.js'
+import BufferView from '#/utility/bufferview.js'
+import { decode } from '#/utility/encoding.js'
 import {
   ConstantTag,
   GAP_BYTE_LENGTH,

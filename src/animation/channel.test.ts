@@ -1,10 +1,10 @@
 import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import Directory from '../utf/directory.js'
-import File from '../utf/file.js'
-import BufferView from '../utility/bufferview.js'
-import Quat from '../math/quat.js'
-import Vector4 from '../math/vector4.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
+import BufferView from '#/utility/bufferview.js'
+import Quat from '#/math/quat.js'
+import Vector4 from '#/math/vector4.js'
 import {
   ChannelType,
   keyframeByteLength,

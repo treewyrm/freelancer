@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
-import * as corpus from '../corpus.js'
+import * as corpus from '#/corpus.js'
 import * as bytecode from './bytecode/index.js'
 import * as text from './text/index.js'
 import { formatOf, read } from './index.js'

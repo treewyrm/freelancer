@@ -2,10 +2,10 @@ import { ok, strictEqual } from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
-import { list, root as data, skip } from '../corpus.js'
+import { list, root as data, skip } from '#/corpus.js'
 import Directory from './directory.js'
 import File from './file.js'
-import BufferView from '../utility/bufferview.js'
+import BufferView from '#/utility/bufferview.js'
 
 const { ENTRY_BYTE_LENGTH: entrySize } = Directory
 

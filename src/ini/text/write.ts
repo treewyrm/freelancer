@@ -1,5 +1,5 @@
-import type { Document, Property, Section } from '../types.js'
-import { toText } from '../value.js'
+import type { Document, Property, Section } from '#/ini/types.js'
+import { toText } from '#/ini/value.js'
 
 export interface WriteOptions {
   /** Line terminator. The game's own tools wrote CRLF. */

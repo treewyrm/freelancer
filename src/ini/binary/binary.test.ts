@@ -3,8 +3,8 @@ import * as assert from 'node:assert/strict'
 import { isBinary, read } from './read.js'
 import { write } from './write.js'
 import Dictionary from './dictionary.js'
-import type { Document } from '../types.js'
-import * as value from '../value.js'
+import type { Document } from '#/ini/types.js'
+import * as value from '#/ini/value.js'
 
 /** Assembles a BINI by hand so a reader test does not depend on the writer. */
 const bini = (sections: number[], dictionary: string): Uint8Array => {

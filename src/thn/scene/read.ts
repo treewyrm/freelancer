@@ -1,5 +1,5 @@
-import type { Document, TableValue, Value } from '../types.js'
-import * as value from '../value.js'
+import type { Document, TableValue, Value } from '#/thn/types.js'
+import * as value from '#/thn/value.js'
 import {
   ATTACH_FLAGS,
   AXES,

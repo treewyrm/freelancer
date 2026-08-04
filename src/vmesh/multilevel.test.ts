@@ -1,6 +1,6 @@
 import { deepStrictEqual, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import Directory from '../utf/directory.js'
+import Directory from '#/utf/directory.js'
 import { atRange, readMultiLevel, writeMultiLevel, type MultiLevel } from './multilevel.js'
 import { writeVMeshPart, type VMeshPart } from './part.js'
 import type { VMeshRef } from './ref.js'

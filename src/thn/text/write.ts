@@ -1,4 +1,4 @@
-import type { Document, Value } from '../types.js'
+import type { Document, Value } from '#/thn/types.js'
 
 /** Lua 3.2's reserved words. A table key that is one of these cannot be written bare. */
 const RESERVED = new Set([

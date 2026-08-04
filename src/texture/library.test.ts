@@ -1,8 +1,8 @@
 import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import Directory from '../utf/directory.js'
-import File from '../utf/file.js'
-import BufferView from '../utility/bufferview.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
+import BufferView from '#/utility/bufferview.js'
 import { readAnimatedTexture, writeAnimatedTexture, type AnimatedTexture } from './animation.js'
 import { Compression, readDirectDrawSurface, writeDirectDrawSurface } from './dds.js'
 import {

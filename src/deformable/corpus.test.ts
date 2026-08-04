@@ -1,11 +1,11 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { load, skip } from '../corpus.js'
-import Directory from '../utf/directory.js'
-import File from '../utf/file.js'
-import { getResourceId } from '../hash.js'
-import { readMaterials } from '../material/library.js'
-import { listTreeElements } from '../utility/tree.js'
+import { load, skip } from '#/corpus.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
+import { getResourceId } from '#/hash.js'
+import { readMaterials } from '#/material/library.js'
+import { listTreeElements } from '#/utility/tree.js'
 import {
   getBoneModel,
   readDeformableModel,

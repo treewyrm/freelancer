@@ -1,6 +1,6 @@
 import { deepStrictEqual, notStrictEqual, ok, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { quadIn, quadOut, smooth } from '../math/scalar.js'
+import { quadIn, quadOut, smooth } from '#/math/scalar.js'
 import {
   EaseType,
   TransformFlags,

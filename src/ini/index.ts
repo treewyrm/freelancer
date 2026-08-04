@@ -1,7 +1,7 @@
 import * as binary from './binary/index.js'
 import * as text from './text/index.js'
 import type { Document } from './types.js'
-import { decode, encode } from '../utility/encoding.js'
+import { decode, encode } from '#/utility/encoding.js'
 
 export * from './types.js'
 export * from './section.js'
