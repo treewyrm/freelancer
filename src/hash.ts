@@ -1,5 +1,22 @@
+/**
+ * How Freelancer names things, and how a name resolves to a reference.
+ *
+ * Two hashes, and picking the wrong one yields a number rather than an error — the whole reason
+ * they live side by side here rather than one per format module:
+ *
+ * - {@link getResourceId} is plain CRC32 over the table in `EXE/dacom.dll`, and hashes what UTF
+ *   files reference — model parts, material and texture names, mesh library entries, Alchemy nodes.
+ * - {@link getObjectId} is the byte-swapped variant, and hashes INI nicknames — archetypes, system
+ *   objects, the voice files under `DATA/AUDIO`.
+ *
+ * Both fold case by default, because the game compares names with `stricmp`. Alchemy is the one
+ * place that does not: see `alchemy/`, which passes `caseSensitive`.
+ *
+ * Nothing here reads or interprets a format. That is the boundary this module keeps.
+ */
 import crc32 from './crc32.js'
 import id32 from './id32.js'
+import { encode } from './utility/encoding.js'
 
 export type Hashable = number | string | ArrayBufferView | ArrayBufferLike
 
@@ -23,8 +40,6 @@ type FilterByHash = <T>(
 
 type SetByHash = <T>(items: T[], predicate: Hasher<T>, value: T, caseSensitive?: boolean) => void
 
-const encoder = new TextEncoder()
-
 /**
  * Converts ascii characters in buffer to lower case for case insensitive match.
  * @param bytes
@@ -36,12 +51,17 @@ const convertCase = (bytes: Readonly<Uint8Array>, caseSensitive = false): Uint8A
 
 /**
  * Converts hashables into bytes.
+ *
+ * A string is encoded as **windows-1252**, which is the byte sequence the game hashed. UTF-8 agrees
+ * on ASCII, and every name in retail is ASCII, so this only matters for a name a mod invents — but
+ * there the two disagree by whole bytes and the reference stops resolving.
  * @param value Hashable value
- * @param caseSensitive Match character case
  * @returns Unsigned 8-bit integer buffer
+ * @throws RangeError on a character windows-1252 cannot represent, which is a name the game could
+ * not have stored.
  */
 export const toBytes = (value: Exclude<Hashable, number>): Uint8Array => {
-  if (typeof value === 'string') return encoder.encode(value)
+  if (typeof value === 'string') return encode(value)
   if (ArrayBuffer.isView(value))
     return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
   if (value instanceof ArrayBuffer) return new Uint8Array(value)

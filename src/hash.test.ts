@@ -75,6 +75,21 @@ describe('getObjectId', () => {
     notStrictEqual(getObjectId(mesh.name), getResourceId(mesh.name))
   })
 
+  it('matches known nickname hashes', () => {
+    strictEqual(getObjectId('li_elite'), -1220103865)
+    strictEqual(getObjectId('commodity_gold'), -1428760757)
+    strictEqual(getObjectId('Li01'), -2086171057)
+  })
+
+  /**
+   * `initialworld.ini` writes `locked_gate = 2926089285 ;St01_to_St02_hole`, and 2,926,089,285 is
+   * this hash read as unsigned. That is what those values are, and why one has to stay exact: as a
+   * float32 it would come back 2,926,089,248 and resolve to nothing.
+   */
+  it('is the value initialworld.ini stores unsigned', () => {
+    strictEqual(getObjectId('St01_to_St02_hole') >>> 0, 2926089285)
+  })
+
   // id32 ors in 0x80000000, so every object id read back as int32 is negative.
   it('always sets the high bit', () => {
     for (const name of ['li_elite', 'Li01_01_base', 'rh_fighter', ''])
@@ -104,6 +119,16 @@ describe('toBytes', () => {
 
   it('reads a whole ArrayBuffer', () => {
     deepStrictEqual([...toBytes(Uint8Array.of(7, 8).buffer)], [7, 8])
+  })
+
+  // windows-1252, not UTF-8. The two agree on ASCII and nothing in retail is anything else, but
+  // where they disagree the game's byte is the one that hashed.
+  it('encodes a high character as the single byte windows-1252 gives it', () => {
+    deepStrictEqual([...toBytes('é')], [0xe9])
+  })
+
+  it('rejects a character windows-1252 cannot carry', () => {
+    throws(() => toBytes('中'), RangeError)
   })
 
   it('rejects anything else', () => {

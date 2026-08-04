@@ -1,6 +1,5 @@
 export { default as BufferView } from './bufferview.js'
 export * as encoding from './encoding.js'
-export * from './hash.js'
 export * from './number.js'
 export * from './string.js'
 export * from './timestamp.js'
