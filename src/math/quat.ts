@@ -69,9 +69,10 @@ const Quat = {
     const d = Vector3.dot(from, to)
 
     if (d < -1 + 1e-6) {
-      const perp = Math.abs(from.x) < 0.9
-        ? Vector3.normalize(Vector3.cross(from, Vector3.x))
-        : Vector3.normalize(Vector3.cross(from, Vector3.y))
+      const perp =
+        Math.abs(from.x) < 0.9
+          ? Vector3.normalize(Vector3.cross(from, Vector3.x))
+          : Vector3.normalize(Vector3.cross(from, Vector3.y))
       return { x: perp.x, y: perp.y, z: perp.z, w: 0 }
     }
 
@@ -82,10 +83,15 @@ const Quat = {
 
   /** Generates quaternion from intrinsic XYZ Euler angles (radians). */
   fromEuler(x: number, y: number, z: number): Vector4 {
-    const hx = x * 0.5, hy = y * 0.5, hz = z * 0.5
-    const cx = Math.cos(hx), sx = Math.sin(hx)
-    const cy = Math.cos(hy), sy = Math.sin(hy)
-    const cz = Math.cos(hz), sz = Math.sin(hz)
+    const hx = x * 0.5,
+      hy = y * 0.5,
+      hz = z * 0.5
+    const cx = Math.cos(hx),
+      sx = Math.sin(hx)
+    const cy = Math.cos(hy),
+      sy = Math.sin(hy)
+    const cz = Math.cos(hz),
+      sz = Math.sin(hz)
 
     return {
       x: sx * cy * cz - cx * sy * sz,

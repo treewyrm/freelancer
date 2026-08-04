@@ -18,7 +18,8 @@ export const fromDOSTimestamp = (value: number): Date =>
     (value & 0x1f) * 2,
   )
 
-export const toFileTime = (date: Date): bigint => (BigInt(date.getTime()) + 11644473600000n) * 10000n
+export const toFileTime = (date: Date): bigint =>
+  (BigInt(date.getTime()) + 11644473600000n) * 10000n
 
 export const fromFileTime = (value: bigint): Date =>
   new Date(Number(value / 10000n - 11644473600000n))

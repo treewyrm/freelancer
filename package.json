@@ -1,12 +1,17 @@
 {
-  "name": "@treewyrm/utf2json",
+  "name": "@treewyrm/freelancer",
   "version": "0.1.0",
-  "description": "UTF (bespoke format used in Freelancer PC game from 2003) processing library.",
+  "description": "Reads and writes the data formats of Freelancer (Digital Anvil, 2003): UTF assets, INI and BINI, THN scene scripts, and the resource DLLs.",
   "keywords": [
     "freelancer",
-    "utf",
+    "digital anvil",
     "game",
-    "digital anvil"
+    "modding",
+    "utf",
+    "ini",
+    "bini",
+    "thn",
+    "thorn"
   ],
   "author": "Yuriy Alexeev",
   "license": "MIT",
@@ -28,6 +33,10 @@
     "./math": {
       "import": "./dist/math/index.js",
       "types": "./dist/math/index.d.ts"
+    },
+    "./utf": {
+      "import": "./dist/utf/index.js",
+      "types": "./dist/utf/index.d.ts"
     },
     "./alchemy": {
       "import": "./dist/alchemy/index.js",
@@ -64,6 +73,38 @@
     "./deformable": {
       "import": "./dist/deformable/index.js",
       "types": "./dist/deformable/index.d.ts"
+    },
+    "./ini": {
+      "import": "./dist/ini/index.js",
+      "types": "./dist/ini/index.d.ts"
+    },
+    "./ini/text": {
+      "import": "./dist/ini/text/index.js",
+      "types": "./dist/ini/text/index.d.ts"
+    },
+    "./ini/binary": {
+      "import": "./dist/ini/binary/index.js",
+      "types": "./dist/ini/binary/index.d.ts"
+    },
+    "./thn": {
+      "import": "./dist/thn/index.js",
+      "types": "./dist/thn/index.d.ts"
+    },
+    "./thn/text": {
+      "import": "./dist/thn/text/index.js",
+      "types": "./dist/thn/text/index.d.ts"
+    },
+    "./thn/bytecode": {
+      "import": "./dist/thn/bytecode/index.js",
+      "types": "./dist/thn/bytecode/index.d.ts"
+    },
+    "./thn/scene": {
+      "import": "./dist/thn/scene/index.js",
+      "types": "./dist/thn/scene/index.d.ts"
+    },
+    "./resource": {
+      "import": "./dist/resource/index.js",
+      "types": "./dist/resource/index.d.ts"
     }
   },
   "main": "./dist/index.js",
@@ -89,6 +130,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/treewyrm/utf2json.git"
+    "url": "git+https://github.com/treewyrm/freelancer.git"
   }
 }

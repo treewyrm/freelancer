@@ -7,8 +7,8 @@
  * [THORN.md](../../../docs/THORN.md).
  *
  * ```ts
- * import * as thn from '@treewyrm/ini2json/thn'
- * import * as scene from '@treewyrm/ini2json/thn/scene'
+ * import * as thn from '@treewyrm/freelancer/thn'
+ * import * as scene from '@treewyrm/freelancer/thn/scene'
  *
  * const script = scene.read(thn.read(bytes))
  * const cameras = script.entities.filter((entity) => entity.type === 'CAMERA')

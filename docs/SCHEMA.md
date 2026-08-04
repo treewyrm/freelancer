@@ -63,8 +63,8 @@ a fixed pair silently invents a second number for 11 sounds.
 
 ### Every property is independently optional
 
-Same conclusion as `Material` in utf2json, for the same reason: **the section name does not predict
-which properties are present.** No `[Object]` carries every `Object` property; most carry a handful.
+Same conclusion as `Material` in [MATERIAL.md](MATERIAL.md), for the same reason: **the section
+name does not predict which properties are present.** No `[Object]` carries every `Object` property; most carry a handful.
 So a typed structure models each property as optional, and **a property that was absent stays absent
 on write-back** rather than being emitted with a default. Defaults belong to the consumer, not the
 serializer — a default written out is a claim about the game's behaviour that the file did not make.
@@ -113,7 +113,7 @@ modules exist rather than guessed now:
 
 1. Whether schemas are runtime objects that infer their TypeScript type, or hand-written types with
    separate read/write functions per section — the first is less to maintain, the second is more
-   readable and matches how utf2json's readers are written today.
+   readable and matches how the UTF readers are written today.
 2. Whether one schema per section is enough, or whether a section's shape genuinely depends on the
    file it appears in. `[Sound]` is the test case: 1,817 occurrences carry a `nickname` and 23,997
    do not, and the split is by file (voice banks vs sound definitions), not by content.
@@ -135,17 +135,14 @@ the useful structural fact in the whole data set:
 - **The three that vary** are `[Sound]` (1,817 / 23,997), `[Voice]` (109 / 90) and `[TrueType]`
   (21 / 1). Each is a real split to model, not an inconsistency to smooth over.
 
-Cross-references are by nickname string, and the game hashes them with **`getObjectId`** (id32) —
-the same function utf2json uses for INI nicknames, and the one that names `DATA/AUDIO` voice files.
-`getResourceId` (CRC32) is the _other_ hash and belongs to UTF resources; using it here silently
-fails to match. Both already exist in `@treewyrm/utf2json`, which is the argument for depending on
-that package rather than restating them:
+Cross-references are by nickname string, and the game hashes them with **`getObjectId`** (id32),
+which is also the function that names `DATA/AUDIO` voice files. `getResourceId` (CRC32) is the
+_other_ hash and belongs to UTF resources; using it here silently fails to match.
 
-**Recommendation: depend on `@treewyrm/utf2json`** for `getObjectId`, `getResourceId` and
-`BufferView`. BINI needs a little-endian cursor over a buffer and `BufferView` already is one; the
-hashes must agree between the two libraries or cross-referencing a UTF asset from an INI breaks.
-The alternative — duplicating three files to keep ini2json standalone — trades a dependency for a
-correctness risk in the one place the two libraries have to agree.
+Both live at the package root, [`src/hash.ts`](../src/hash.ts). They used to be one copy per
+library, with a comment in each saying the two had to agree; the merge is what retired that. Use
+them from there rather than restating either — a hash that drifts does not fail, it resolves to
+nothing.
 
 ## Cross-file references
 
@@ -167,7 +164,7 @@ The data is a graph of files, and the reference is a property whose value is a p
 Paths are **backslash-separated and relative to `DATA`** (`Universe\Systems\Li01\Bases\Li01_01_Base.ini`),
 authored with Windows case-insensitivity and therefore frequently disagreeing with the real
 filename's case. Resolution needs both separator translation and a case-insensitive lookup, exactly
-as utf2json's path lookups fold case through `getResourceId`.
+as UTF path lookups fold case through `getResourceId`.
 
 The library should offer resolution as an explicit opt-in step — `readSystem(path)` returning one
 file's sections, and a separate resolver that walks the graph — so that reading one file never

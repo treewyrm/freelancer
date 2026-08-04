@@ -280,7 +280,10 @@ describe('Quat.nlerp', () => {
   it('result is always a unit quaternion', () => {
     for (const t of [0.25, 0.5, 0.75]) {
       const result = Quat.nlerp(Quat.identity, q90Z, t)
-      assert.ok(Math.abs(Vector4.magnitude(result) - 1) < 1e-10, `t=${t} magnitude ${Vector4.magnitude(result)}`)
+      assert.ok(
+        Math.abs(Vector4.magnitude(result) - 1) < 1e-10,
+        `t=${t} magnitude ${Vector4.magnitude(result)}`,
+      )
     }
   })
 

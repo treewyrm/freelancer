@@ -183,8 +183,9 @@ byte-exact reproduction the model and material modules pin.
 
 ```ts
 import { readFile, writeFile } from 'node:fs/promises'
-import { Directory, getObjectId } from '@treewyrm/utf2json'
-import { toHex } from '@treewyrm/utf2json/utility'
+import { getObjectId } from '@treewyrm/freelancer'
+import { Directory } from '@treewyrm/freelancer/utf'
+import { toHex } from '@treewyrm/freelancer/utility'
 
 const bank = Directory.read(await readFile('DATA/AUDIO/betaleader.utf'))
 
@@ -219,8 +220,9 @@ const named = new Map(
 
 ```ts
 import { readFile, writeFile } from 'node:fs/promises'
-import { Directory, File, getObjectId } from '@treewyrm/utf2json'
-import { toHex, parseHex } from '@treewyrm/utf2json/utility'
+import { getObjectId } from '@treewyrm/freelancer'
+import { Directory, File } from '@treewyrm/freelancer/utf'
+import { toHex, parseHex } from '@treewyrm/freelancer/utility'
 
 const bank = new Directory()
 

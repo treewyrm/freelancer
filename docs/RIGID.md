@@ -208,10 +208,10 @@ import {
   writeCamera,
   writeRigidModel,
   writeSphere,
-} from '@treewyrm/utf2json/rigid'
+} from '@treewyrm/freelancer/rigid'
 ```
 
-The hierarchy a compound model reads into — `Model`, `getModelHardpoint`, `Hardpoint`, `Joint`, `Constraint` — comes from `@treewyrm/utf2json/compound`.
+The hierarchy a compound model reads into — `Model`, `getModelHardpoint`, `Hardpoint`, `Joint`, `Constraint` — comes from `@treewyrm/freelancer/compound`.
 
 ---
 
@@ -247,9 +247,9 @@ So it is an unmodelled **Freelancer** structure for an unfinished **Freelancer**
 ### Example
 
 ```ts
-import { Directory } from '@treewyrm/utf2json'
-import { getModelHardpoint } from '@treewyrm/utf2json/compound'
-import { readRigidModel } from '@treewyrm/utf2json/rigid'
+import { Directory } from '@treewyrm/freelancer/utf'
+import { getModelHardpoint } from '@treewyrm/freelancer/compound'
+import { readRigidModel } from '@treewyrm/freelancer/rigid'
 import { readFileSync } from 'node:fs'
 
 const root = Directory.read(readFileSync('ships/li_fighter.cmp'))

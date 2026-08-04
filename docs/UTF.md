@@ -57,7 +57,11 @@ Each tree entry is 44 bytes and encodes one node (directory or file):
 
 Path lookups (`getDirectory`, `getFile`) compare entry names via `getResourceId` (Freelancer CRC32) for case-insensitive matching.
 
-## API
+## API (`@treewyrm/freelancer/utf`)
+
+```ts
+import { Directory, File, type Entry, type Header } from '@treewyrm/freelancer/utf'
+```
 
 ### `Directory`
 
@@ -86,9 +90,11 @@ Path lookups (`getDirectory`, `getFile`) compare entry names via `getResourceId`
 | `writeStrings(...values)`  | Appends NUL-separated strings                                          |
 | `append(...views)`         | Appends raw `ArrayBufferView` data                                     |
 
-## Hashing (`@treewyrm/utf2json`)
+## Hashing (`@treewyrm/freelancer`)
 
-Hash helpers are exported from the package root alongside `Directory` and `File`.
+Hashing is the package root, not part of `./utf`: an `.ale` names a node the way a `.cmp` names a
+mesh, and an INI names an archetype a different way, so it belongs to no one format. It is
+documented here because UTF path lookups are its first consumer.
 
 ```ts
 import {
@@ -98,7 +104,7 @@ import {
   getObject,
   filterResources,
   filterObjects,
-} from '@treewyrm/utf2json'
+} from '@treewyrm/freelancer'
 ```
 
 | Export                                     | Description                                       |
@@ -121,7 +127,7 @@ Two hash algorithms match Freelancer's internal conventions:
 
 Both accept `number | string | ArrayBufferView | ArrayBufferLike` and default to case-insensitive matching.
 
-## Utilities (`@treewyrm/utf2json/utility`)
+## Utilities (`@treewyrm/freelancer/utility`)
 
 ```ts
 import {
@@ -135,7 +141,7 @@ import {
   toHex,
   isHex,
   parseHex,
-} from '@treewyrm/utf2json/utility'
+} from '@treewyrm/freelancer/utility'
 ```
 
 ### `BufferView`

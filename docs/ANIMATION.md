@@ -241,8 +241,8 @@ so channel keyframes work directly with the shared `at()` range query that `samp
 built on.
 
 ```ts
-import { getScript, readAnimationLibrary, sampleChannel } from '@treewyrm/utf2json/animation'
-import { Directory } from '@treewyrm/utf2json'
+import { getScript, readAnimationLibrary, sampleChannel } from '@treewyrm/freelancer/animation'
+import { Directory } from '@treewyrm/freelancer/utf'
 
 const root = Directory.read(await readFile('dyson_door.cmp'))
 const script = getScript(readAnimationLibrary(root), 'Sc_open dock')

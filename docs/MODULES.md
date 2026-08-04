@@ -208,7 +208,7 @@ this module is a resolver over a node table more than a set of independent recor
 plus `Layer` 8, `damage_root` 7, `EffectLOD` 6, `JumpGateEffect` 5, `Gate_Tunnel` 4, `BeamBolt` 4,
 `damage_group` 3, `JumpShipEffect` 1, `make_invincible` 1, `dump_cargo` 1, `tumble` 1.
 
-`[Effect]` and `[VisEffect]` are the join to utf2json: a `VisEffect` names an `.ale` file and a node
+`[Effect]` and `[VisEffect]` are the join to the asset side: a `VisEffect` names an `.ale` file and a node
 inside it, which is where an INI reference becomes an Alchemy effect. `[Fuse]` and the
 `destroy_*` / `damage_*` families are the death-sequence scripting and are ordered instruction lists,
 so section order genuinely matters here.
@@ -219,8 +219,8 @@ so section order genuinely matters here.
 
 `[Sound]` has two shapes — 1,817 carry a `nickname`, 23,997 do not — split by file: sound
 definitions vs voice banks. The voice-bank entries are the ones whose names hash to the UTF files in
-`DATA/AUDIO`, so this module pairs directly with utf2json's
-[AUDIO.md](../../utf2json/docs/AUDIO.md).
+`DATA/AUDIO`, so this module pairs directly with
+[AUDIO.md](AUDIO.md).
 
 ## `./interface`
 
@@ -239,7 +239,7 @@ Note `keymap=1.1` — a section name containing `=`, which is why section header
 `Costume` 154, `Accessory` 106, `Head` 104, `Body` 88, `DetailSwitchTable` 7, `PetalAnimations` 7,
 `Skeleton` 7, `RightHand` 6, `LeftHand` 6, `Animations` 1, `Package` 1, `Faction` 1.
 
-Pairs with utf2json's [DEFORMABLE.md](../../utf2json/docs/DEFORMABLE.md): a `[Body]` names the `.dfm`
+Pairs with [DEFORMABLE.md](DEFORMABLE.md): a `[Body]` names the `.dfm`
 and a `[Skeleton]` names the `.anm` that drives it.
 
 ## `./constants` — the root singletons
@@ -253,7 +253,7 @@ Three near neighbours are assigned elsewhere on shape rather than location: `Eng
 `Cursor` (`mouse.ini`) and `IGraph` (`igraph.ini`) to `./interface`.
 
 Small and unglamorous, but it is where a reader first meets `EXE/`-style plain text and the
-`[MaterialMap]` table utf2json's [MATERIAL.md](../../utf2json/docs/MATERIAL.md) already documents.
+`[MaterialMap]` table [MATERIAL.md](MATERIAL.md) already documents.
 
 ---
 
@@ -270,7 +270,7 @@ Four appear across domains and are the argument for shared modules rather than d
 | `Explosion`                                             | `EQUIPMENT`, `FX`   | owned by `./equipment`; also the one section spelled two ways ×86/×70 |
 | `Field`, `TexturePanels`, `AsteroidBillboards`, `Shape` | `SOLAR`, `UNIVERSE` | owned by `./solar`                                                    |
 
-This is the same situation as `compound/` in utf2json — a structure shared byte-for-byte by two
+This is the same situation as `compound/` — a structure shared byte-for-byte by two
 domains gets its own home and neither domain owns it.
 
 ---

@@ -23,7 +23,7 @@ export const decompressRGB = (source: Uint8Array, target: Uint8Array, offset: nu
   if (channels < 3 || channels > 4)
     throw new RangeError(`Invalid decompression block size: ${target.byteLength} bytes`)
 
-    // Unpack 565 colors into color table
+  // Unpack 565 colors into color table
   ;[colors[0], colors[1], colors[2]] = expand565to888(a)
   ;[colors[4], colors[5], colors[6]] = expand565to888(b)
   colors[3] = colors[7] = 0xff

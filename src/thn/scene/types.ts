@@ -10,7 +10,7 @@
  * Consequences worth knowing before using it:
  *
  * - **Every property is independently optional.** The entity type does not predict which keys are
- *   present — the same position as `Material` in utf2json and `[Object]` in INI — and a property that
+ *   present — the same position as `Material` in the UTF material library and `[Object]` in INI — and a property that
  *   was absent stays absent on the way out rather than being written with a default. A default
  *   emitted is a claim about the engine that the file did not make.
  * - **Unrecognised keys are kept, not dropped**, in `unknown`. A modded script survives a

@@ -70,8 +70,8 @@ A part is matched to a model part by `id`, the CRC32 of the part name (`getResou
 The file begins with the signature `vers` (`0x73726576`) followed by a `float32` version, which must be exactly `2.0`. Parts are then read until the view is exhausted.
 
 ```ts
-import { BufferView } from '@treewyrm/utf2json/utility'
-import { readSurfaceLibrary } from '@treewyrm/utf2json/surface'
+import { BufferView } from '@treewyrm/freelancer/utility'
+import { readSurfaceLibrary } from '@treewyrm/freelancer/surface'
 import { readFileSync } from 'node:fs'
 
 const parts = readSurfaceLibrary(BufferView.from(readFileSync('ships/li_fighter.sur')))
@@ -300,7 +300,7 @@ import {
   type Part,
   readSurfaceLibrary,
   writeSurfaceLibrary,
-} from '@treewyrm/utf2json/surface'
+} from '@treewyrm/freelancer/surface'
 ```
 
 `HullType`, the per-structure `read*`/`write*` pairs, and the traversal helpers (`getNodes`, `getHulls`, `getIndices`) are available from their individual modules but are not re-exported by the entry point.

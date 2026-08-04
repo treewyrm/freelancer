@@ -10,12 +10,12 @@ describe('toDOSTimestamp', () => {
   it('encodes each field into the correct bit positions', () => {
     // 2003-03-05 12:34:56
     const ts = toDOSTimestamp(new Date(2003, 2, 5, 12, 34, 56))
-    assert.equal((ts >>> 25) & 0x7f, 23)  // year: 2003 - 1980
-    assert.equal((ts >>> 21) & 0x0f, 3)   // month: March (1-based)
-    assert.equal((ts >>> 16) & 0x1f, 5)   // day
-    assert.equal((ts >>> 11) & 0x1f, 12)  // hour
-    assert.equal((ts >>> 5) & 0x3f, 34)   // minute
-    assert.equal(ts & 0x1f, 28)           // second: 56 >> 1
+    assert.equal((ts >>> 25) & 0x7f, 23) // year: 2003 - 1980
+    assert.equal((ts >>> 21) & 0x0f, 3) // month: March (1-based)
+    assert.equal((ts >>> 16) & 0x1f, 5) // day
+    assert.equal((ts >>> 11) & 0x1f, 12) // hour
+    assert.equal((ts >>> 5) & 0x3f, 34) // minute
+    assert.equal(ts & 0x1f, 28) // second: 56 >> 1
   })
 
   it('encodes the earliest representable date (1980-01-01 00:00:00)', () => {
@@ -37,12 +37,12 @@ describe('fromDOSTimestamp', () => {
   it('decodes each field from the correct bit positions', () => {
     // Manually constructed: 2003-03-05 12:34:56
     const ts =
-      28 |            // second: 56 >> 1 = 28
-      (34 << 5) |     // minute
-      (12 << 11) |    // hour
-      (5 << 16) |     // day
-      (3 << 21) |     // month (1-based)
-      (23 << 25)      // year: 2003 - 1980
+      28 | // second: 56 >> 1 = 28
+      (34 << 5) | // minute
+      (12 << 11) | // hour
+      (5 << 16) | // day
+      (3 << 21) | // month (1-based)
+      (23 << 25) // year: 2003 - 1980
 
     const date = fromDOSTimestamp(ts)
     assert.equal(date.getFullYear(), 2003)

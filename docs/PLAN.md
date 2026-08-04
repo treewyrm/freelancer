@@ -1,6 +1,8 @@
 # PLAN
 
-Merge of `utf2json` and `ini2json` into a single library.
+Merge of `utf2json` and `ini2json` into a single library. **The merge is done** — steps 1–8 below
+are complete and marked; what remains is the cross-reference layer and the three open questions at
+the end.
 
 ## Goal
 
@@ -132,21 +134,38 @@ case-sensitive variant. Picking wrong yields a number, just the wrong one.
 
 ## Steps
 
-1. Scaffold repo, `package.json` exports, tsdown, tsconfig, Prettier — copy from `utf2json`.
-2. Reconcile `utility/`: one `BufferView` (utf2json's, it is the superset), one `string`/`encoding`.
-   Lift hashing out of `utility/` to `src/hash.ts` at `.`, holding both `getResourceId` and
-   `getObjectId`; `crc32`/`id32` stay internal.
-3. Move `utf2json/src/*` in, preserving history where practical; `directory.ts`/`file.ts` land in
-   `utf/`.
-4. Move `ini2json/src/{ini,thn,resource}` in, repointing to the shared `utility/`.
-5. Merge `docs/`, dedupe `RETAIL.md`, rebuild the cross-module `TODO` table.
-6. Merge corpus harnesses into one skip-with-reason mechanism.
-7. Audit third-layer types against invariants 3 and 4; state JSON-safety per module document.
-8. Archive both source repos with a pointer.
+1. ✅ Scaffold repo, `package.json` exports, tsdown, tsconfig, Prettier — copied from `utf2json`.
+2. ✅ Reconcile `utility/`: one `BufferView` (utf2json's, the superset, plus `bytes`,
+   `findTerminator` and `from` on a raw buffer), one `string`. Hashing lifted out of `utility/` to
+   `src/hash.ts` at `.`, holding both `getResourceId` and `getObjectId`; `crc32`/`id32` internal.
+3. ✅ `utf2json/src/*` moved in **with its history** — the repo was initialised from it, so blame
+   survives. `directory.ts`/`file.ts`/`types.ts` landed in `utf/`.
+4. ✅ `ini2json/src/{ini,thn,resource}` moved in, its history merged as an unrelated root, all of
+   it repointed to the shared `utility/` and to `#/hash.js`.
+5. ✅ `docs/` merged; one `RETAIL.md` carrying both corpora, both round-trip tables and one `TODO`
+   index of 23 questions.
+6. ✅ One corpus harness. The two `load` functions meant different things — `glob` is now the
+   pattern sweep, `load` the extension sweep parsed as trees, `raw` the same sweep as bytes.
+7. ✅ Third-layer types swept for invariant 4. **No data field anywhere uses `null` for absence.**
+   The only two `null`s in non-test source are control-flow sentinels, not fields:
+   `readProperty` returns `Property | null` at an Alchemy block terminator, and `reduceTree` passes
+   `parent: T | null` for the root. Neither is a modelled absence, and both are reachable to change
+   to `undefined` later. Invariant 3 is what the per-module corpus round-trips already assert; the
+   table in [RETAIL.md](RETAIL.md#round-trip-fidelity) is that audit.
+8. Archive both source repos with a pointer. *(Left to do by hand — nothing here deletes them.)*
 
-Deferred until after the merge lands: the cross-reference layer (archetype → model, material →
-texture library, fx → node). It is the reason to merge, but it should be designed against a
-settled tree rather than during the move.
+Deferred, as planned: the cross-reference layer (archetype → model, material → texture library,
+fx → node). It is the reason to merge, but it should be designed against a settled tree rather than
+during the move.
+
+### What the merge actually retired
+
+- Two `BufferView` implementations, one of which carried a comment saying it was a deliberate
+  subset "until utf2json is published".
+- Two copies of the `id32` table, each with a comment saying the two had to agree.
+- `getObjectId` living in a UTF library because `AUDIO.md` needed it, and again in an INI library
+  because that is what INI nicknames are.
+- A `SCHEMA.md` recommendation to take a dependency on a package that was never published.
 
 ## Open
 

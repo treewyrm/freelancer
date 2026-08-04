@@ -419,8 +419,8 @@ level whose buffer does not match the dimensions it would be read back at, a sur
 is neither one nor six, or a set of cubemap faces whose chains disagree in length.
 
 ```ts
-import { Directory } from '@treewyrm/utf2json'
-import { readTextures, writeTextures } from '@treewyrm/utf2json/texture'
+import { Directory } from '@treewyrm/freelancer/utf'
+import { readTextures, writeTextures } from '@treewyrm/freelancer/texture'
 
 const root = Directory.read(await readFile('li_ships.txm'))
 const textures = [...readTextures(root)]

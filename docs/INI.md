@@ -244,7 +244,7 @@ than one way in retail:
 | `archetype`       | `Archetype` ×17, `archetype` ×1              |
 
 32 property names are likewise multi-spelled. This is the same situation as `Material library`'s
-three spellings in utf2json, and gets the same answer: **every lookup folds case, no lookup string-
+three spellings in [MATERIAL.md](MATERIAL.md), and gets the same answer: **every lookup folds case, no lookup string-
 compares**, and the writer emits what was read so a round-trip does not normalize the spelling.
 
 Note `Exclusion Zones` — a section name with a **space** in it. Names are not identifiers.
@@ -263,7 +263,7 @@ entirely from `marketgood`.
 
 ## Round-trip
 
-Two guarantees, as in utf2json: **byte-exactness where it is achievable, and writing as a fixed
+Two guarantees, as on the asset side: **byte-exactness where it is achievable, and writing as a fixed
 point everywhere** — what is written reads back identical and writes again to the same bytes.
 
 | Direction                              | Target                                                                   |

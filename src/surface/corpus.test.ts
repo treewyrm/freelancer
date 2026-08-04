@@ -34,8 +34,7 @@ function* parts(): Generator<{ path: string; part: Part }> {
 
 /** Every hull in the corpus, paired with the asset path it came from. */
 function* hulls(): Generator<{ path: string; hull: NonNullable<Node['hull']> }> {
-  for (const { path, part } of parts())
-    for (const hull of getHulls(part.root)) yield { path, hull }
+  for (const { path, part } of parts()) for (const hull of getHulls(part.root)) yield { path, hull }
 }
 
 const terminal = (part: Part) =>

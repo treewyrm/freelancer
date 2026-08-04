@@ -189,5 +189,5 @@ import {
   writeConstraints,
   writeHardpoints,
   writeModel,
-} from '@treewyrm/utf2json/compound'
+} from '@treewyrm/freelancer/compound'
 ```
