@@ -7,10 +7,13 @@ import { isCompoundModel, type Model, readModel, writeModel } from '#/compound/m
 import { readHardpoints, writeHardpoints, type Hardpoint } from '#/compound/hardpoint.js'
 import { isSphere, readSphere, writeSphere, type Sphere } from './sphere.js'
 
+/** What a rigid part hangs its geometry off: one reference, or a switch over several. */
+export type MeshSource = MultiLevel | VMeshPart
+
 export interface Rigid {
   type: 'rigid'
   hardpoints: Hardpoint[]
-  part?: MultiLevel | VMeshPart
+  part?: MeshSource
   wireframe?: VMeshWire
 }
 

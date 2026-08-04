@@ -1,5 +1,6 @@
 export { type Camera, isCamera, readCamera, writeCamera } from './camera.js'
 export {
+  type MeshSource,
   type Rigid,
   type RigidModel,
   type RigidPart,

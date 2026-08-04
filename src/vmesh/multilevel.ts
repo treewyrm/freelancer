@@ -7,6 +7,13 @@ export interface MultiLevel {
   levels: VMeshPart[]
 }
 
+/**
+ * Picks the detail level covering a camera distance.
+ *
+ * `undefined` past the last breakpoint is the model's cue to vanish, so it is returned rather than
+ * clamped away, and the breakpoint list is walked as given — four retail capital ships carry
+ * denormal junk mid-list, and sorting it would change which level shows.
+ */
 export function atRange({ ranges, levels }: MultiLevel, value: number): VMeshPart | undefined {
   for (let i = 0, l = ranges.length - 1, min: number, max: number; i < l; i++) {
     min = ranges[i] ?? 0

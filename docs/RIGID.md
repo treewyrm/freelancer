@@ -41,10 +41,12 @@ The `Cmpnd` subdirectories carry only names and fragment filenames; the hierarch
 ### Types
 
 ```ts
+type MeshSource = MultiLevel | VMeshPart // one reference, or a switch over several
+
 interface Rigid {
   type: 'rigid'
   hardpoints: Hardpoint[]
-  part?: MultiLevel | VMeshPart
+  part?: MeshSource
   wireframe?: VMeshWire // optional edge overlay drawn over the geometry
 }
 
