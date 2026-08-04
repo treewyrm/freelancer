@@ -17,8 +17,10 @@ Two directories outside `DATA` matter here and do not in utf2json:
 
 - **`EXE/`** — `freelancer.ini`, `dacom.ini`, `dacomsrv.ini`, the three plain-text INIs, and the
   only place `@include` appears.
-- **`DLLS/`** — where `strid_name` and `ids_info` resource numbers resolve to strings. Reading PE
-  resources is out of scope; the numbers stay numbers.
+- **`EXE/`** again — the seven **resource DLLs** every `ids_name` and `ids_info` resolves into,
+  read and written by `./resource`. See [RESOURCE.md](RESOURCE.md).
+- **`DLLS/`** — holds only `BIN/content.dll`, which carries a version block and nothing else. The
+  resource numbers do **not** resolve here, a natural guess and a wrong one.
 
 Retail is the authority these readers are measured against, so a claim about the format is worth
 only the count behind it. Every number in these documents comes from a sweep of that install, and
@@ -46,6 +48,17 @@ number that stops matching means the reader drifted, not that the number needs u
 | — number (tag `01`)                  | 282,234                |
 | — string (tag `02`)                  | 160,365                |
 | Identifier reads                     | 155,259, over 55 names |
+| Scene entities                       | 41,250                 |
+| Scene events                         | 50,785                 |
+| Resource DLLs under `EXE`            | 37, all readable       |
+| — libraries Freelancer loads         | 7                      |
+| Resources in those seven             | 6,653                  |
+| — `RT_STRING` blocks                 | 1,334                  |
+| — `RT_HTML` infocards                | 5,307                  |
+| — `RT_VERSION` blocks                | 7                      |
+| String slots (16 per block)          | 21,344                 |
+| — filled                             | 13,121                 |
+| — holes (zero-length)                | 8,223                  |
 
 Distribution by directory:
 
@@ -95,13 +108,17 @@ Each of these decided a design position. The position is in the linked document;
 
 Measured by the `corpus.test.ts` suites against the install, except where the layer does not exist yet.
 
-| Layer                                   | Result                           |
-| --------------------------------------- | -------------------------------- |
-| BINI → interim → BINI                   | **Byte-exact, 1,251 of 1,251**   |
-| BINI → interim → text → interim → BINI  | **Byte-exact, 1,251 of 1,251**   |
-| text → interim → text                   | Fixed point over all 1,252 files |
-| THN bytecode → interim → text → interim | **Exact** over all 1,506 scripts |
-| interim → typed → interim               | Pending the typed layer          |
+| Layer                                   | Result                                                                               |
+| --------------------------------------- | ------------------------------------------------------------------------------------ |
+| BINI → interim → BINI                   | **Byte-exact, 1,251 of 1,251**                                                       |
+| BINI → interim → text → interim → BINI  | **Byte-exact, 1,251 of 1,251**                                                       |
+| text → interim → text                   | Fixed point over all 1,252 files                                                     |
+| THN bytecode → interim → text → interim | **Exact** over all 1,506 scripts                                                     |
+| THN typed → interim → typed             | **Identity** over all 1,506                                                          |
+| THN interim → typed → interim           | Fixed point; 3 of 1,506 are exact and 72 more differ only in how numbers are spelled |
+| DLL → resources → DLL                   | **Exact** over all 37 DLLs in `EXE`                                                  |
+| resources → `.rsrc` section             | **Byte-identical to retail**, 5 libraries of 7 exactly, 2 as a strict prefix         |
+| INI interim → typed → interim           | Pending the typed layer                                                              |
 
 The obstacle known in advance — **dictionary emission order** — turned out not to be one. The order
 is derivable (names in first-use order, then values in first-use order, one shared dedup table), and
@@ -150,16 +167,25 @@ name the symbolic ones. See [THN.md](THN.md#both-export-forms-are-in-live-use).
 Questions the corpus cannot answer, because the answer is a behaviour rather than a byte. Each
 document carries the full argument; this is the index.
 
-| Question                                                                                    | Where                       | Experiment                                                                           |
-| ------------------------------------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------ |
-| Whether the shipped game honours `@include` or whether it was a build-tool directive        | [INI.md](INI.md#todo)       | Add one to a text INI the game reads                                                 |
-| First-wins or last-wins for a repeated scalar property                                      | [SCHEMA.md](SCHEMA.md#todo) | Duplicate a scalar and observe                                                       |
-| Whether `[Sound]`'s two shapes are one section disambiguated by file, or two sharing a name | [SCHEMA.md](SCHEMA.md#todo) | Move a voice-bank `[Sound]` into `sounds.ini`                                        |
-| Whether trailing values past a field's known arity are read or ignored                      | [SCHEMA.md](SCHEMA.md#todo) | Extend a known field by one value                                                    |
-| What the 4-byte gap and header bytes 19–20 of a compiled `.thn` hold                        | [THN.md](THN.md#todo)       | **Read Lua 3.2's `ldump.c`/`lundump.c` first** — probably not a game question at all |
-| What numeric values THORN's identifiers have                                                | [THN.md](THN.md#todo)       | Pair a symbolic script against its numeric twin; confirm against `thorn.dll`         |
+| Question                                                                                    | Where                           | Experiment                                                                           |
+| ------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
+| Whether the shipped game honours `@include` or whether it was a build-tool directive        | [INI.md](INI.md#todo)           | Add one to a text INI the game reads                                                 |
+| First-wins or last-wins for a repeated scalar property                                      | [SCHEMA.md](SCHEMA.md#todo)     | Duplicate a scalar and observe                                                       |
+| Whether `[Sound]`'s two shapes are one section disambiguated by file, or two sharing a name | [SCHEMA.md](SCHEMA.md#todo)     | Move a voice-bank `[Sound]` into `sounds.ini`                                        |
+| Whether trailing values past a field's known arity are read or ignored                      | [SCHEMA.md](SCHEMA.md#todo)     | Extend a known field by one value                                                    |
+| What the 4-byte gap and header bytes 19–20 of a compiled `.thn` hold                        | [THN.md](THN.md#todo)           | **Read Lua 3.2's `ldump.c`/`lundump.c` first** — probably not a game question at all |
+| What the five unplaced event values are — 0, 1, 12, 17, 19                                  | [THORN.md](THORN.md#todo)       | Write a script using one of the names symbolically and see whether the event fires   |
+| What `event_flags` means; bits 1, 2 and 128 occur and 128 dominates                         | [THORN.md](THORN.md#todo)       | Flip a bit on a `START_MOTION` in a scene that plays                                 |
+| Which bit is `PATH_POSITION` and which is `USE_SCRIPT_DURATION`                             | [THORN.md](THORN.md#todo)       | Bit 16 is unclaimed in the attach namespace; suggestive, not evidence                |
+| Whether a rewritten `resources.dll` loads with no entry point                               | [RESOURCE.md](RESOURCE.md#todo) | Replace it with a rewritten one and start the game                                   |
+| Whether an eighth resource library is honoured                                              | [RESOURCE.md](RESOURCE.md#todo) | Add a `DLL =` line and reference an id at `0x70000`                                  |
+| Whether the resource language must be `0x409`                                               | [RESOURCE.md](RESOURCE.md#todo) | Write a library at `LANG_NEUTRAL` and see whether its strings resolve                |
+| Whether the resource code page field is read at all                                         | [RESOURCE.md](RESOURCE.md#todo) | Change it and observe; expected to be invisible                                      |
 
-Closed: whether a plain-text `.thn` loads from the packed install — it does, observed in game
+Closed: what numeric values THORN's identifiers have — the numeric-form scripts resolve all 41,250
+retail entities and 50,785 events by structural correspondence, cross-checked against `thorn.dll`'s
+string-table order and against `D3DLIGHTTYPE` and `D3DFOGMODE` ([THORN.md](THORN.md)). Closed:
+whether a plain-text `.thn` loads from the packed install — it does, observed in game
 ([THN.md](THN.md#the-engine)). Closed: whether the Lua 3.2 opcode numbering is right — the per-opcode
 counts over all 1,506 scripts reproduce the disassembly table exactly ([THN.md](THN.md#todo)). Closed: whether the game accepts text where retail ships BINI — it
 does, as a fallback for any file lacking the signature; BINI itself is parsed natively by a second
@@ -171,4 +197,5 @@ derivable — it is, and reproducing it round-trips all 1,251 files byte-exactly
 
 ---
 
-[INI.md](INI.md) · [SCHEMA.md](SCHEMA.md) · [MODULES.md](MODULES.md) · [THN.md](THN.md)
+[INI.md](INI.md) · [SCHEMA.md](SCHEMA.md) · [MODULES.md](MODULES.md) · [THN.md](THN.md) ·
+[RESOURCE.md](RESOURCE.md)

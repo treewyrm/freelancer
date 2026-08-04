@@ -174,9 +174,16 @@ file's sections, and a separate resolver that walks the graph — so that readin
 implies touching the filesystem for another. `UNIVERSE/universe.ini` is the practical root: it lists
 every `[Base]` and `[System]` with its file.
 
-`strid_name` and `ids_info` values are numeric resource IDs into the game's DLLs
-(`strid_name = 196766`), not strings in the data. Resolving them means reading PE resource tables,
-which is **out of scope** — the typed layer keeps them as numbers and names them clearly.
+`ids_name` and `ids_info` values are numeric resource IDs into the game's DLLs (`ids_name = 196766`),
+not strings in the data. **The typed layer keeps them as numbers** — but no longer because resolving
+them is out of reach: `./resource` reads and writes those DLLs, and `readLibrary` turns the numbers
+into text ([RESOURCE.md](RESOURCE.md)).
+
+Resolution stays a separate, explicit step for the same reason file references do. The id space is
+`library * 0x10000 + local`, and which library is which depends on the order of `[Resources]` in
+`freelancer.ini` — so a number in a `DATA` INI cannot be resolved from that file, or from `DATA` at
+all, without also reading `EXE`. Making the typed layer carry text would mean making it read seven
+DLLs from a path nothing in the section knows.
 
 ## Round-trip
 

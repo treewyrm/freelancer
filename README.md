@@ -1,23 +1,27 @@
 # @treewyrm/ini2json
 
-TypeScript library for two of Freelancer's data formats:
+TypeScript library for three of Freelancer's data formats:
 
 - **INI** — both the plain-text form and **BINI**, the compiled binary form that ships in retail
   `DATA`. Two spellings of one document model, so a reader that accepts either plus a writer that
   emits either is also a BINI compiler and decompiler.
 - **THN** — the Lua 3.2 scene scripts that drive cutscenes and animated base views, which INI points
   at and nothing else does.
+- **Resource DLLs** — where every `ids_name` and `ids_info` in the INI data resolves to text. They
+  are Win32 PE images containing no code at all, so they are read and **written** here, not just
+  parsed.
 
 Companion to [`@treewyrm/utf2json`](../utf2json), which covers the UTF binary containers this data
 points at.
 
-See [docs/INI.md](docs/INI.md) and [docs/THN.md](docs/THN.md) for the formats, the measurements
-behind every decision here, and how the game itself reads a value.
+See [docs/INI.md](docs/INI.md), [docs/THN.md](docs/THN.md) and
+[docs/RESOURCE.md](docs/RESOURCE.md) for the formats, the measurements behind every decision here,
+and how the game itself reads a value.
 
-## Three layers, twice
+## Three layers, three times
 
 On-disk bytes, an interim document model, and typed structures — each convertible to its neighbours
-in both directions, and each usable on its own. The two formats share the shape and nothing else.
+in both directions, and each usable on its own. The three formats share the shape and nothing else.
 
 ```
    INI text  ─┐                                                ┌─ Universe: systems, bases, zones
@@ -27,30 +31,36 @@ in both directions, and each usable on its own. The two formats share the shape 
    bytecode  ─┐
               ├─▶     Value / Global        ◀──▶  typed  ◀───── Entities and events
    Lua text  ─┘        (the interim model)
+
+   DLL image ───▶      Resource[]            ◀──▶  typed  ◀───── Names and infocards, by global id
+                    (the interim model)
 ```
 
-**The encoding and interim layers are implemented for both.** The typed layers are not: for INI they
-are designed, in [docs/SCHEMA.md](docs/SCHEMA.md) and [docs/MODULES.md](docs/MODULES.md); for THN
-they are not started. THN's encoding layer is deliberately asymmetric — compiled scripts are read,
-and written back as Lua source, which the game loads just as happily.
+**The encoding and interim layers are implemented for all three, and the typed layer for THN and for
+resources.** INI's is designed and unwritten, in [docs/SCHEMA.md](docs/SCHEMA.md) and
+[docs/MODULES.md](docs/MODULES.md). THN's encoding layer is deliberately asymmetric — compiled
+scripts are read, and written back as Lua source, which the game loads just as happily. The resource
+writer emits a whole DLL, which is possible only because those DLLs contain no code.
 
 ## Entry points
 
-| Import                            | Contents                                                                      | Documentation                 |
-| --------------------------------- | ----------------------------------------------------------------------------- | ----------------------------- |
-| `@treewyrm/ini2json`              | `ini` and `thn` as namespaces, for code that handles both                     | —                             |
-| `@treewyrm/ini2json/ini`          | `Document`, `Section`, `Property`, `Value`, coercion, lookups, `read`/`write` | [INI.md](docs/INI.md)         |
-| `@treewyrm/ini2json/ini/text`     | Text INI parser and serializer                                                | [INI.md](docs/INI.md)         |
-| `@treewyrm/ini2json/ini/binary`   | BINI reader and writer                                                        | [INI.md](docs/INI.md)         |
-| `@treewyrm/ini2json/thn`          | `Document`, `Global`, `Value`, value helpers, `read`/`write`                  | [THN.md](docs/THN.md)         |
-| `@treewyrm/ini2json/thn/text`     | Lua source parser and serializer                                              | [THN.md](docs/THN.md)         |
-| `@treewyrm/ini2json/thn/bytecode` | Compiled Lua 3.2 reader, and the opcode table                                 | [THN.md](docs/THN.md)         |
-| `@treewyrm/ini2json/utility`      | `BufferView`, windows-1252, `getObjectId`, number and name helpers            | [INI.md](docs/INI.md)         |
-| _planned_ `./schema`              | The typed-layer machinery: coercion, optionality, ordering                    | [SCHEMA.md](docs/SCHEMA.md)   |
-| _planned_ domain modules          | Universe, equipment, ships, solar, missions, FX, audio, interface             | [MODULES.md](docs/MODULES.md) |
+| Import                            | Contents                                                                       | Documentation                   |
+| --------------------------------- | ------------------------------------------------------------------------------ | ------------------------------- |
+| `@treewyrm/ini2json`              | `ini`, `thn` and `resource` as namespaces, for code that handles more than one | —                               |
+| `@treewyrm/ini2json/ini`          | `Document`, `Section`, `Property`, `Value`, coercion, lookups, `read`/`write`  | [INI.md](docs/INI.md)           |
+| `@treewyrm/ini2json/ini/text`     | Text INI parser and serializer                                                 | [INI.md](docs/INI.md)           |
+| `@treewyrm/ini2json/ini/binary`   | BINI reader and writer                                                         | [INI.md](docs/INI.md)           |
+| `@treewyrm/ini2json/resource`     | Resource DLLs: `read`/`write`, string tables, infocards, the `ids_*` id space  | [RESOURCE.md](docs/RESOURCE.md) |
+| `@treewyrm/ini2json/thn`          | `Document`, `Global`, `Value`, value helpers, `read`/`write`                   | [THN.md](docs/THN.md)           |
+| `@treewyrm/ini2json/thn/text`     | Lua source parser and serializer                                               | [THN.md](docs/THN.md)           |
+| `@treewyrm/ini2json/thn/bytecode` | Compiled Lua 3.2 reader, and the opcode table                                  | [THN.md](docs/THN.md)           |
+| `@treewyrm/ini2json/thn/scene`    | Entities and events as typed records, and THORN's vocabulary                   | [THORN.md](docs/THORN.md)       |
+| `@treewyrm/ini2json/utility`      | `BufferView`, windows-1252, `getObjectId`, number and name helpers             | [INI.md](docs/INI.md)           |
+| _planned_ `./schema`              | The typed-layer machinery: coercion, optionality, ordering                     | [SCHEMA.md](docs/SCHEMA.md)     |
+| _planned_ domain modules          | Universe, equipment, ships, solar, missions, FX, audio, interface              | [MODULES.md](docs/MODULES.md)   |
 
-`ini` and `thn` are namespaces rather than a flat export because both define `Value`, `read` and
-`write`, and those mean different things on each side.
+`ini`, `thn` and `resource` are namespaces rather than a flat export because all three define `read`
+and `write`, and those mean different things on each side.
 
 ## Installation
 
@@ -169,6 +179,68 @@ Numbers keep the literal they were written as rather than a parsed value, becaus
 stores them as decimal ASCII and re-formatting `-0.9999900000000001` yields `-0.99999` — the same
 quantity, a different file.
 
+### Scenes, typed
+
+`./thn/scene` is the layer above: entities and events as records, discriminated on `type` and
+`action`, with THORN's vocabulary resolved. It reads **both** of the forms retail ships — 355 of the
+1,506 scripts carry `type = 9` where the rest carry `type = SCENE` — and both come out the same.
+
+```ts
+import * as thn from '@treewyrm/ini2json/thn'
+import * as scene from '@treewyrm/ini2json/thn/scene'
+
+const script = scene.read(thn.read(readFileSync('DATA/SCRIPTS/INTRO/intro_waterplanet.thn')))
+
+for (const entity of script.entities) if (entity.type === 'CAMERA') entity.cameraprops?.fovh // narrowed; a MARKER has no cameraprops
+
+writeFileSync('out.thn', thn.write(scene.write(script)))
+```
+
+Two things this layer does deliberately. It **refuses what it has not measured** — an entity type,
+event action, enum value or flag bit outside the vocabulary is an error naming the value, because
+every alternative is a guess and all 41,250 retail entities resolve without one. And it **keeps what
+it does not recognise**, in `unknown`, so a modded script survives a read-modify-write.
+
+It is a fixed point, not byte-exact: writing always emits the symbolic form and a canonical key
+order. Edit the interim document when the bytes matter. Where each value in the vocabulary came from
+— `thorn.dll`, the corpus, or the scripting guide that turned out to be wrong in six places — is in
+[docs/THORN.md](docs/THORN.md).
+
+### Names and infocards
+
+An `ids_name` or `ids_info` is a number into a set of DLLs, `resources.dll` first and then whatever
+`freelancer.ini`'s `[Resources]` block lists. Give `readLibrary` those files in that order and it
+resolves the numbers:
+
+```ts
+import { readFileSync } from 'node:fs'
+import * as resource from '@treewyrm/ini2json/resource'
+
+const library = resource.readLibrary(
+  resource.RETAIL_LIBRARIES.map((name) => resource.read(readFileSync(`EXE/${name}`))),
+)
+
+library.names.get(196609) // 'New York'
+library.infocards.get(65539) // '<?xml version="1.0" encoding="UTF-16"?>…'
+```
+
+Writing goes the other way, and produces a real DLL — these images carry no code, so there is
+nothing to link:
+
+```ts
+const dll = resource.write([
+  ...resource.writeStrings(new Map([[0, 'Nomad Battleship']])),
+  ...resource.writeInfocards(new Map([[3, '<RDL><PUSH/><TEXT>…</TEXT><POP/></RDL>']])),
+])
+
+writeFileSync('EXE/MyMod.dll', dll)
+```
+
+Two traps the module handles so a caller does not have to. A string resource is **not** a string —
+the table is blocked sixteen to an entry, and a hole has to be written as a zero-length run or every
+slot after it shifts. And directory entries must be **sorted**, because `FindResource` binary-searches
+them, so an unsorted directory does not fail outright; it fails for some ids and not others.
+
 ## Round-trip
 
 | Direction                           | Guarantee                                            |
@@ -177,6 +249,9 @@ quantity, a different file.
 | BINI → model → text → model → BINI  | **Byte-exact**, same corpus                          |
 | text → model → text                 | Fixed point; comments and layout are not preserved   |
 | THN bytecode → model → text → model | **Exact**, verified over all 1,506 retail scripts    |
+| THN scene → model → scene           | Fixed point; the numeric export form normalises      |
+| DLL → resources → DLL               | **Exact**, verified over all 37 DLLs in retail `EXE` |
+| resources → `.rsrc`                 | **Byte-identical to retail**, 5 libraries of 7       |
 
 There is no THN bytecode writer, so compiled → compiled is not on that list. It is deferred rather
 than ruled out — nothing needs it, since the game reads text — and what it waits on is two undecoded
@@ -199,18 +274,21 @@ npm test
 
 The corpus suites read a retail install from `$FREELANCER_DATA`, falling back to
 `~/Downloads/Freelancer/DATA`, and skip themselves with a reason when neither exists — one sweep for
-the 1,252 INI files, one for the 1,506 scene scripts. Every count they assert was measured before the
-code existed, so a failure means the reader drifted rather than that the number needs updating.
+the 1,252 INI files, one for the 1,506 scene scripts, and one for the 37 DLLs in `EXE`. Every count
+they assert was measured before the code existed, so a failure means the reader drifted rather than
+that the number needs updating.
 
 ## Documentation
 
-| Document                      | Subject                                                               |
-| ----------------------------- | --------------------------------------------------------------------- |
-| [INI.md](docs/INI.md)         | Both encodings, the shared document model, how the game reads a value |
-| [SCHEMA.md](docs/SCHEMA.md)   | Interim → typed: coercion, optionality, references, nicknames         |
-| [MODULES.md](docs/MODULES.md) | Every retail section name, and which module would own it              |
-| [RETAIL.md](docs/RETAIL.md)   | The corpus, the measurements, the quirks, the open questions          |
-| [THN.md](docs/THN.md)         | The scene script format, its value domain, and why it is not INI      |
+| Document                        | Subject                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| [INI.md](docs/INI.md)           | Both encodings, the shared document model, how the game reads a value        |
+| [SCHEMA.md](docs/SCHEMA.md)     | Interim → typed: coercion, optionality, references, nicknames                |
+| [MODULES.md](docs/MODULES.md)   | Every retail section name, and which module would own it                     |
+| [RESOURCE.md](docs/RESOURCE.md) | The resource DLLs: the PE container, string tables, infocards, the id space  |
+| [RETAIL.md](docs/RETAIL.md)     | The corpus, the measurements, the quirks, the open questions                 |
+| [THN.md](docs/THN.md)           | The scene script format, its value domain, and why it is not INI             |
+| [THORN.md](docs/THORN.md)       | The scene vocabulary: entities, events, properties, and where each came from |
 
 ## Relationship to utf2json
 

@@ -1,13 +1,15 @@
 /**
- * Freelancer's data formats: **INI** (plain text and BINI) and **THN** (Lua 3.2 scene scripts).
+ * Freelancer's data formats: **INI** (plain text and BINI), **THN** (Lua 3.2 scene scripts), and
+ * the **resource DLLs** the INIs' `ids_name` and `ids_info` numbers point into.
  *
- * The two are here together because INI is what points at a THN — `[Trigger] act_AddRTC` and
- * friends — and nowhere else do they meet. They share no document model, no encoding and no
- * vocabulary, so they are exported as namespaces rather than flattened: both define `Value`, `read`
- * and `write`, and those mean different things on each side.
+ * The three are here together because INI is what points at the other two — `[Trigger] act_AddRTC`
+ * reaches a THN, and every `ids_name` reaches a string table — and nowhere else do they meet. They
+ * share no document model, no encoding and no vocabulary, so they are exported as namespaces rather
+ * than flattened: all three define `read` and `write`, and those mean different things on each side.
  *
- * Import a namespace directly (`@treewyrm/ini2json/ini`, `@treewyrm/ini2json/thn`) when only one is
- * wanted; this entry point exists for code that handles both.
+ * Import a namespace directly (`@treewyrm/ini2json/ini`, `/thn`, `/resource`) when only one is
+ * wanted; this entry point exists for code that handles more than one.
  */
 export * as ini from './ini/index.js'
+export * as resource from './resource/index.js'
 export * as thn from './thn/index.js'

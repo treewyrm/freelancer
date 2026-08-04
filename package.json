@@ -37,6 +37,10 @@
       "import": "./dist/ini/binary/index.js",
       "types": "./dist/ini/binary/index.d.ts"
     },
+    "./resource": {
+      "import": "./dist/resource/index.js",
+      "types": "./dist/resource/index.d.ts"
+    },
     "./thn": {
       "import": "./dist/thn/index.js",
       "types": "./dist/thn/index.d.ts"
@@ -48,6 +52,10 @@
     "./thn/bytecode": {
       "import": "./dist/thn/bytecode/index.js",
       "types": "./dist/thn/bytecode/index.d.ts"
+    },
+    "./thn/scene": {
+      "import": "./dist/thn/scene/index.js",
+      "types": "./dist/thn/scene/index.d.ts"
     },
     "./utility": {
       "import": "./dist/utility/index.js",

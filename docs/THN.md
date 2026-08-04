@@ -104,19 +104,23 @@ a contiguous string table, which is wider than what retail exercises:
   `START_REVERB_PROP_ANIM`, `START_SUB_SCENE`, `SUBTITLE`, `USER_EVENT`, `UNDEFINED_EVENT`
 - **Flags** — `POSITION`, `ORIENTATION`, `LOOK_AT`, `ENTITY_RELATIVE`, `ORIENTATION_RELATIVE`,
   `PARENT_CHILD`, `PATH_POSITION`, `LIT_DYNAMIC`, `LIT_AMBIENT`, `HIDDEN`, `SPATIAL`, `REFERENCE`,
-  `LOOP`, `STREAM`, `ROOT`, `PART`, `HARDPOINT`, `USE_SCRIPT_DURATION`, `FOG_PROPS_REMOVED`
+  `LOOP`, `STREAM`, `USE_SCRIPT_DURATION`, `FOG_PROPS_REMOVED`
+- **Target kinds** — `ROOT`, `PART`, `HARDPOINT`
 - **Axes** — `X_AXIS`, `Y_AXIS`, `Z_AXIS` and their `NEG_` counterparts
 - **Light and fog kinds** — `L_DIRECT`, `L_POINT`, `L_SPOT`, `F_NONE`, `F_LINEAR`, `F_EXP`, `F_EXP2`
 
 The DLL also carries the property-key vocabulary (`spatialprops`, `cameraprops`, `lightprops`,
 `pathprops`, `userprops`, `orient`, `q_orient`, `up`, `front`, `fovh`, `nearplane`, `farplane`,
-`target_part`, `target_type`, `start_percent`, `event_flags`, …), which is where a schema for the
-records should be taken from rather than inferred from the corpus.
+`target_part`, `target_type`, `start_percent`, `event_flags`, …).
+
+**All of it, with what each name is worth and where that came from, is in [THORN.md](THORN.md)** —
+including the names the DLL carries that no script uses, which is most of the interesting part.
 
 ### `Y` and `N` are the booleans
 
-Lua 3.2 predates Lua's boolean type, so THORN registers two one-character globals — `N` and `Y` sit
-adjacent in the same string table as the enums. Retail uses them on three keys:
+Lua 3.2 predates Lua's boolean type, so THORN registers two one-character globals. `N` and `Y` sit
+adjacent to each other in `thorn.dll`, a little past the enum block rather than inside it. Retail
+uses them on three keys:
 
 | Key        | `Y`   | `N` |
 | ---------- | ----- | --- |
@@ -251,6 +255,11 @@ with INI but the fact that INI points at it. Three of the four directions exist:
 | text → model     | `thn/text/`     | a Lua _literal_ parser, not a Lua parser |
 | model → bytecode | —               | **deferred**, see [TODO](#todo)          |
 
+**The typed layer above it is implemented too, at `./thn/scene`** — entities and events as records
+rather than tables, with the vocabulary and the evidence for it in [THORN.md](THORN.md). It is the
+one place the two export forms below are folded together, which only became possible once the
+identifiers' numeric values were measured.
+
 The earlier reading of this document put a bytecode decompiler and an engine-API model in the way;
 the disassembly says neither is needed. Reading is an evaluator of a few hundred lines rather than an
 interpreter, because there is no control flow to interpret, and the model is the value domain
@@ -309,24 +318,21 @@ that holds one, which is precisely why the identifier arm has to stay distinct f
 and need not be resolved to anything. Both forms read, both round-trip, and neither is normalised
 into the other.
 
-**This also relocates one of the open questions below.** These files hold the identifiers' numeric
-values by correspondence: `up = Y_AXIS` against `up = 1` in the same structural position says
-`Y_AXIS = 1`, and `fogon = N` against `fogon = 0` says `N = 0`. That is a lead worth following, and
-it is not the same as a read of THORN's registration table — the correspondence is only as good as
-the pairing of positions, and nothing here has checked it beyond the handful above. It is recorded as
-where to start, not as an answer.
+**This closed one of the open questions below.** These files hold the identifiers' numeric values by
+correspondence: `up = Y_AXIS` against `up = 1` in the same structural position says `Y_AXIS = 1`, and
+`fogon = N` against `fogon = 0` says `N = 0`. Followed through, that resolves every enum THORN
+defines — see [THORN.md](THORN.md), which carries the tables, the evidence for each value, and the
+two places the correspondence is weak enough to say so.
+
+The pairing was done **structurally rather than by frequency**, which is what makes it evidence
+rather than a fit: a numeric entity carrying `cameraprops` is a camera whatever the counts say,
+because no other entity type carries that block.
 
 ## TODO
 
 What is pending _observation in the running game_ rather than pending code — with one entry that may
 not belong in this section at all, flagged as such.
 
-- **What are the numeric values of the identifiers?** Still only needed to _interpret_ a script, not
-  to round-trip one: the readers keep identifiers symbolic and never learn them. But **the claim that
-  they are not in the corpus is now wrong** — the [355 numeric-form scripts](#355-scripts-use-numbers-where-the-rest-use-identifiers)
-  pair a symbolic file against a numeric one in the same structural position, which yields them by
-  correspondence. `thorn.dll`'s registration table remains the authoritative source; the corpus is
-  now a cross-check on it rather than silent.
 - **What does the 4-byte gap before the constant count hold, and bytes 19–20 of the header?**
   Constant across nothing and correlated with nesting depth respectively, so most likely
   `maxstacksize` and friends. Irrelevant to reading, and the only thing standing between the deferred
@@ -339,6 +345,12 @@ not belong in this section at all, flagged as such.
   there. If the fields fall out of the source, they leave this section as answers rather than being
   guessed at from the corpus.
 
+**Closed:** what the identifiers' numeric values are. This was the lead recorded above, and it has
+been followed: the correspondence resolves **all 41,250 retail entities and all 50,785 events** with
+no leftover, cross-checked against `thorn.dll`'s string-table order and against the two Direct3D
+enums THORN passes straight through. The tables are in [THORN.md](THORN.md), and the typed layer at
+`./thn/scene` is built on them.
+
 **Closed:** whether a plain-text `.thn` loads from the packed retail install. It does — observed in
 game, so the write path in [Scope](#scope) is settled, not provisional.
 
@@ -349,4 +361,4 @@ operand despite ending in neither `W` nor `OP`.
 
 ---
 
-[INI.md](INI.md) · [SCHEMA.md](SCHEMA.md) · [MODULES.md](MODULES.md) · [RETAIL.md](RETAIL.md)
+[THORN.md](THORN.md) · [INI.md](INI.md) · [SCHEMA.md](SCHEMA.md) · [MODULES.md](MODULES.md) · [RETAIL.md](RETAIL.md)
