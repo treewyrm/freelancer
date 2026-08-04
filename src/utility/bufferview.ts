@@ -74,17 +74,18 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
   }
 
   /**
-   * Creates new view from another view or string.
+   * Creates new view from a buffer, another view or a string.
    *
    * - Does not copy underlying buffer.
    * - Copies offset and endianess if value is a BufferView.
-   * @param value String or buffer view
+   * @param value String, buffer or buffer view
    * @returns
    */
   static from(value: string): BufferView<ArrayBuffer>
-  static from<T extends ArrayBufferLike>(view: ArrayBufferView<T>): BufferView<T>
-  static from(value: ArrayBufferView | string): BufferView {
+  static from<T extends ArrayBufferLike>(value: ArrayBufferView<T> | T): BufferView<T>
+  static from(value: ArrayBufferView | ArrayBufferLike | string): BufferView {
     if (typeof value === 'string') value = encoder.encode(value)
+    if (!ArrayBuffer.isView(value)) return new this(value)
 
     const { buffer, byteOffset, byteLength } = value
 
@@ -94,6 +95,22 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
     if (value instanceof BufferView) ({ offset, littleEndian } = value)
 
     return new this(buffer, byteOffset, byteLength, offset, littleEndian)
+  }
+
+  /** Bytes of this view, without copying. */
+  get bytes(): Uint8Array {
+    return new Uint8Array(this.buffer, this.byteOffset, this.byteLength)
+  }
+
+  /**
+   * Finds the NUL terminating a string that starts at `offset`. Does not affect the offset.
+   * @param offset Byte offset of the first character.
+   * @returns Byte offset of the terminator.
+   */
+  findTerminator(offset: number): number {
+    const end = this.bytes.indexOf(0, offset)
+    if (end < 0) throw new RangeError(`String at offset ${offset} has no NUL terminator`)
+    return end
   }
 
   rewind(): this {

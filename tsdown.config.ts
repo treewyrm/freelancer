@@ -2,18 +2,26 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   entry: [
+    './src/index.ts',
+    './src/utility/index.ts',
     './src/math/index.ts',
     './src/alchemy/index.ts',
     './src/animation/index.ts',
     './src/vmesh/index.ts',
     './src/compound/index.ts',
     './src/rigid/index.ts',
-    './src/utility/index.ts',
     './src/surface/index.ts',
     './src/texture/index.ts',
     './src/material/index.ts',
     './src/deformable/index.ts',
-    './src/index.ts',
+    './src/ini/index.ts',
+    './src/ini/text/index.ts',
+    './src/ini/binary/index.ts',
+    './src/thn/index.ts',
+    './src/thn/text/index.ts',
+    './src/thn/bytecode/index.ts',
+    './src/thn/scene/index.ts',
+    './src/resource/index.ts',
   ],
   platform: 'neutral',
 })

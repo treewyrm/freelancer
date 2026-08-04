@@ -1,6 +1,6 @@
 import { deepStrictEqual, notStrictEqual, ok, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { list, load, skip, type Asset } from '../corpus.js'
+import { list, load, skip, type TreeAsset as Asset } from '../corpus.js'
 import { getResourceId } from '../hash.js'
 import BufferView from '../utility/bufferview.js'
 import { DefaultId, readEffectLibrary, writeEffectLibrary, type NodeInstance } from './effect.js'
