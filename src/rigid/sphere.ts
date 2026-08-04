@@ -1,5 +1,5 @@
-import Directory from '#/directory.js'
-import type File from '#/file.js'
+import Directory from '#/utf/directory.js'
+import type File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
 
 /**

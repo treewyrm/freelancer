@@ -1,4 +1,4 @@
-import Directory from '#/directory.js'
+import Directory from '#/utf/directory.js'
 import { getResource, type Hashable } from '#/hash.js'
 import { getScriptDuration, readScript, writeScript, type Script } from './script.js'
 

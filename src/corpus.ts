@@ -1,7 +1,7 @@
 import { globSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import Directory from './directory.js'
+import Directory from './utf/directory.js'
 
 /**
  * Locates retail Freelancer data so tests can read the real thing.

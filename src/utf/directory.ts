@@ -1,9 +1,9 @@
-import BufferView from './utility/bufferview.js'
-import Dictionary from './utility/dictionary.js'
+import BufferView from '#/utility/bufferview.js'
+import Dictionary from '#/utility/dictionary.js'
 import File from './file.js'
-import { getResource, type Hashable, setResource } from './hash.js'
-import { fromDOSTimestamp, fromFileTime, toDOSTimestamp, toFileTime } from './utility/timestamp.js'
-import { toHex } from './utility/string.js'
+import { getResource, type Hashable, setResource } from '#/hash.js'
+import { fromDOSTimestamp, fromFileTime, toDOSTimestamp, toFileTime } from '#/utility/timestamp.js'
+import { toHex } from '#/utility/string.js'
 import { type Entry } from './types.js'
 
 interface ReadQueueItem {

@@ -1,5 +1,5 @@
-import Directory from '#/directory.js'
-import File from '#/file.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
 import { readConstraints, writeConstraints, type Constraint } from '#/compound/constraint.js'
 import { arrangeByConstraints, type Model } from '#/compound/model.js'
 import { readBone, writeBone, type Bone } from './bone.js'

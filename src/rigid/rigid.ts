@@ -1,4 +1,4 @@
-import Directory from '#/directory.js'
+import Directory from '#/utf/directory.js'
 import { readMultiLevel, writeMultiLevel, type MultiLevel } from '#/vmesh/multilevel.js'
 import { readVMeshPart, writeVMeshPart, type VMeshPart } from '#/vmesh/part.js'
 import { readVMeshWire, writeVMeshWire, type VMeshWire } from '#/vmesh/wireframe.js'

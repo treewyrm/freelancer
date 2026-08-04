@@ -1,4 +1,4 @@
-import BufferView from './utility/bufferview.js'
+import BufferView from '#/utility/bufferview.js'
 
 /** File entry in UTF structure. */
 export default class File implements ArrayBufferView {

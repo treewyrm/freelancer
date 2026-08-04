@@ -1,5 +1,5 @@
-import Directory from '#/directory.js'
-import File from '#/file.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
 import { readFaceGroup, writeFaceGroup, type FaceGroup } from './facegroup.js'
 import { readGeometry, writeGeometry, type Geometry } from './geometry.js'
 

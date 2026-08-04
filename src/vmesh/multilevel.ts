@@ -1,4 +1,4 @@
-import Directory from '#/directory.js'
+import Directory from '#/utf/directory.js'
 import { readVMeshPart, writeVMeshPart, type VMeshPart } from './part.js'
 
 export interface MultiLevel {

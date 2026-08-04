@@ -1,5 +1,5 @@
-import Directory from '#/directory.js'
-import File from '#/file.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
 import { getResource, type Hashable } from '#/hash.js'
 import Matrix3 from '#/math/matrix3.js'
 import Vector3 from '#/math/vector3.js'

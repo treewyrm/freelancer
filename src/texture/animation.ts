@@ -1,5 +1,5 @@
-import Directory from '#/directory.js'
-import File from '#/file.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
 
 export interface AnimatedTextureFrame {

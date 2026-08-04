@@ -1,6 +1,6 @@
 import Directory from './directory.js'
 import File from './file.js'
-import BufferView from './utility/bufferview.js'
+import BufferView from '#/utility/bufferview.js'
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 

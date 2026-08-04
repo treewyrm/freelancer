@@ -1,6 +1,6 @@
 import { deepStrictEqual, notDeepStrictEqual, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import File from '../file.js'
+import File from '../utf/file.js'
 import Matrix3 from '../math/matrix3.js'
 import Vector3 from '../math/vector3.js'
 import BufferView from '../utility/bufferview.js'

@@ -85,7 +85,10 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
   static from<T extends ArrayBufferLike>(value: ArrayBufferView<T> | T): BufferView<T>
   static from(value: ArrayBufferView | ArrayBufferLike | string): BufferView {
     if (typeof value === 'string') value = encoder.encode(value)
-    if (!ArrayBuffer.isView(value)) return new this(value)
+
+    // Not `ArrayBuffer.isView`: `File` satisfies ArrayBufferView structurally without being one,
+    // and every reader hands one of those in. A buffer is what has no buffer of its own.
+    if (!('buffer' in value)) return new this(value)
 
     const { buffer, byteOffset, byteLength } = value
 

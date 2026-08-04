@@ -1,6 +1,6 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import Directory from '../directory.js'
+import Directory from '../utf/directory.js'
 import { ChannelType, type Channel } from './channel.js'
 import {
   getLibraryDuration,

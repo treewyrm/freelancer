@@ -12,8 +12,8 @@
  * UTF file is asking whether this one carries effects, which is the same question `readMaterials`
  * answers by yielding nothing.
  */
-import Directory from '#/directory.js'
-import File from '#/file.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
 import { readEffectLibrary, writeEffectLibrary, type EffectLibrary } from './effect.js'
 import { readNodeLibrary, writeNodeLibrary, type NodeLibrary } from './node.js'

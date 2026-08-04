@@ -1,4 +1,4 @@
-import Directory from '#/directory.js'
+import Directory from '#/utf/directory.js'
 import { getResource } from '#/hash.js'
 import { readVMeshData, vertexByteLength, writeVMeshData, type VMeshData } from './data.js'
 import type { VMeshRef } from './ref.js'

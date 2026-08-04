@@ -1,5 +1,5 @@
 import { type Tree, listTreeElements } from '#/utility/tree.js'
-import Directory from '#/directory.js'
+import Directory from '#/utf/directory.js'
 import { getResource, getResourceId, type Hashable } from '#/hash.js'
 import { readConstraints, writeConstraints, type Constraint } from './constraint.js'
 import { getHardpoint, type Hardpoint } from './hardpoint.js'

@@ -1,4 +1,4 @@
-import Directory from '#/directory.js'
+import Directory from '#/utf/directory.js'
 import { readVMeshRef, writeVMeshRef, type VMeshRef } from './ref.js'
 
 export interface VMeshPart {

@@ -1,6 +1,6 @@
 import BufferView from '#/utility/bufferview.js'
-import Directory from '#/directory.js'
-import File from '#/file.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
 import { type Hashable, getResource } from '#/hash.js'
 import Vector3 from '#/math/vector3.js'
 import Matrix3 from '#/math/matrix3.js'

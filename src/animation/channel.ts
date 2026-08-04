@@ -1,6 +1,6 @@
 import BufferView from '#/utility/bufferview.js'
-import Directory from '#/directory.js'
-import File from '#/file.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
 import { at, type Keyframe as TimedKeyframe } from '#/math/animation.js'
 import Quat from '#/math/quat.js'
 import { clamp, lerp } from '#/math/scalar.js'

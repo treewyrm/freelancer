@@ -1,4 +1,4 @@
-import Directory from '#/directory.js'
+import Directory from '#/utf/directory.js'
 
 /**
  * Camera part of a compound model, used by cockpit models for the view the pilot looks through.

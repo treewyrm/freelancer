@@ -1,5 +1,5 @@
-import Directory from '#/directory.js'
-import File from '#/file.js'
+import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
 import { readFloat32Array, readUint16Array, writeFloat32Array, writeUint16Array } from './arrays.js'
 
 /**

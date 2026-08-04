@@ -1,4 +1,4 @@
-import File from '#/file.js'
+import File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
 
 /**
