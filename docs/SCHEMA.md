@@ -151,17 +151,18 @@ correctness risk in the one place the two libraries have to agree.
 
 The data is a graph of files, and the reference is a property whose value is a path:
 
-| Property                                 | Occurrences | Points at                                       |
-| ---------------------------------------- | ----------- | ----------------------------------------------- |
-| `[EncounterParameters] filename`         | 1,163       | encounter scripts                               |
-| `[Room] file`                            | 464         | base room definitions                           |
-| `[TexturePanels] file`                   | 243         | texture panel libraries                         |
-| `[Asteroids] file`                       | 210         | asteroid field definitions                      |
-| `[Base] file`                            | 197         | per-base files under `UNIVERSE/SYSTEMS/…/BASES` |
-| `[Nebula] file`                          | 60          | nebula definitions                              |
-| `[System] file`                          | 53          | per-system files                                |
-| `[Ship] cockpit`                         | 40          | cockpit definitions                             |
-| `[Trigger] act_AddRTC` / `act_RemoveRTC` | 99          | `.thn` scenes — see [THN.md](THN.md)            |
+| Property                                 | Occurrences | Points at                                                    |
+| ---------------------------------------- | ----------- | ------------------------------------------------------------ |
+| `[EncounterParameters] filename`         | 1,163       | encounter scripts                                            |
+| `[Room] file`                            | 464         | base room definitions                                        |
+| `[TexturePanels] file`                   | 243         | texture panel libraries                                      |
+| `[Asteroids] file`                       | 210         | asteroid field definitions                                   |
+| `[Base] file`                            | 197         | per-base files under `UNIVERSE/SYSTEMS/…/BASES`              |
+| `[Nebula] file`                          | 60          | nebula definitions                                           |
+| `[System] file`                          | 53          | per-system files                                             |
+| `[Ship] cockpit`                         | 40          | cockpit definitions                                          |
+| `[Trigger] act_AddRTC` / `act_RemoveRTC` | 99          | RTC **`.ini`** files, which in turn name a `.thn`            |
+| `[Room_Info] scene` and 18 more          | 3,000       | `.thn` scenes — read them with `./thn`, see [THN.md](THN.md) |
 
 Paths are **backslash-separated and relative to `DATA`** (`Universe\Systems\Li01\Bases\Li01_01_Base.ini`),
 authored with Windows case-insensitivity and therefore frequently disagreeing with the real

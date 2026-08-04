@@ -1,11 +1,14 @@
 {
   "name": "@treewyrm/ini2json",
   "version": "0.1.0",
-  "description": "INI and BINI (compiled binary INI used in Freelancer PC game from 2003) processing library.",
+  "description": "INI, BINI and THN (data and scene script formats used in Freelancer PC game from 2003) processing library.",
   "keywords": [
     "freelancer",
     "ini",
     "bini",
+    "thn",
+    "thorn",
+    "lua",
     "game",
     "digital anvil"
   ],
@@ -22,13 +25,29 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./text": {
-      "import": "./dist/text/index.js",
-      "types": "./dist/text/index.d.ts"
+    "./ini": {
+      "import": "./dist/ini/index.js",
+      "types": "./dist/ini/index.d.ts"
     },
-    "./binary": {
-      "import": "./dist/binary/index.js",
-      "types": "./dist/binary/index.d.ts"
+    "./ini/text": {
+      "import": "./dist/ini/text/index.js",
+      "types": "./dist/ini/text/index.d.ts"
+    },
+    "./ini/binary": {
+      "import": "./dist/ini/binary/index.js",
+      "types": "./dist/ini/binary/index.d.ts"
+    },
+    "./thn": {
+      "import": "./dist/thn/index.js",
+      "types": "./dist/thn/index.d.ts"
+    },
+    "./thn/text": {
+      "import": "./dist/thn/text/index.js",
+      "types": "./dist/thn/text/index.d.ts"
+    },
+    "./thn/bytecode": {
+      "import": "./dist/thn/bytecode/index.js",
+      "types": "./dist/thn/bytecode/index.d.ts"
     },
     "./utility": {
       "import": "./dist/utility/index.js",

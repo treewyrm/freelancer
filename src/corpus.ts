@@ -42,19 +42,23 @@ export interface Asset {
 const cache = new Map<string, Asset[]>()
 
 /**
- * Reads every `.ini` under a root, verbatim. Cached, so suites sharing a root share the read.
+ * Reads every matching file under a root, verbatim. Cached, so suites sharing a sweep share the
+ * read.
  *
- * Both encodings come back — this is the corpus a reader is supposed to sort out for itself, and
- * splitting them here would hide the one text file among the 1,251 binary ones.
+ * Both encodings come back, whichever format is being swept — this is the corpus a reader is
+ * supposed to sort out for itself, and splitting them here would hide the one text INI among the
+ * 1,251 binary ones. The scene scripts are spread across `SCRIPTS`, `MISSIONS` and
+ * `RANDOMMISSIONS`, so a single sweep from the root is what finds all 1,506.
  */
-export const load = (from: string = root): Asset[] => {
-  let assets = cache.get(from)
+export const load = (from: string = root, pattern = '**/*.ini'): Asset[] => {
+  const key = `${from}\0${pattern}`
+  let assets = cache.get(key)
 
   if (!assets)
     cache.set(
-      from,
+      key,
       (assets = exists(from)
-        ? globSync('**/*.ini', { cwd: from, nocase: true } as { cwd: string }).map((path) => ({
+        ? globSync(pattern, { cwd: from, nocase: true } as { cwd: string }).map((path) => ({
             path,
             data: readFileSync(join(from, path)),
           }))

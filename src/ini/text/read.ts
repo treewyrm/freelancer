@@ -1,6 +1,6 @@
 import type { Document, Property, Section } from '../types.js'
-import { classify } from '../utility/number.js'
-import { trim } from '../utility/string.js'
+import { classify } from '../../utility/number.js'
+import { trim } from '../../utility/string.js'
 
 /**
  * Parses text INI into sections.

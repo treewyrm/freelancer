@@ -1,10 +1,10 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
-import * as corpus from './corpus.js'
+import * as corpus from '../corpus.js'
 import { formatOf, read } from './index.js'
 import * as binary from './binary/index.js'
 import * as text from './text/index.js'
-import { decode } from './utility/encoding.js'
+import { decode } from '../utility/encoding.js'
 
 /**
  * The readers against the retail install.

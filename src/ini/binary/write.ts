@@ -1,5 +1,5 @@
 import type { Document, Section, Value } from '../types.js'
-import BufferView from '../utility/bufferview.js'
+import BufferView from '../../utility/bufferview.js'
 import {
   HEADER_BYTE_LENGTH,
   MAX_NAME_OFFSET,

@@ -162,51 +162,190 @@ A third tag would be a nested function prototype. There is not one.
 
 ## How INI reaches them
 
-Three properties, 101 references across retail, all in mission scripting:
+**Not through `act_AddRTC`, which is what an earlier version of this section claimed.** That property
+names an **`.ini`**, not a `.thn` — an RTC file, which then names the script:
 
-| Property                  | Count |
-| ------------------------- | ----- |
-| `[Trigger] act_AddRTC`    | 68    |
-| `[Trigger] act_RemoveRTC` | 31    |
-| `[Trigger] cnd_RTCDone`   | 2     |
+```
+[Trigger] act_AddRTC = missions\\m13\\M013_s072aa_St01_01_nrml.ini
+                            ↓
+                       [CharacterEncounter] action = scripts\story\s072aa_offer_Quintaine_pl_09_pad_01.thn
+```
 
-`SCRIPTS/` also holds `[RTCSlider]`, `[GenericScripts]` and `[GCS_Exclusions]`, which name scripts
-by path. All of these are ordinary string values as far as this library is concerned — the typed
-layer resolves them to a path and stops there.
+All **101** `act_AddRTC` / `act_RemoveRTC` / `cnd_RTCDone` values end in `.ini`; not one ends in
+`.thn`. The RTC triggers are a hop away and never carry a script path themselves.
+
+**`[Trigger] Act_CallThorn` is the one that does**, and it is a mission-scripting property in the
+literal sense: all 70 of its occurrences are under `MISSIONS`, and it is the **only** property that
+reaches a script in `MISSIONS/` or `RANDOMMISSIONS/` — 60 of those 83 files, with nothing else naming
+any of them. It is also the only property in retail whose name contains `Thorn`.
+
+Nineteen properties carry a script path in total, across **3,000 references naming 1,292 distinct
+scripts**, and every one resolves to a file that exists — there are no dangling script references in
+retail:
+
+| Property                                                    | References |
+| ----------------------------------------------------------- | ---------- |
+| `[Room_Info] scene` / `set_script` / `goodscart_script`     | 1,128      |
+| `[GenericScripts] script`                                   | 617        |
+| `[MRoom] fixture`                                           | 559        |
+| `[CharacterPlacement] start_script`                         | 208        |
+| `[GCS_Exclusions] script`                                   | 126        |
+| `[Char] fidget`                                             | 83         |
+| `[Trigger] Act_CallThorn`                                   | 70         |
+| `[CharacterEncounter]` × 6 (`action`, `offer`, …)           | 143        |
+| `[PlayerShipPlacement] landing_script` / `launching_script` | 58         |
+| `[Trigger] Act_AddAmbient` / `Act_RemoveAmbient`            | 8          |
+
+Two things a resolver has to handle. Paths are backslash-separated and authored case-insensitively,
+as everywhere else in INI — but **retail also mixes `\` and `\\` inside the same property**:
+`[Trigger] Act_CallThorn` carries `missions\\m12\\M12_Osiris.thn` and `missions\m11\M11_Walker1.thn`
+one line apart. Collapse repeated separators or 61 of the 1,292 stop resolving.
+
+### Both export forms are in live use
+
+Cross-checking the [355 numeric-form scripts](#355-scripts-use-numbers-where-the-rest-use-identifiers)
+against every reference above settles that they are not dead residue:
+
+| Form     | Referenced from INI    |
+| -------- | ---------------------- |
+| numeric  | 275 of 355 (77.5%)     |
+| symbolic | 1,017 of 1,151 (88.4%) |
+
+And they are not segregated by purpose. `[Room_Info] scene` names 129 symbolic scripts and 142
+numeric ones; under `SCRIPTS/BASES` the `bar_enter_01` scripts are 16 symbolic and 22 numeric. The
+same room property, for the same kind of scene, in either form — **two authoring tools, not two
+categories**, which is the reading that matters for a reader: neither form may be treated as
+secondary.
+
+One difference is real and unexplained: within `SCRIPTS/BASES`, numeric-form scripts are referenced
+at 75.8% against the symbolic form's 91.6%.
+
+### 214 scripts are named by nothing
+
+In both forms, and in every directory. The mission ones are the legible case — 23 of the 83 under
+`MISSIONS/`, and they read as superseded drafts rather than as a gap in this sweep:
+
+```
+missions/m01a/m01a_01.thn … m01a_09.thn, m01a_11.thn   (m01a_10 does not exist)
+missions/m01a/m01a_rev2_07.thn                          ("rev2", beside a referenced m01a_07)
+missions/m01b/m01b_01.thn … m01b_03.thn
+missions/m02/m03_survivor1.thn                          (an m03 script filed under m02)
+```
+
+A numbered sequence with a hole in it, a file named `rev2`, and one misfiled by a directory. Against
+that, the 60 that _are_ referenced carry descriptive names — `M12_Osiris.thn`, `M11_Walker1.thn`.
+
+**This is a reading, not a finding.** The corpus cannot show that a script is unreachable, only that
+nothing in `DATA` names it, and the 191 unreferenced scripts outside `MISSIONS/` have no such tell.
+Deleting one on the strength of this would be acting on a hunch.
 
 ## Scope
 
-**Out of scope for the INI modules, and a separate entry point (`./thn`) if it is ever in scope** —
-a THN shares nothing with INI but the fact that INI points at it.
+**Implemented, at `./thn`** — a separate entry point from the INI ones, because a THN shares nothing
+with INI but the fact that INI points at it. Three of the four directions exist:
 
-What it is no longer is intractable. The earlier reading of this document put a bytecode
-decompiler and an engine-API model in the way; the disassembly says neither is needed:
+| Direction        | Module          | State                                    |
+| ---------------- | --------------- | ---------------------------------------- |
+| bytecode → model | `thn/bytecode/` | all 1,506 retail scripts                 |
+| model → text     | `thn/text/`     | the whole write path                     |
+| text → model     | `thn/text/`     | a Lua _literal_ parser, not a Lua parser |
+| model → bytecode | —               | **deferred**, see [TODO](#todo)          |
 
-1. **Read** — decode the pool, run the fifteen opcodes on a value stack. There is no control flow,
-   so this is an evaluator of a few hundred lines, not an interpreter.
-2. **Translate** — emit `duration`/`entities`/`events` as JSON, with identifiers tagged so they
-   survive the trip.
-3. **Write** — emit plain-text Lua. The game reads it. **No bytecode writer is required**, which
-   removes the only genuinely hard piece of the write path.
+The earlier reading of this document put a bytecode decompiler and an engine-API model in the way;
+the disassembly says neither is needed. Reading is an evaluator of a few hundred lines rather than an
+interpreter, because there is no control flow to interpret, and the model is the value domain
+directly — `duration`/`entities`/`events` over numbers, strings, identifiers and tables, which is
+JSON except for the identifiers.
 
-Round-tripping is testable against the corpus immediately, and unusually strictly: compiled →
-JSON → plain text → compiled is not available, but compiled → JSON → compiled-shaped value tree
-compares exactly, since every scalar is preserved as its literal.
+Two claims about the write path have to stay apart, because running them together is what made the
+last version of this section wrong:
+
+- **A bytecode writer is not _required_.** The engine loads scripts with `dofile`, Lua's loader
+  compiles source text when the signature is absent, and a plain-text script loads from the packed
+  retail install — observed in game. Emitting text is a complete write path, not a fallback.
+- **A bytecode writer is still _wanted_,** for completeness rather than for need. It is deferred, not
+  ruled out: `bytecode/data.ts` already carries the name → byte direction of the opcode table, and
+  `thn.write`'s `format` parameter names only `'text'` so that widening it later is additive. What it
+  waits on is in [TODO](#todo).
+
+### Round-tripping
+
+Stronger than this document expected. It said compiled → text → compiled was unavailable without a
+bytecode writer, which is true — but a **text reader** closes the loop from the other side:
+
+> **bytecode → model → text → model** compares exactly, over all 1,506 retail scripts.
+
+It compares exactly rather than approximately because every scalar survives as its literal, and it is
+asserted in `thn/corpus.test.ts` alongside every count in this document.
+
+One consequence for the writer. `{ [1] = x }` and `{ x }` are the same table to Lua but different
+instructions in the bytecode — `SETMAP` against `SETLIST` — and the model records which was used, so
+**a table keyed `1..n` is written back keyed, not collapsed into an array literal**. 76,447 retail
+tables are in that form. Collapsing them would be the one thing a round-trip could lose, and it would
+read as a formatting nicety rather than as data loss, which is what makes it worth stating.
+
+Two further facts fell out of the corpus while implementing, neither of which was measured before:
+
+- **No retail table fills both parts at once.** An array part and a hash part never appear in the
+  same table, in any of 547,086 of them.
+- **355 scripts are written in a different form entirely** — see below.
+
+### 355 scripts use numbers where the rest use identifiers
+
+Under `SCRIPTS/STORY` and its neighbours, 355 of the 1,506 carry the _resolved values_ where the
+other 1,151 carry the symbolic globals, and store arrays as a hash keyed `1..n`:
+
+```lua
+-- the symbolic form, 1,151 files            -- the numeric form, 355 files
+type = SCENE                                 type = 9
+up = Y_AXIS                                  up = 1
+front = Z_AXIS                               front = 2
+fogon = N                                    fogon = 0
+pos = { 0, 0, 0 }                            pos = { [1] = 0, [2] = 0, [3] = 0 }
+```
+
+They are two exporters, not two formats — the engine reads a number wherever it would read the global
+that holds one, which is precisely why the identifier arm has to stay distinct from the string arm
+and need not be resolved to anything. Both forms read, both round-trip, and neither is normalised
+into the other.
+
+**This also relocates one of the open questions below.** These files hold the identifiers' numeric
+values by correspondence: `up = Y_AXIS` against `up = 1` in the same structural position says
+`Y_AXIS = 1`, and `fogon = N` against `fogon = 0` says `N = 0`. That is a lead worth following, and
+it is not the same as a read of THORN's registration table — the correspondence is only as good as
+the pairing of positions, and nothing here has checked it beyond the handful above. It is recorded as
+where to start, not as an answer.
 
 ## TODO
 
-What is pending _observation in the running game_ rather than pending code.
+What is pending _observation in the running game_ rather than pending code — with one entry that may
+not belong in this section at all, flagged as such.
 
-- **What are the numeric values of the identifiers?** They are only needed to _interpret_ a script,
-  not to round-trip one — a translator that keeps identifiers symbolic never learns them. If a
-  consumer ever needs them, they are in `thorn.dll`'s registration table, not in the corpus.
+- **What are the numeric values of the identifiers?** Still only needed to _interpret_ a script, not
+  to round-trip one: the readers keep identifiers symbolic and never learn them. But **the claim that
+  they are not in the corpus is now wrong** — the [355 numeric-form scripts](#355-scripts-use-numbers-where-the-rest-use-identifiers)
+  pair a symbolic file against a numeric one in the same structural position, which yields them by
+  correspondence. `thorn.dll`'s registration table remains the authoritative source; the corpus is
+  now a cross-check on it rather than silent.
 - **What does the 4-byte gap before the constant count hold, and bytes 19–20 of the header?**
   Constant across nothing and correlated with nesting depth respectively, so most likely
-  `maxstacksize` and friends. Irrelevant to reading; relevant only if a bytecode _writer_ is ever
-  wanted, which step 3 above says it is not.
+  `maxstacksize` and friends. Irrelevant to reading, and the only thing standing between the deferred
+  bytecode writer and existing — [Scope](#scope) now wants one, where the previous version of this
+  document said it never would.
+
+  **This one is probably not TODO-shaped.** The section's premise is that a question is pending
+  observation in the running game, but the layout of a Lua dump is pending a read of `ldump.c` and
+  `lundump.c` at the same `github.com/lua/lua` `v3.2` tag that supplied the opcode table. Start
+  there. If the fields fall out of the source, they leave this section as answers rather than being
+  guessed at from the corpus.
 
 **Closed:** whether a plain-text `.thn` loads from the packed retail install. It does — observed in
 game, so the write path in [Scope](#scope) is settled, not provisional.
+
+**Closed:** whether the Lua 3.2 opcode numbering used here is right. The per-opcode counts over all
+1,506 scripts reproduce the table above exactly, and `bytecode.test.ts` pins the two places a
+plausible near-miss would land: `SETMAP`'s operand being pairs minus one, and `SETTABLEPOP` taking no
+operand despite ending in neither `W` nor `OP`.
 
 ---
 

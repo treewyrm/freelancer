@@ -7,7 +7,7 @@ in it, and what has actually been measured versus what is assumed. Per-format de
 
 ## The corpus is the same install utf2json uses
 
-`corpus.test.ts` suites look for a Freelancer `DATA` directory at **`$FREELANCER_DATA`**, falling
+The `corpus.test.ts` suites look for a Freelancer `DATA` directory at **`$FREELANCER_DATA`**, falling
 back to **`~/Downloads/Freelancer/DATA`**, and each suite skips itself with a reason when neither
 exists — the same convention and the same install as
 [utf2json's](../../utf2json/docs/RETAIL.md). **The rest of the test suite must never depend on
@@ -22,7 +22,7 @@ Two directories outside `DATA` matter here and do not in utf2json:
 
 Retail is the authority these readers are measured against, so a claim about the format is worth
 only the count behind it. Every number in these documents comes from a sweep of that install, and
-`corpus.test.ts` now asserts them back through the readers — **they are regression tests, so a
+the `corpus.test.ts` suites now assert them back through the readers — **they are regression tests, so a
 number that stops matching means the reader drifted, not that the number needs updating.**
 
 ## What is in it
@@ -39,6 +39,13 @@ number that stops matching means the reader drifted, not that the number needs u
 | Properties                           | 511,556                |
 | Values                               | 876,034                |
 | — of type boolean (`0x0`)            | **0**                  |
+| `.thn` files under `DATA`            | 1,506, all compiled    |
+| — in the symbolic form               | 1,151                  |
+| — in the numeric form                | 355                    |
+| Scene script constants               | 442,599                |
+| — number (tag `01`)                  | 282,234                |
+| — string (tag `02`)                  | 160,365                |
+| Identifier reads                     | 155,259, over 55 names |
 
 Distribution by directory:
 
@@ -86,14 +93,15 @@ Each of these decided a design position. The position is in the linked document;
 
 ## Round-trip fidelity
 
-Measured by `corpus.test.ts` against the install, except where the layer does not exist yet.
+Measured by the `corpus.test.ts` suites against the install, except where the layer does not exist yet.
 
-| Layer                                  | Result                           |
-| -------------------------------------- | -------------------------------- |
-| BINI → interim → BINI                  | **Byte-exact, 1,251 of 1,251**   |
-| BINI → interim → text → interim → BINI | **Byte-exact, 1,251 of 1,251**   |
-| text → interim → text                  | Fixed point over all 1,252 files |
-| interim → typed → interim              | Pending the typed layer          |
+| Layer                                   | Result                           |
+| --------------------------------------- | -------------------------------- |
+| BINI → interim → BINI                   | **Byte-exact, 1,251 of 1,251**   |
+| BINI → interim → text → interim → BINI  | **Byte-exact, 1,251 of 1,251**   |
+| text → interim → text                   | Fixed point over all 1,252 files |
+| THN bytecode → interim → text → interim | **Exact** over all 1,506 scripts |
+| interim → typed → interim               | Pending the typed layer          |
 
 The obstacle known in advance — **dictionary emission order** — turned out not to be one. The order
 is derivable (names in first-use order, then values in first-use order, one shared dedup table), and
@@ -111,36 +119,49 @@ and resolve to nothing.
 
 Collected so a reader recognizes them instead of treating them as bugs.
 
-| Quirk                               | Where                                                                                  | Detail                                                                               |
-| ----------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| The one text data file              | `initialworld.ini`                                                                     | Also pads numbers with **U+00A0**, not spaces                                        |
-| A section commented out by its name | `EXE/freelancer.ini`                                                                   | `[;Display]` — a section named `;Display`                                            |
-| `=` inside a section name           | `INTERFACE/keymap.ini`                                                                 | `[keymap=1.1]`                                                                       |
-| A space inside a section name       | `SOLAR`                                                                                | `[Exclusion Zones]`                                                                  |
-| A space inside a property name      | `MISSIONS/M12/m12.ini`                                                                 | `[Trigger] system St02`                                                              |
-| A purely numeric property name      | `UNIVERSE/SYSTEMS/IW01/iw01.ini`                                                       | `[Object] 260800`                                                                    |
-| Stray zero-value properties         | `FX/fuse_br_battleship.ini`, `FX/fuse_ku_gunship.ini`, `INTERFACE/BASESIDE/navbar.ini` | `ONLY`, `age_fire`, and `mesh` / `behavior` / `event` ×14                            |
-| Backslash paths, wrong case         | everywhere `file =` appears                                                            | `Universe\Systems\Li01\Bases\…` — needs separator translation and case-folded lookup |
-| `@include`                          | `EXE/dacom.ini`                                                                        | Opens with `@include FL_Dev.ini`; unresolved whether the game honours it             |
+| Quirk                               | Where                                                                                  | Detail                                                                                               |
+| ----------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| The one text data file              | `initialworld.ini`                                                                     | Also pads numbers with **U+00A0**, not spaces                                                        |
+| A section commented out by its name | `EXE/freelancer.ini`                                                                   | `[;Display]` — a section named `;Display`                                                            |
+| `=` inside a section name           | `INTERFACE/keymap.ini`                                                                 | `[keymap=1.1]`                                                                                       |
+| A space inside a section name       | `SOLAR`                                                                                | `[Exclusion Zones]`                                                                                  |
+| A space inside a property name      | `MISSIONS/M12/m12.ini`                                                                 | `[Trigger] system St02`                                                                              |
+| A purely numeric property name      | `UNIVERSE/SYSTEMS/IW01/iw01.ini`                                                       | `[Object] 260800`                                                                                    |
+| Stray zero-value properties         | `FX/fuse_br_battleship.ini`, `FX/fuse_ku_gunship.ini`, `INTERFACE/BASESIDE/navbar.ini` | `ONLY`, `age_fire`, and `mesh` / `behavior` / `event` ×14                                            |
+| Backslash paths, wrong case         | everywhere `file =` appears                                                            | `Universe\Systems\Li01\Bases\…` — needs separator translation and case-folded lookup                 |
+| Doubled backslashes                 | `[Trigger] Act_CallThorn`, `act_AddRTC`                                                | `missions\\m12\\M12_Osiris.thn` beside `missions\m11\M11_Walker1.thn` — collapse repeated separators |
+| `@include`                          | `EXE/dacom.ini`                                                                        | Opens with `@include FL_Dev.ini`; unresolved whether the game honours it                             |
 
-The 1,506 `.thn` files are **not INI** — all of them are compiled Lua 3.2. See [THN.md](THN.md) so
-a sweep does not try to parse one as INI, and does not write one off as code: they hold no
-functions and no control flow, only `duration`, `entities` and `events`.
+The 1,506 `.thn` files are **not INI** — all of them are compiled Lua 3.2, and they are read by
+`./thn` rather than by anything here. See [THN.md](THN.md) so a sweep does not try to parse one as
+INI, and does not write one off as code: they hold no functions and no control flow, only `duration`,
+`entities` and `events`. Two of their own quirks belong on this list:
+
+| Quirk                          | Where                               | Detail                                                                                                    |
+| ------------------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Two export forms               | 355 scripts, mostly `SCRIPTS/STORY` | Numbers where the other 1,151 use identifiers — `type = 9` for `type = SCENE`, `up = 1` for `up = Y_AXIS` |
+| Arrays stored as a `1..n` hash | the same 355                        | 76,447 tables; the same table to Lua, a different instruction in the bytecode, and preserved as written   |
+
+Both forms are in live use — 275 of the 355 are named by INI data, from the same properties that
+name the symbolic ones. See [THN.md](THN.md#both-export-forms-are-in-live-use).
 
 ## TODO — what is pending in the game
 
 Questions the corpus cannot answer, because the answer is a behaviour rather than a byte. Each
 document carries the full argument; this is the index.
 
-| Question                                                                                    | Where                       | Experiment                                    |
-| ------------------------------------------------------------------------------------------- | --------------------------- | --------------------------------------------- |
-| Whether the shipped game honours `@include` or whether it was a build-tool directive        | [INI.md](INI.md#todo)       | Add one to a text INI the game reads          |
-| First-wins or last-wins for a repeated scalar property                                      | [SCHEMA.md](SCHEMA.md#todo) | Duplicate a scalar and observe                |
-| Whether `[Sound]`'s two shapes are one section disambiguated by file, or two sharing a name | [SCHEMA.md](SCHEMA.md#todo) | Move a voice-bank `[Sound]` into `sounds.ini` |
-| Whether trailing values past a field's known arity are read or ignored                      | [SCHEMA.md](SCHEMA.md#todo) | Extend a known field by one value             |
+| Question                                                                                    | Where                       | Experiment                                                                           |
+| ------------------------------------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------ |
+| Whether the shipped game honours `@include` or whether it was a build-tool directive        | [INI.md](INI.md#todo)       | Add one to a text INI the game reads                                                 |
+| First-wins or last-wins for a repeated scalar property                                      | [SCHEMA.md](SCHEMA.md#todo) | Duplicate a scalar and observe                                                       |
+| Whether `[Sound]`'s two shapes are one section disambiguated by file, or two sharing a name | [SCHEMA.md](SCHEMA.md#todo) | Move a voice-bank `[Sound]` into `sounds.ini`                                        |
+| Whether trailing values past a field's known arity are read or ignored                      | [SCHEMA.md](SCHEMA.md#todo) | Extend a known field by one value                                                    |
+| What the 4-byte gap and header bytes 19–20 of a compiled `.thn` hold                        | [THN.md](THN.md#todo)       | **Read Lua 3.2's `ldump.c`/`lundump.c` first** — probably not a game question at all |
+| What numeric values THORN's identifiers have                                                | [THN.md](THN.md#todo)       | Pair a symbolic script against its numeric twin; confirm against `thorn.dll`         |
 
 Closed: whether a plain-text `.thn` loads from the packed install — it does, observed in game
-([THN.md](THN.md#the-engine)). Closed: whether the game accepts text where retail ships BINI — it
+([THN.md](THN.md#the-engine)). Closed: whether the Lua 3.2 opcode numbering is right — the per-opcode
+counts over all 1,506 scripts reproduce the disassembly table exactly ([THN.md](THN.md#todo)). Closed: whether the game accepts text where retail ships BINI — it
 does, as a fallback for any file lacking the signature; BINI itself is parsed natively by a second
 parser in the same class, not decompiled to text ([INI.md](INI.md#ini-and-bini)). Closed: how a
 boolean payload encodes truth — byte 0, nonzero is true, found by disassembly

@@ -1,6 +1,6 @@
 import type { Document, Property, Section, Value } from '../types.js'
-import BufferView from '../utility/bufferview.js'
-import { decode } from '../utility/encoding.js'
+import BufferView from '../../utility/bufferview.js'
+import { decode } from '../../utility/encoding.js'
 import { HEADER_BYTE_LENGTH, SIGNATURE, VALUE_BYTE_LENGTH, ValueTag, VERSION } from './data.js'
 
 /** Whether a buffer starts with the `BINI` signature. Check this, never the file extension. */
