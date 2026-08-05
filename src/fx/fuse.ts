@@ -1,7 +1,25 @@
 import type { Document, Section } from '#/ini/types.js'
-import { equals as sameName, fold } from '#/utility/string.js'
-import { boolean, list, number, numbers, rest, text, tuple } from './field.js'
-import type { Action, Fuse } from './types.js'
+import { from, toFloat } from '#/ini/value.js'
+import { fold } from '#/utility/string.js'
+import { runs } from '#/schema/document.js'
+import { boolean, number, numbers, rest, text } from '#/schema/field.js'
+import { fields, readSection, type Instruction, type Table } from '#/schema/property.js'
+import type { Report } from '#/schema/types.js'
+import type {
+  Action,
+  DamageGroup,
+  DamageRoot,
+  DestroyGroup,
+  DestroyHardpointAttachment,
+  DumpCargo,
+  Fuse,
+  IgniteFuse,
+  Impulse,
+  MakeInvincible,
+  StartCameraParticles,
+  StartEffect,
+  Tumble,
+} from './types.js'
 
 /**
  * Fuse scripts — the one thing in this data that is a sequence rather than a record.
@@ -39,133 +57,129 @@ const OPENER = 'fuse'
 
 const FUSE = ['name', 'lifetime', 'death_fuse', 'lodranges']
 
-/** Shared by every action arm. */
-const TIMED = ['at_t']
+/**
+ * `at_t`, shared by every arm.
+ *
+ * Written by hand rather than as `numbers`, because the field is a **one-or-two** union and anything
+ * else is not it: three retail actions carry a third value, and widening the type to `number[]` to
+ * hold them would make every consumer check a length the type had already promised. A wrong arity is
+ * reported and left out, and `unrecognized` still does not claim it — the property was read.
+ */
+const at_t: Instruction<Action> = {
+  into: 'at_t',
+  read(draft, values, report) {
+    const at = values.map(toFloat)
 
-const readAction = (section: Section): Action => {
-  const type = fold(section.name)
-  const known = [...TIMED]
+    if (at.length !== 1 && at.length !== 2) {
+      report?.(`at_t: expected 1 or 2 values, found ${at.length}`)
+      return true
+    }
 
-  const action = { type } as Action
-
-  const at = numbers(section, 'at_t')
-
-  // Arity as read: one value or two, and never padded to a fixed width.
-  if (at && (at.length === 1 || at.length === 2)) action.at_t = at as [number] | [number, number]
-
-  const scalar = (name: string, into: string) => {
-    known.push(name)
-    const value = text(section, name)
-    if (value !== undefined) Reflect.set(action, into, value)
-  }
-
-  const numeric = (name: string, into: string) => {
-    known.push(name)
-    const value = number(section, name)
-    if (value !== undefined) Reflect.set(action, into, value)
-  }
-
-  const flag = (name: string, into: string) => {
-    known.push(name)
-    const value = boolean(section, name)
-    if (value !== undefined) Reflect.set(action, into, value)
-  }
-
-  const triplet = (name: string) => {
-    known.push(name)
-    const value = tuple(section, name, 3)
-    if (value) Reflect.set(action, name, value)
-  }
-
-  const pair = (name: string) => {
-    known.push(name)
-    const value = tuple(section, name, 2)
-    if (value) Reflect.set(action, name, value)
-  }
-
-  const repeated = (name: string) => {
-    known.push(name)
-    const value = list(section, name)
-    if (value) Reflect.set(action, name, value)
-  }
-
-  switch (type) {
-    case 'start_effect':
-      scalar('effect', 'effect')
-      repeated('hardpoint')
-      flag('attached', 'attached')
-      triplet('pos_offset')
-      triplet('ori_offset')
-      break
-
-    case 'destroy_group':
-      scalar('group_name', 'group_name')
-      scalar('fate', 'fate')
-      break
-
-    case 'destroy_hp_attachment':
-      scalar('hardpoint', 'hardpoint')
-      scalar('fate', 'fate')
-      break
-
-    case 'destroy_root':
-      break
-
-    case 'ignite_fuse':
-      scalar('fuse', 'fuse')
-      numeric('fuse_t', 'fuse_t')
-      break
-
-    case 'damage_group':
-      scalar('group_name', 'group_name')
-      scalar('damage_type', 'damage_type')
-      numeric('hitpoints', 'hitpoints')
-      break
-
-    case 'damage_root':
-      scalar('damage_type', 'damage_type')
-      numeric('hitpoints', 'hitpoints')
-      break
-
-    case 'impulse':
-      scalar('hardpoint', 'hardpoint')
-      numeric('radius', 'radius')
-      numeric('force', 'force')
-      numeric('damage', 'damage')
-      triplet('pos_offset')
-      break
-
-    case 'start_cam_particles':
-      scalar('effect', 'effect')
-      triplet('pos_offset')
-      triplet('ori_offset')
-      break
-
-    case 'tumble':
-      numeric('ang_drag_scale', 'ang_drag_scale')
-      pair('turn_throttle_x')
-      pair('turn_throttle_y')
-      pair('turn_throttle_z')
-      pair('throttle')
-      break
-
-    case 'dump_cargo':
-      scalar('origin_hardpoint', 'origin_hardpoint')
-      break
-
-    case 'make_invincible':
-      flag('turn_on', 'turn_on')
-      break
-
-    // A thirteenth kind from a mod. Everything it carries lands in `unrecognized`.
-    default:
-      break
-  }
-
-  return { ...action, ...rest(section, known) }
+    draft.at_t = at as [number] | [number, number]
+    return true
+  },
+  write(properties, value, name) {
+    if (value.at_t) properties.push({ name, values: value.at_t.map(from) })
+  },
 }
 
-const readFuse = (section: Section, actions: Section[]): Fuse => {
+const start = fields<StartEffect>()
+const group = fields<DestroyGroup>()
+const attachment = fields<DestroyHardpointAttachment>()
+const ignite = fields<IgniteFuse>()
+const damageGroup = fields<DamageGroup>()
+const damageRoot = fields<DamageRoot>()
+const impulse = fields<Impulse>()
+const camera = fields<StartCameraParticles>()
+const tumble = fields<Tumble>()
+const cargo = fields<DumpCargo>()
+const invincible = fields<MakeInvincible>()
+
+/**
+ * One table per action kind, keyed by the folded section name.
+ *
+ * The twelve arms of a `switch` that used to build six closures per section and push every name it
+ * touched onto a `known: string[]`. The field names are checked against the interfaces in
+ * `./types.ts` now, and what the reader did not take is derived from the walk.
+ *
+ * A thirteenth kind from a mod finds no table: everything it carries lands in `unrecognized`.
+ */
+const TABLES = {
+  start_effect: {
+    effect: start.text('effect'),
+    hardpoint: start.merge('hardpoint'),
+    attached: start.boolean('attached'),
+    pos_offset: start.tuple(3, 'pos_offset'),
+    ori_offset: start.tuple(3, 'ori_offset'),
+  } satisfies Table<StartEffect>,
+
+  destroy_group: {
+    group_name: group.text('group_name'),
+    fate: group.text('fate'),
+  } satisfies Table<DestroyGroup>,
+
+  destroy_hp_attachment: {
+    hardpoint: attachment.text('hardpoint'),
+    fate: attachment.text('fate'),
+  } satisfies Table<DestroyHardpointAttachment>,
+
+  destroy_root: {},
+
+  ignite_fuse: {
+    fuse: ignite.text('fuse'),
+    fuse_t: ignite.number('fuse_t'),
+  } satisfies Table<IgniteFuse>,
+
+  damage_group: {
+    group_name: damageGroup.text('group_name'),
+    damage_type: damageGroup.text('damage_type'),
+    hitpoints: damageGroup.number('hitpoints'),
+  } satisfies Table<DamageGroup>,
+
+  damage_root: {
+    damage_type: damageRoot.text('damage_type'),
+    hitpoints: damageRoot.number('hitpoints'),
+  } satisfies Table<DamageRoot>,
+
+  impulse: {
+    hardpoint: impulse.text('hardpoint'),
+    radius: impulse.number('radius'),
+    force: impulse.number('force'),
+    damage: impulse.number('damage'),
+    pos_offset: impulse.tuple(3, 'pos_offset'),
+  } satisfies Table<Impulse>,
+
+  start_cam_particles: {
+    effect: camera.text('effect'),
+    pos_offset: camera.tuple(3, 'pos_offset'),
+    ori_offset: camera.tuple(3, 'ori_offset'),
+  } satisfies Table<StartCameraParticles>,
+
+  tumble: {
+    ang_drag_scale: tumble.number('ang_drag_scale'),
+    turn_throttle_x: tumble.tuple(2, 'turn_throttle_x'),
+    turn_throttle_y: tumble.tuple(2, 'turn_throttle_y'),
+    turn_throttle_z: tumble.tuple(2, 'turn_throttle_z'),
+    throttle: tumble.tuple(2, 'throttle'),
+  } satisfies Table<Tumble>,
+
+  dump_cargo: {
+    origin_hardpoint: cargo.text('origin_hardpoint'),
+  } satisfies Table<DumpCargo>,
+
+  make_invincible: {
+    turn_on: invincible.boolean('turn_on'),
+  } satisfies Table<MakeInvincible>,
+} as Readonly<Record<string, Table<Action>>>
+
+const readAction = (section: Section, report?: Report): Action => {
+  const type = fold(section.name)
+  const table: Table<Action> = { at_t, ...TABLES[type] }
+
+  return { ...readSection<Action>(section, table, report), type } as Action
+}
+
+const readFuse = (section: Section, actions: Section[], report?: Report): Fuse => {
   const name = text(section, 'name')
   if (name === undefined) throw new RangeError('[fuse] has no name')
 
@@ -180,7 +194,7 @@ const readFuse = (section: Section, actions: Section[]): Fuse => {
     lifetime,
     ...(death_fuse !== undefined && { death_fuse }),
     ...(lodranges && { lodranges }),
-    actions: actions.map(readAction),
+    actions: actions.map((action) => readAction(action, report)),
     ...rest(section, FUSE),
   }
 }
@@ -189,29 +203,13 @@ const readFuse = (section: Section, actions: Section[]): Fuse => {
  * Every fuse script in a document, in file order, each with its actions in firing order.
  *
  * @param document Sections of one `fuse*.ini`.
+ * @param report Optional diagnostics — see {@link Report}.
  * @throws RangeError when a section precedes the first `[fuse]`, which no retail file does — the
  * sections would have no owner and silently dropping them is how a mod loses its death sequence.
  */
-export function* readFuses(document: Document): Generator<Fuse> {
-  let opener: Section | undefined
-  let actions: Section[] = []
-
-  for (const section of document) {
-    if (!sameName(section.name, OPENER)) {
-      if (!opener)
-        throw new RangeError(`Section [${section.name}] appears before the first [${OPENER}]`)
-
-      actions.push(section)
-      continue
-    }
-
-    if (opener) yield readFuse(opener, actions)
-
-    opener = section
-    actions = []
-  }
-
-  if (opener) yield readFuse(opener, actions)
+export function* readFuses(document: Document, report?: Report): Generator<Fuse> {
+  for (const { opener, members } of runs(document, [OPENER], { orphans: 'throw' }))
+    yield readFuse(opener, members, report)
 }
 
 /**

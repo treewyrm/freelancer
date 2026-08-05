@@ -258,6 +258,15 @@ Six things follow that a reimplementation can get wrong:
 6. **`is_value_empty` is not "the value is an empty string" on the BINI path** — it is only ever
    true for an out-of-range index. A BINI value is never empty; the text path's version tests the
    substring's first character. This is the sharpest place where "one document model" leaks.
+7. **A flag is read by presence, so `separable` and `separable = true` are the same fact.** This
+   follows from 5 rather than being measured directly: reading index 0 of a zero-value property pops
+   the error box, and **456 bare `[CollisionGroup] separable` properties load without one**, so the
+   game cannot be reading them by value. The sweep agrees from the other side — `separable` is the
+   only `(section, property)` pair in retail written both bare and with a value, and every one of its
+   28 valued occurrences says `true`, **never `false`**. Three other pairs mix the two forms
+   (`[Zone] difficulty`, `[ObjList] breakformation`, `[Trigger] system`) and none of them is a flag:
+   their valued form carries a difficulty number, a placeholder token and a system name, and the bare
+   occurrences are one-off accidents. Status **inferred** — see the TODO.
 
 Two accessors are worth naming because they explain what BINI _looks_ like from inside the engine:
 
@@ -351,6 +360,7 @@ rather than a byte. The reading taken meanwhile is the one that cannot go visibl
 | Question                                                                                                                                                          | Reading taken                                                | Experiment                                                                                       |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
 | Whether the shipped game honours `@include` (`EXE/dacom.ini` opens with `@include FL_Dev.ini`), or whether it was a build-tool directive stripped before shipping | Treat it as a property named `@include` and do not follow it | Add an `@include` to a text INI the game reads and see whether the included content takes effect |
+| Whether a zero-value property is read as **true by presence**, per consequence 7 | Presence is true. Derived from consequence 5 plus the sweep, not observed | Author `separable = false` on a collision group and see whether the group still detaches |
 
 **Closed:** whether the game tolerates text where retail ships BINI. It does — a file without the
 `BINI` signature falls through to the text parser unconditionally. Note this is a fallback and not,

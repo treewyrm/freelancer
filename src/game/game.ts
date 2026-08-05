@@ -13,6 +13,7 @@ import { read as readIni } from '#/ini/index.js'
 import { read as readResources, readLibrary } from '#/resource/index.js'
 import { Directory } from '#/utf/index.js'
 import { fold } from '#/utility/string.js'
+import type { AnyBlock, Pilot } from '#/ai/index.js'
 import {
   readBeams,
   readEffectLODs,
@@ -22,11 +23,13 @@ import {
   readTextureLibraries,
   readVisEffects,
 } from '#/fx/index.js'
+import { readBlocks, readPilots } from '#/ai/index.js'
 import Assets from './assets.js'
 import Resolver from './resolver.js'
 import type { FileSystem } from './filesystem.js'
 import type { DataEntry, Settings } from './config.js'
 import { isMarker, readEntries, readLibraries, readSettings } from './config.js'
+import { HARDCODED_FILES } from './hardcoded.js'
 import { join } from './path.js'
 
 /**
@@ -78,6 +81,20 @@ export interface OpenOptions {
 
   /** LANGID to take from the resource DLLs, or every language when omitted. */
   language?: number
+
+  /**
+   * Whether to also walk the 58 paths compiled into the binaries — see {@link HARDCODED_FILES}.
+   *
+   * `[Data]` is not the whole load list: the mission scripts, the faction and NPC tables, the
+   * pilots, the random-mission data and the interface layout are all opened by name from code. **On
+   * is what the game does**, and a tool that wants the AI or the missions has no other way to reach
+   * them.
+   *
+   * Off by default all the same, because turning it on changes what {@link Game.documents} and
+   * {@link Game.entries} contain and existing consumers pin counts on both. The cost is 58 more
+   * files, which is small next to the seven DLLs `strings` reads.
+   */
+  hardcoded?: boolean
 }
 
 /** What a `[Data]` entry turned into. */
@@ -87,6 +104,18 @@ export interface LoadedEntry extends DataEntry {
 
   /** Why the entry produced nothing, when it did not. */
   error?: string
+
+  /** Whether the path came from a binary's string table rather than from `[Data]`. */
+  hardcoded?: true
+}
+
+/** Everything `./ai` recognized, accumulated across every file that contributed to it. */
+export interface Ai {
+  /** Includes the `CHARACTERS/newcharacter.ini` one — see `./ai`'s `isBehaviour`. */
+  pilots: Pilot[]
+
+  /** All seventeen block kinds in one list, discriminated by `type`. */
+  blocks: AnyBlock[]
 }
 
 /** Everything `./fx` recognized, accumulated across every file that contributed to it. */
@@ -138,6 +167,9 @@ export default class Game {
     fuses: [],
   }
 
+  /** What `./ai` read out of the `pilots` key. Empty unless `hardcoded` was on — see {@link OpenOptions}. */
+  readonly ai: Ai = { pilots: [], blocks: [] }
+
   private constructor(fs: FileSystem) {
     this.paths = new Resolver(fs)
   }
@@ -149,7 +181,7 @@ export default class Game {
    * @param options Where the config is and whether to read the resource DLLs.
    */
   static async open(fs: FileSystem, options: OpenOptions = {}): Promise<Game> {
-    const { config = 'EXE/freelancer.ini', strings = true, language } = options
+    const { config = 'EXE/freelancer.ini', strings = true, language, hardcoded = false } = options
 
     const game = new Game(fs)
 
@@ -159,6 +191,10 @@ export default class Game {
     if (strings) await game.#readLibraries(config, language)
 
     for (const entry of readEntries(game.config)) await game.#load(entry)
+
+    // After `[Data]`, because the code opens these when it needs them and a later definition wins.
+    if (hardcoded)
+      for (const { path, key } of HARDCODED_FILES) await game.#load({ key, path }, true)
 
     return game
   }
@@ -201,8 +237,8 @@ export default class Game {
     for (const [id, value] of infocards) this.library.infocards.set(id, value)
   }
 
-  async #load(entry: DataEntry): Promise<void> {
-    const loaded: LoadedEntry = { ...entry }
+  async #load(entry: DataEntry, hardcoded = false): Promise<void> {
+    const loaded: LoadedEntry = { ...entry, ...(hardcoded && { hardcoded: true as const }) }
     this.entries.push(loaded)
 
     // `bases` is the only one in retail: a marker for where base loading falls in the order.
@@ -260,6 +296,20 @@ export default class Game {
         this.effects.fuses.push(...readFuses(document))
         break
 
+      // ./ai — implemented. `pilots` is a hardcoded key, not a `[Data]` one, so this arm is dead
+      // unless `hardcoded` was on. `missions` reaches here for `[MetaBehavior]`, which lives in
+      // three story mission files rather than with the pilots.
+      case 'pilots':
+      case 'missions':
+        this.ai.pilots.push(...readPilots(document))
+        this.ai.blocks.push(...readBlocks(document))
+        break
+
+      // `newchardb`'s `[Pilot]` is a different section sharing the name — see ./ai's isBehaviour.
+      case 'newchardb':
+        this.ai.pilots.push(...readPilots(document))
+        break
+
       // TODO: ./solar
       case 'solar':
       case 'asteroids':
@@ -289,10 +339,9 @@ export default class Game {
       case 'voices':
         break
 
-      // TODO: ./characters
+      // TODO: ./characters — `newchardb` is above, since ./ai reads its `[Pilot]`
       case 'bodyparts':
       case 'costumes':
-      case 'newchardb':
         break
 
       // TODO: ./interface

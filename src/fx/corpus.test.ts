@@ -5,7 +5,7 @@ import { read } from '#/ini/index.js'
 import { Directory } from '#/utf/index.js'
 import { readAlchemy } from '#/alchemy/index.js'
 import { getResourceId } from '#/hash.js'
-import { fold } from '#/utility/string.js'
+import { equals as sameName, fold } from '#/utility/string.js'
 import Game from '#/game/game.js'
 import { readFuses } from './fuse.js'
 import { findEffect, readVisEffects } from './viseffect.js'
@@ -237,6 +237,62 @@ describe('fuse scripts', { skip: corpus.skip }, () => {
       'start_effect.only': 1,
       'start_effect.particles': 3,
     })
+  })
+
+  /**
+   * The whole behavioural surface of reading sequentially rather than by lookup.
+   *
+   * A singular property that repeats is **last-wins**, because the game re-runs the instruction, and
+   * three `[start_effect]` sections in all of retail are where that is visible. Every other repeat in
+   * these files — `at_t`, `ori_offset`, `attached` — writes the same value twice, and `hardpoint`
+   * accumulates rather than overriding, so nothing else moves.
+   *
+   * Named here rather than counted, because SCHEMA.md's TODO on this is still open: if observation in
+   * game ever says first-wins, these three are what has to change and this is the list.
+   */
+  it('takes the last of a repeated singular, everywhere one repeats', () => {
+    const overridden: string[] = []
+
+    for (const { data, path } of files) {
+      const document = read(data)
+
+      // Actions are every section but the openers, in file order — which is the order readFuses
+      // yields them in, so the two zip.
+      const sections = document.filter(({ name }) => !sameName(name, 'fuse'))
+      const actions = [...readFuses(document)].flatMap(({ actions }) => actions)
+
+      assert.equal(sections.length, actions.length)
+
+      for (const [index, section] of sections.entries()) {
+        const action = actions[index]
+        assert.ok(action)
+
+        for (const name of ['effect', 'pos_offset', 'ori_offset', 'at_t', 'attached'] as const) {
+          const repeats = section.properties.filter((property) => sameName(property.name, name))
+          if (repeats.length < 2) continue
+
+          const last = repeats.at(-1)?.values.map(({ value }) => String(value)).join()
+          const held = Reflect.get(action, name) as unknown
+          const read_ = Array.isArray(held) ? held.join() : String(held)
+
+          assert.equal(read_, last, `${path} [${section.name}] ${name}`)
+
+          const first = repeats[0]?.values.map(({ value }) => String(value)).join()
+          if (first !== last) overridden.push(`${section.name}.${name}`)
+        }
+      }
+    }
+
+    // Three [start_effect] sections, and nothing else in retail, read differently for it. Every
+    // other repeat writes the same value twice. SCHEMA.md's TODO on first-wins vs last-wins is
+    // still open, and this is the list of what would have to change if the game says otherwise.
+    assert.deepEqual(overridden.sort(), [
+      'start_effect.effect',
+      'start_effect.effect',
+      'start_effect.effect',
+      'start_effect.pos_offset',
+      'start_effect.pos_offset',
+    ])
   })
 
   /**

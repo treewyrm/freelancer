@@ -21,31 +21,52 @@ in the other twelve:
 
 ## Proposed entry points
 
-| Entry point        | Sections | Occurrences | Depends on                 |
-| ------------------ | -------- | ----------- | -------------------------- |
-| `./audio`          | 5        | 26,110      | —                          |
-| `./universe`       | 23       | 12,881      | —                          |
-| `./missions`       | 36       | 11,325      | universe, ships, equipment |
-| `./base`           | 10       | 6,329       | universe                   |
-| `./fx` **built**   | 25       | 4,283       | —                          |
-| `./equipment`      | 33       | 3,754       | —                          |
-| `./solar`          | 25       | 1,766       | —                          |
-| `./ships`          | 11       | 1,741       | equipment                  |
-| `./ai`             | 18       | 610         | —                          |
-| `./randommissions` | 10       | 584         | missions                   |
-| `./characters`     | 12       | 488         | —                          |
-| `./interface`      | 43       | 352         | —                          |
-| `./constants`      | 5        | 27          | —                          |
+The **wiki** column is how many of the module's `(section, property)` pairs the community
+documentation reaches, measured in [DICTIONARY.md](DICTIONARY.md). It is the honest estimate of how
+expensive a module will be, and it is not proportional to size: `./interface` is 42 sections at 13%.
 
-Every one of the 256 section names is assigned exactly once, and the occurrence column sums to
-70,250 — the assignment is a partition, not a sketch.
+| Entry point        | Sections | Occurrences | Pairs | Wiki      | Depends on                 |
+| ------------------ | -------- | ----------- | ----- | --------- | -------------------------- |
+| `./audio`          | 5        | 26,110      | 46    | 41%       | —                          |
+| `./universe`       | 21       | 12,881      | 162   | 72%       | —                          |
+| `./missions`       | 36       | 11,325      | 340   | 85%       | universe, ships, equipment |
+| `./base`           | 10       | 6,329       | 36    | 44%       | universe                   |
+| `./fx` **built**   | 25       | 4,283       | 167   | 89%       | —                          |
+| `./equipment`      | 33       | 3,754       | 416   | 47%       | —                          |
+| `./solar`          | 29       | 1,766       | 234   | 55%       | —                          |
+| `./ships`          | 11       | 1,741       | 92    | 89%       | equipment                  |
+| `./ai` **built**   | 18       | 610         | 187   | **92%**   | —                          |
+| `./randommissions` | 10       | 584         | 44    | **0%**    | missions                   |
+| `./characters`     | 12       | 488         | 32    | 84%       | —                          |
+| `./interface`      | 42       | 352         | 303   | **13%**   | —                          |
+| `./constants`      | 5        | 27          | 21    | **100%**  | —                          |
+
+**Two corrections to this table, both found by making the partition total.** Neither changes a count
+anywhere else, and both are recorded in [DICTIONARY.md](DICTIONARY.md#two-corrections-to-modulesmd):
+
+- The partition covered 256 names and **the sweep finds 257**. `[locked_gates]` (`initialworld.ini`,
+  27 `locked_gate` values) had no home and goes to `./universe`. `[Group]` was counted at 3 and given
+  to `./interface`, but 55 of its 58 are the faction groups in `initialworld.ini` — the `groups`
+  `[Data]` key — so it goes to `./universe` too, which is why that row moved from 23 sections to 21
+  and `./interface` from 43 to 42.
+- **`[Pilot]` is not wholly `./ai`.** 319 of the 320 are the AI pilots; the one in
+  `CHARACTERS/newcharacter.ini` is the new-character record and is `./characters`' shape.
+- `./solar` gains four rows over the original 25 by listing the shared sections it owns explicitly.
+
+Every one of the **257** section names is now assigned exactly once, over **2,080 distinct
+`(section, property)` pairs**.
 
 `./audio` dwarfs everything by occurrence (25,814 `[Sound]` entries, almost all voice lines) and is
 the cheapest module to build — five section shapes. `./universe` and `./missions` carry the most
 distinct structure. **Build order recommendation: audio, then universe + base, then equipment +
-ships, then solar, fx, ai, interface, characters, constants, and missions + randommissions last** —
-missions references nearly everything else, so its schemas are worth the most once the others exist
-to reference.
+ships, then solar, interface, characters, constants, and missions + randommissions last** — missions
+references nearly everything else, so its schemas are worth the most once the others exist to
+reference.
+
+`./fx` and `./ai` are done, and `./ai` went early rather than in its place in that order because it
+was the cheapest way to test the typed layer: 18 sections, one repeated shape, no cross-file
+resolution, and the best wiki coverage in the data. It settled the last two of SCHEMA.md's open
+design questions — see [AI.md](AI.md#what-building-it-settled).
 
 ---
 
@@ -74,7 +95,9 @@ to reference.
 | `Archetype`                                        | 18      |                                                         |
 | `MissionCreatedSolar`                              | 9       |                                                         |
 | `FlashlightLine`                                   | 5       |                                                         |
+| `Group`                                            | 58      | 55 in `initialworld.ini`; the 3 in `keylist.ini` are a different section sharing the name |
 | `Time`                                             | 1       | singleton                                               |
+| `locked_gates`                                     | 1       | `initialworld.ini`; 27 gate ids, stored pre-hashed      |
 
 ## `./base` — base interiors
 
@@ -182,9 +205,10 @@ plus `Reserve` 22, `Mission` 14, `MsnRandEnc` 7, `MsnLoot` 4, `PhantomLoot` 124,
 encode a command and its arguments. Those are effectively a second grammar inside the value list and
 are the hardest thing in this repository to type well; expect them to start as raw value lists.
 
-## `./ai` — pilots and the behaviour blocks
+## `./ai` — built, see [AI.md](AI.md)
 
-`MISSIONS/pilots_population.ini` and friends. One `[Pilot]` names a set of blocks by nickname.
+`MISSIONS/pilots_population.ini` and `pilots_story.ini`. One `[Pilot]` names a set of blocks by
+nickname.
 
 `Pilot` 320, `GunBlock` 99, `JobBlock` 59, `EvadeDodgeBlock` 30, `MissileBlock` 20,
 `BuzzHeadTowardBlock` 17, `FormationBlock` 10, `EvadeBreakBlock` 8, `BuzzPassByBlock` 6,
@@ -192,8 +216,19 @@ are the hardest thing in this repository to type well; expect them to start as r
 `DamageReactionBlock` 5, `TrailBlock` 4, `EngineKillBlock` 3, `MineBlock` 3,
 `MissileReactionBlock` 3.
 
-The 17 `*Block` sections share a family resemblance, which makes this the best module to prove the schema machinery
-on: many small sections, one repeated shape, and no cross-file resolution to worry about.
+The 17 `*Block` sections share a family resemblance, which is what made this the module to prove the
+schema machinery on: many small sections, one repeated shape, and no cross-file resolution to worry
+about. It worked — the coercion helpers moved to `./schema` and the last two of
+[SCHEMA.md](SCHEMA.md)'s open design questions closed.
+
+Three things the count above hides:
+
+- **`Pilot` 320 is 319 plus one.** `CHARACTERS/newcharacter.ini` carries a `[Pilot]` sharing only
+  `nickname` with the other 319; it belongs to `./characters` and is read here anyway, because a
+  section does not say which file it came from.
+- **`inherit` is on 290 of the 319**, so most pilots carry a name and a parent and nothing else.
+- **These files are not in `[Data]`.** `content.dll` opens them by name, so reaching them through
+  `./game` needs `hardcoded: true` — see [GAME.md](GAME.md).
 
 ## `./randommissions`
 

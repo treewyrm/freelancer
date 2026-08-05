@@ -128,10 +128,11 @@ Every format is read in the same three steps, and each step is usable on its own
 | `./thn/bytecode` | `src/thn/bytecode/index.ts` | Compiled Lua 3.2 reader, and the opcode table. **No writer** |
 | `./thn/scene` | `src/thn/scene/index.ts` | The typed layer: entities and events as records, and THORN's vocabulary |
 | `./resource` | `src/resource/index.ts` | Resource DLLs: the PE container, `RT_STRING` tables, `RT_HTML` infocards, the `ids_*` id space |
+| `./schema` | `src/schema/index.ts` | Typed-layer machinery for INI: the sequential `readSection`/`writeSection` walk and its field constructors, `runs` for opener-owned section runs, the `field.*` lookup helpers, and the `Unrecognized` contract every typed record extends |
 | `./fx` | `src/fx/index.ts` | Effects: `[Effect]`, `[VisEffect]`, beam appearances, and the fuse scripts |
+| `./ai` | `src/ai/index.ts` | Pilots: `[Pilot]` and the seventeen behaviour blocks it names |
 | `./game` | `src/game/index.ts` | The install: the injected filesystem, case-folding path resolution, `freelancer.ini`, the load order |
-| _planned_ `./schema` | — | Typed-layer machinery for INI: coercion, optionality, repeated fields, references |
-| _planned_ domain | — | `./universe`, `./base`, `./solar`, `./equipment`, `./ships`, `./missions`, `./ai`, `./audio`, `./interface`, … |
+| _planned_ domain | — | `./universe`, `./base`, `./solar`, `./equipment`, `./ships`, `./missions`, `./audio`, `./interface`, … |
 
 `./thn/scene` is deliberately *not* re-exported from `./thn`, so a consumer that wants the interim
 model does not pull the vocabulary in with it. The planned domain split is a partition of all 256
@@ -291,6 +292,14 @@ format tables do.
   until the next `[fuse]`, with nothing but position linking them, so a flat read yields 1,960
   orphans and loses every death sequence in the game. `at_t` is optional (39 actions have none) and
   keeps its arity (17 carry a two-value range, which is a min/max rather than a start and an end).
+- **[AI.md](docs/AI.md)** (`src/ai/`) — the second typed layer over INI, and the first written from
+  [DICTIONARY.md](docs/DICTIONARY.md) rather than from the files. **`[Pilot]` is two sections sharing
+  a name**: 319 are the AI pilots and the one in `CHARACTERS/newcharacter.ini` is the new-character
+  record, sharing only `nickname`. **`inherit` is on 290 of the 319**, so a reader that does not walk
+  the chain reads almost nothing. The `*_style_weight` fields are **mixed tuples that repeat**, and
+  flattening them loses which weight went with which name. **These files are not in `[Data]`** —
+  `content.dll` opens them, so `Game.open` needs `hardcoded: true`. Building it moved the coercion
+  helpers to `./schema` and closed SCHEMA.md's last two open design questions.
 
 ### The install
 
@@ -313,9 +322,23 @@ format tables do.
   that share only the container. **Find them, skip them, do not implement them** — every reader
   already yields nothing on them without throwing, deliberately. It also indexes every open question
   across the modules.
-- **[SCHEMA.md](docs/SCHEMA.md)** — INI's interim → typed layer, designed and unwritten. **The value
-  type tag is authoring residue**: 266 fields carry more than one type signature across retail, so
-  the typed layer coerces to its declared type and never switches on the tag.
+- **[SCHEMA.md](docs/SCHEMA.md)** — INI's interim → typed layer, and every design question it opened
+  is now closed by `./fx` or `./ai`. **The value type tag is authoring residue**: 266 fields carry
+  more than one type signature across retail, so the typed layer coerces to its declared type and
+  never switches on the tag. **A section is read sequentially, the way `INI_Reader` reads one** —
+  one pass over the properties, each name selecting an instruction — because a lookup-per-field
+  reader cannot express a property that owns the properties after it (`[Exclusion Zones]`, 634
+  openers), derives `unrecognized` from a `known: string[]` nothing checks, and answers the
+  repeated-scalar question by accident. **A repeat overrides**: last-wins, visible on five fields in
+  three retail sections. The tables still infer no types — `types.ts` is hand-written and is the
+  contract.
+- **[DICTIONARY.md](docs/DICTIONARY.md)** — **the document a domain module is built from**: all
+  **2,080 retail `(section, property)` pairs**, grouped by the module that will read them, with the
+  measurement beside the reading. Joins the retail sweep to the community wiki, which reaches 60% of
+  them and carries the half the sweep cannot produce — which fields are paths, which enumerations are
+  closed, what a number means. Every row carries ALCHEMY.md's `confirmed / inferred / guessed /
+  unread`, and a wiki claim enters at `guessed`. Prose is restated, never reproduced: the wiki is
+  GPL-3.0 and this package is MIT.
 - **[MODULES.md](docs/MODULES.md)** — every retail section name, its count, and which module owns it.
 - **[THORN.md](docs/THORN.md)** — the scene vocabulary the typed THN layer is built from. **Every row
   carries a provenance mark** — `thorn.dll`'s string table, the corpus, or the author's scripting
@@ -335,7 +358,8 @@ format tables do.
 A document's last section before its footer is **`## TODO`**, holding what is pending *observation in
 the running game* rather than pending code: the question, why the corpus cannot settle it, the
 reading taken meanwhile, and the experiment that would decide it. Present in ALCHEMY, ANIMATION,
-RIGID, MATERIAL, TEXTURE, DEFORMABLE, RENDERER, INI, SCHEMA, THN, THORN, RESOURCE, FX and GAME;
+RIGID, MATERIAL, TEXTURE, DEFORMABLE, RENDERER, INI, SCHEMA, DICTIONARY, THN, THORN, RESOURCE, FX,
+AI and GAME;
 [RETAIL.md](docs/RETAIL.md#todo--what-is-pending-in-the-game) indexes all of them in one table.
 
 - **Everything listed round-trips already.** A `TODO` marks an unread meaning, never an unread byte

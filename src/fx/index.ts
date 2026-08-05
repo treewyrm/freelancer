@@ -11,13 +11,13 @@
  * The files are the `effects`, `effect_shapes` and `fuses` keys of `[Data]`, which is 30 of its 99
  * entries. `./game` routes them here.
  *
- * `field.ts` is exported because it is the seed of the planned `./schema`: hand-written readers over
- * a few coercion helpers, which is the answer this module gives to the open question in
- * [SCHEMA.md](../../docs/SCHEMA.md) about how the typed layer should be shaped.
+ * The coercion helpers this module was built on **now live in [`./schema`](../../docs/SCHEMA.md)**.
+ * They started here as `field.ts` — the answer to SCHEMA.md's question about how the typed layer
+ * should be shaped — and moved when `./ai` became the second module to want them, which is the
+ * condition SCHEMA.md set. Import them from `#/schema` rather than from here.
  */
 
 export * from './types.js'
 export * from './effect.js'
 export * from './viseffect.js'
 export * from './fuse.js'
-export * as field from './field.js'

@@ -1,4 +1,4 @@
-import type { Property } from '#/ini/types.js'
+import type { Unrecognized } from '#/schema/types.js'
 
 /**
  * What the effect data means, as plain records.
@@ -23,16 +23,7 @@ import type { Property } from '#/ini/types.js'
  * Types are not JSON-safe-by-contract but happen to be, since nothing here holds a typed array.
  */
 
-/** Anything read from a section keeps what this module did not recognize. */
-export interface Unrecognized {
-  /**
-   * Properties with no field on this type, in the order they were read.
-   *
-   * A modded install carries fields this library has never heard of, and retail carries authoring
-   * residue. Both survive a read-modify-write instead of being silently deleted.
-   */
-  unrecognized?: Property[]
-}
+export type { Unrecognized }
 
 /** An 8-bit RGB triplet, which is how the beam appearances write colour. */
 export type Color = [red: number, green: number, blue: number]

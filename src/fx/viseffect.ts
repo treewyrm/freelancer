@@ -1,7 +1,7 @@
 import type { Document, Section } from '#/ini/types.js'
 import { filterSections } from '#/ini/section.js'
 import { getResourceId } from '#/hash.js'
-import { list, rest, text } from './field.js'
+import { list, rest, text } from '#/schema/field.js'
 import type { VisEffect } from './types.js'
 
 /**

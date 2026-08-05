@@ -178,6 +178,16 @@ are bare basenames whose real paths come from `[Data]`. `flserver.exe`'s `freela
 strings carry a literal `../data/` prefix — the same files spelled from a different working
 directory.
 
+**`Game.open` walks them when `hardcoded` is on**, after `[Data]` and through the same `#load` path,
+so each lands in `documents` under the `key` its row assigns and goes through the same reader switch.
+`entries` marks them `hardcoded: true`. This is what `hardcoded.ts` always meant by assigning a key;
+until `./ai` needed it, nothing walked the list.
+
+It is **off by default**, which is a decision worth stating rather than a default that happened:
+turning it on changes what `documents` and `entries` contain, and existing consumers pin counts on
+both. The cost is 58 files, small next to the seven PE images `strings` reads. A tool that wants the
+AI, the missions or the interface has no other way to reach them.
+
 ### Why reading the list beats walking the tree
 
 `FX/fuse_li_battleship.ini` is on disk and **absent from `[Data] fuses`**. The game never loads it.

@@ -157,6 +157,32 @@ fourth kind: **an opener that owns the run following it**, identified by `name`.
 `act_*` lists and the `destroy_*` families in a ship's death sequence will need the same shape, which
 is the argument for having built it here first.
 
+That shape is now `runs` in [`src/schema/document.ts`](../src/schema/document.ts), and `readFuses` is
+three lines over it with the same throw and the same order. Building it generic found that it is
+**not one rule**: `[fuse]` owns *every* section until the next opener, but `shiparch.ini`'s
+`[CollisionGroup]` attaches to the last `[Ship]` while its 157 `[Simple]` sections interleave between
+ships without belonging to one. Applying `[fuse]`'s rule there would hand every `[Simple]` to
+whichever ship happened to precede it, so a caller names the member kinds when only some attach.
+
+### Reading it sequentially moved three sections, and only three
+
+`readAction`'s twelve `switch` arms are twelve small tables now, and its six closures — each pushing
+to a hand-maintained `known: string[]` — are gone with the `Reflect.set` they existed to feed. The
+port is not behaviour-neutral, unlike `./ai`'s, and the whole of the difference is this:
+
+| File | Section | Property | Was (first) | Is (last) |
+| --- | --- | --- | --- | --- |
+| `FX/fuse_ku_battleship.ini` | `[start_effect]` | `effect` | `explosion_sfx_csx_flash01` | `gf_explosion_ku_battleship_smallexp` |
+| `FX/fuse_li_dreadnought.ini` | `[start_effect]` | `effect` | `explosion_sfx_csx_sectional04` | `gf_explosion_li_battleship_mainexpbig` |
+| `FX/fuse_li_dreadnought.ini` | `[start_effect]` | `pos_offset` | `0, 0, 70` | `30, -20, 70` |
+| `FX/fuse_or_osiris.ini` | `[start_effect]` | `effect` | `explosion_sfx_csx_sectional04` | `gf_explosion_li_battleship_mainexpbig` |
+| `FX/fuse_or_osiris.ini` | `[start_effect]` | `pos_offset` | `0, 0, 70` | `30, -20, 70` |
+
+Every other repeated property in these seventeen files writes the same value twice (`at_t`,
+`ori_offset`, `attached`) or accumulates rather than overriding (`hardpoint`). `corpus.test.ts`
+asserts the whole list rather than the count, because [SCHEMA.md](SCHEMA.md)'s TODO on first-wins
+versus last-wins is still open and this is exactly what would have to change if the game disagrees.
+
 ### Not preserved
 
 Property **interleaving** does not survive a write-back: recognized fields go out in the order the

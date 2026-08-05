@@ -1,7 +1,7 @@
 import type { Document, Section } from '#/ini/types.js'
 import { filterSections } from '#/ini/section.js'
 import { equals as sameName } from '#/utility/string.js'
-import { list, number, rest, text, tuple } from './field.js'
+import { list, number, rest, text, tuple } from '#/schema/field.js'
 import type { Beam, Effect, EffectLOD, EffectType, TextureShapes } from './types.js'
 
 /**
@@ -95,7 +95,7 @@ export const readEffectType = (section: Section): EffectType => {
   }
 
   const pbubble = tuple(section, 'pbubble', 2)
-  if (pbubble) type.pbubble = pbubble as [number, number]
+  if (pbubble) type.pbubble = pbubble
 
   return { ...type, ...rest(section, EFFECT_TYPE) }
 }
@@ -175,7 +175,7 @@ export const readBeam = (section: Section, kind: Beam['kind']): Beam => {
 
   for (const name of ['tip_color', 'core_color', 'outter_color', 'tail_color'] as const) {
     const value = tuple(section, name, 3)
-    if (value) beam[name] = value as [number, number, number]
+    if (value) beam[name] = value
   }
 
   if (beam.kind === 'bolt') {
@@ -186,7 +186,7 @@ export const readBeam = (section: Section, kind: Beam['kind']): Beam => {
 
     for (const name of ['sec_core_color', 'sec_outter_color'] as const) {
       const value = tuple(section, name, 3)
-      if (value) beam[name] = value as [number, number, number]
+      if (value) beam[name] = value
     }
   }
 

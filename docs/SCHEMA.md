@@ -4,9 +4,14 @@ Turning an interim `Document` into structures with real types, and back. The int
 that `[Good]` holds a property called `price`; this layer knows that a good has a price, that it is
 a number, and that `[Good]` in `EQUIPMENT/goods.ini` is the same shape as `[Good]` anywhere else.
 
-Most of what is here is a design position argued from the retail sweep. **The first domain module,
-[`./fx`](FX.md), is now written**, and where building it settled something the position has been
-replaced with what it settled — marked _(settled by `./fx`)_. Counts come from [RETAIL.md](RETAIL.md).
+Most of what is here is a design position argued from the retail sweep. **Two domain modules are now
+written** — [`./fx`](FX.md) and [`./ai`](AI.md) — and where building one settled something the
+position has been replaced with what it settled, marked _(settled by `./fx`)_ or _(settled by
+`./ai`)_. Counts come from [RETAIL.md](RETAIL.md).
+
+**The field-by-field readings for every module live in [DICTIONARY.md](DICTIONARY.md)**, which joins
+the retail sweep to the community wiki over all 2,080 `(section, property)` pairs. This document is
+the design; that one is the data a module is built from.
 
 ## What the retail data forces
 
@@ -112,16 +117,69 @@ read-modify-write cycle does not quietly delete a third party's data.
 Three questions the sketch above left open, to be settled when the first domain modules existed
 rather than guessed. Two are now answered.
 
-1. **Runtime schema objects, or hand-written readers?** _(settled by `./fx`)_ **Hand-written
-   readers**, over a handful of field helpers — `src/fx/field.ts`. The section shapes are small,
+1. **Runtime schema objects, or hand-written readers?** _(settled by `./fx`, confirmed by `./ai`)_
+   **Hand-written readers**, over a handful of field helpers. The section shapes are small,
    heterogeneous and full of one-off residue, and a declarative schema able to express all of it
    would be larger than the readers it replaced. It also reads the way every UTF reader here already
-   reads. If a second domain module wants those helpers unchanged they move to `./schema`; that is
-   when this is worth revisiting, and not before.
+   reads.
+
+   **The helpers now live in [`src/schema/`](../src/schema/index.ts).** `./ai` was the second module
+   to want them, which is the condition this section set — but Invariant 2 made the move mandatory
+   rather than optional, since `./ai` importing `#/fx/field.js` would be one domain module reaching
+   into another's meaning layer. Three helpers were added there and all three are general:
+   `field.values` for a **mixed tuple** (`waggle, 0.5`), `field.rows` for a **repeated property whose
+   repeats are separate records** rather than one list, and `field.flag` for a **zero-value
+   property**. See [AI.md](AI.md#what-building-it-settled).
+
+   `./ai` also reads its seventeen near-identical blocks from one **table of field names**. That is
+   not a retreat to a runtime schema: the table declares only which of four kinds each name is, it
+   infers no types, and the interfaces are still hand-written and still the contract. The rule that
+   decides between the two is whether the sections are alike — `./fx`'s were not, `./ai`'s are.
+
+   **The answer has not changed; the helpers grew a second shape.** `field.*` is a *lookup* — it
+   searches the section for a name, once per field. The game does not read that way, and three
+   things in the data need what it does instead, so
+   [`src/schema/property.ts`](../src/schema/property.ts) added a **sequential walk**: one pass over
+   the properties in file order, each name selecting an instruction from a `Table<T>`.
+
+   It is still not the runtime schema this rejected, and the distinction is exact. A table declares
+   which INI name does what to which **already-declared** field. It infers no TypeScript type,
+   validates nothing, and `types.ts` in each module is still hand-written and still the contract —
+   `./ai`'s table one step further, not a different animal. What is new is that `into` is checked
+   against `keyof T`, so a misspelled *field* no longer compiles, and that the field names are the
+   only names checked: the table **key** is a string out of a file and a typo there routes a property
+   to `unrecognized` in silence.
+
+   Three things forced it, in the order the evidence supports them:
+
+   - **A property can open a context.** See the fifth identity kind below. `[Exclusion Zones]` cannot
+     be read at all by lookup, and DICTIONARY.md had the wrong reading recorded because of it.
+   - **`unrecognized` was declared, not derived.** Every reader kept a `known: string[]` beside its
+     own interface with nothing checking the two agreed; a name dropped from the array moved a field
+     into `unrecognized` while the field still read correctly. The walk knows what it dispatched.
+   - **Lookup answered the repeated-scalar question by accident**, taking the first occurrence. See
+     the TODO table.
+
+   Both `./fx` and `./ai` are ported onto it. `./ai`'s port is byte-identical — no field on any of
+   the seventeen block sections repeats anywhere in retail — which is what made it the one to port
+   first: any corpus movement would have been a bug in the walk rather than an expected change.
 2. Whether one schema per section is enough, or whether a section's shape genuinely depends on the
-   file it appears in. **Still open** — `./fx` does not test it, because none of its sections change
-   shape by file. `[Sound]` is still the case that decides it: 1,817 occurrences carry a `nickname`
-   and 23,997 do not, and the split is by file (voice banks vs sound definitions), not by content.
+   file it appears in. _(settled by `./ai`)_ **Two sections sharing a name, modelled separately.**
+   The sweep finds three instances, and two of them are stronger evidence than `[Sound]` because
+   their shapes **share no property but `nickname`** — a section the game read leniently as one shape
+   cannot produce a null intersection:
+
+   | Section | Shape A | Shape B | Overlap |
+   | --- | --- | --- | --- |
+   | `[Group]` | `initialworld.ini` ×55 — `nickname`, `ids_name`, `ids_info`, `ids_short_name`, `rep` | `INTERFACE/keylist.ini` ×3 — `group_num`, `name` | **none** |
+   | `[Pilot]` | `MISSIONS/pilots_*.ini` ×319 — 16 `*_id` references and `inherit` | `CHARACTERS/newcharacter.ini` ×1 — `body`, `comm`, `voice`, `body.anim`, `thumb`, `comm.anim` | `nickname` |
+   | `[Sound]` | sound definitions ×1,817 — carry `nickname` | voice banks ×23,997 — carry `msg` | partial |
+
+   **Neither shape is filtered out at read time**, because a section on its own does not say which
+   file it came from and guessing from the property set would be a policy. `./ai` reads the
+   newcharacter `[Pilot]` as a `Pilot` with every field absent and its six real properties in
+   `unrecognized`, and offers `isBehaviour` as the test. The experiment for `[Sound]` itself, whose
+   split is the ambiguous one of the three, is still in the table below.
 3. **Strict or lenient validation?** _(settled by `./fx`)_ **Lenient with a diagnostics channel**, as
    this was leaning. A missing *identity* throws naming the section, because a `[fuse]` with no
    `name` cannot be referenced by anything; every other property is optional and everything
@@ -153,6 +211,26 @@ There is a **fourth kind** the split above does not cover, found while building 
 
   `[Trigger]`'s `act_*` lists and the `destroy_*` families in a ship's death sequence are the same
   shape, which is why it was worth building first somewhere small.
+
+There is a **fifth**, which is the fourth one level down — inside a section rather than across them:
+
+- **A property that owns the properties following it.** `[Exclusion Zones]` is the clean case and
+  nobody had noticed it: **169 sections, 634 `exclusion` openers, and zero member properties before
+  the first opener**, each owning the `fog_far`, `zone_shell`, `max_alpha` and `exclusion_tint` that
+  follow it, in runs of nought to five. Read flat it is nine unrelated lists, and which shell belongs
+  to which zone is unrecoverable — which is what [DICTIONARY.md](DICTIONARY.md) recorded until this
+  was measured.
+
+  **`[Zone] encounter` is the same shape and messier.** 5,425 encounters over 4,080 zones, with 7,105
+  `faction` weights behind them — but **497 `faction` properties in 300 sections precede their
+  section's first `encounter`**, every one of them in `UNIVERSE/SYSTEMS/INTRO/intro.ini`, where the
+  author wrote all thirteen factions and then all six encounters. The game loads that file, so an
+  opener that throws on a leading member is wrong: `Fields.group` files it in `unrecognized` and
+  reports, and it round-trips untouched.
+
+  And **`faction_weight` is not a member of that run at all** — all 5,611 of them precede every
+  `encounter` in their section, in every file, without exception. It is a zone-level list, and
+  modelling it as a member would be a reading the data contradicts.
 
 Cross-references are by nickname string, and the game hashes them with **`getObjectId`** (id32),
 which is also the function that names `DATA/AUDIO` voice files. `getResourceId` (CRC32) is the
@@ -223,6 +301,15 @@ BINI encoding recorded. What must hold:
 2. `typed → interim → typed` is identity.
 3. An absent property stays absent; a zero-value property stays zero-value.
 
+**A zero-value property and `= true` are one fact, not two.** `[CollisionGroup] separable` is the
+only field in retail written both ways — bare ×456, `= true` ×28, and **never `= false`** — and
+[INI.md](INI.md#how-the-game-reads-a-value) says reading index 0 of a zero-value property is a hard
+error in the game, so a bare property cannot be being read by value. Presence is the test. `flag`
+therefore folds the two and writes bare, and rule 3 above is unaffected: what a flag round-trips is
+its meaning, and the choice of spelling is the writer's the way the int/float tag is. An explicit
+`= false` is still written out, because retail never writes one and dropping a mod's would let a
+default win.
+
 Byte-exactness is the _encoding_ layer's guarantee. A tool that must not perturb bytes edits the
 interim document; a tool that wants meaning takes the typed structure and accepts the fixed point.
 
@@ -230,8 +317,8 @@ interim document; a tool that wants meaning takes the typed structure and accept
 
 | Question                                                                                                               | Reading taken                   | Experiment                                                                      |
 | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------- |
-| Whether the game reads a repeated _scalar_ property as first-wins or last-wins, where the schema says it is not a list | Preserve both; do not choose    | Duplicate a scalar in a text INI the game loads and observe which value applies |
-| Whether `[Sound]`'s two shapes are one section the game disambiguates by file, or two sections sharing a name          | Model as two, split by file     | Move a voice-bank `[Sound]` into `sounds.ini` and see whether it loads          |
+| Whether the game reads a repeated _scalar_ property as first-wins or last-wins, where the schema says it is not a list | **Last-wins.** `INI_Reader` is a cursor and the consumer assigns in a loop, so re-running the instruction overwrites; first-wins would need a guard written at every call site. Measured: **202 pairs repeat inside a section**, 34 in under 5% of their sections and 19 in under 1% — the low-frequency tail is authoring accident, which is what makes this a choice rather than an obvious answer. The whole visible surface across retail is **five fields on three `[start_effect]` sections** (`effect` ×3, `pos_offset` ×2, in `FX/fuse_ku_battleship.ini`, `fuse_li_dreadnought.ini` and `fuse_or_osiris.ini`), pinned by name in `src/fx/corpus.test.ts`. Reversing it is one line in one constructor | Duplicate a scalar in a text INI the game loads and observe which value applies |
+| Whether `[Sound]`'s two shapes are one section the game disambiguates by file, or two sections sharing a name          | **Two sections** — `[Group]` and `[Pilot]` settle the general question with a null intersection; `[Sound]`'s own split is partial and still rests on the file | Move a voice-bank `[Sound]` into `sounds.ini` and see whether it loads          |
 | Whether trailing values beyond a field's known arity are read or ignored (`[Gun] lodranges` at 5)                      | Keep them; expose the full list | Extend a known field by one value and look for a behaviour change               |
 
 ---
