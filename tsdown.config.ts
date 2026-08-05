@@ -18,6 +18,7 @@ export default defineConfig({
     './src/ini/index.ts',
     './src/ini/text/index.ts',
     './src/ini/binary/index.ts',
+    './src/ini/save/index.ts',
     './src/thn/index.ts',
     './src/thn/text/index.ts',
     './src/thn/bytecode/index.ts',

@@ -25,17 +25,19 @@ this list is what changes with it.
 | `./texture`      | 41      | `.txm` libraries, DDS, Targa, DXT and 16-bit expansion                    |
 | `./material`     | 13      | `Material library` entries and the shader-name tables                     |
 | `./deformable`   | 23      | `.dfm` character models                                                   |
-| `./ini`          | 23      | INI in either encoding, plus the section/property accessors               |
+| `./ini`          | 24      | INI in any of the three encodings, plus the section/property accessors    |
 | `./ini/text`     | 4       | text INI only                                                             |
 | `./ini/binary`   | 14      | BINI only, and its layout constants                                       |
+| `./ini/save`     | 6       | `.fl` saves: text under a positional XOR mask                             |
 | `./thn`          | 16      | scene scripts in either encoding, interim layer                           |
 | `./thn/text`     | 3       | Lua source only — the whole write path                                    |
 | `./thn/bytecode` | 10      | compiled Lua 3.2 chunks, read only                                        |
 | `./thn/scene`    | 67      | the typed scene layer: entities and events                                |
 | `./resource`     | 57      | resource DLLs, `ids_name` strings and `ids_info` infocards                |
 
-`./ini` re-exports `binary`, `text` and `value` as namespaces, and `./thn` re-exports `bytecode`,
-`text` and `value` the same way, so the split subpaths are a convenience rather than the only route.
+`./ini` re-exports `binary`, `save`, `text` and `value` as namespaces, and `./thn` re-exports
+`bytecode`, `text` and `value` the same way, so the split subpaths are a convenience rather than the
+only route.
 
 ## How to read this
 
@@ -474,7 +476,7 @@ The narrowest entry point in the package, and the one where the most is left beh
 | `findByNickname`   | function  | Finds a section by its `nickname`, comparing hashes rather than text.        |
 | `findProperty`     | function  | First property with this name, or `undefined`.                               |
 | `findSection`      | function  | First section with this name, or `undefined`.                                |
-| `Format`           | type      | `'binary' \| 'text'`.                                                        |
+| `Format`           | type      | `'binary' \| 'text' \| 'save'`.                                              |
 | `formatOf`         | function  | Detects the encoding of a buffer without parsing it.                         |
 | `getNickname`      | function  | The `nickname` a section identifies itself by, as text.                      |
 | `getValue`         | function  | First value of the first property with this name.                            |
@@ -482,12 +484,13 @@ The narrowest entry point in the package, and the one where the most is left beh
 | `hasProperty`      | function  | Whether a property is present at all, whatever its values.                   |
 | `Property`         | interface | A named list of values. Zero values is normal and means something.           |
 | `read`             | function  | Reads an INI in whichever encoding it is in — the signature decides.         |
+| `save`             | namespace | Everything under `./ini/save`.                                               |
 | `Section`          | interface | A named list of properties. The name is opaque text, not an identifier.      |
 | `text`             | namespace | Everything under `./ini/text`.                                               |
 | `value`            | namespace | Value constructors, predicates and coercions (below).                        |
 | `Value`            | type      | One value of one property, tagged rather than a bare primitive.              |
 | `ValueType`        | type      | Which of the four things a value is.                                         |
-| `write`            | function  | Writes a document as bytes, binary by default.                               |
+| `write`            | function  | Writes a document as bytes, binary by default; never masks unless asked.     |
 
 `value`: `boolean`, `integer`, `float`, `string`, `from`, `list`, `isBoolean`, `isInteger`,
 `isFloat`, `isNumber`, `isString`, `toBoolean`, `toInteger`, `toFloat`, `toText`, `equals`.
@@ -517,6 +520,17 @@ The narrowest entry point in the package, and the one where the most is left beh
 | `SIGNATURE`            | const    | `BINI`, read as a little-endian `uint32`.                                            |
 | `VALUE_BYTE_LENGTH`    | const    | `type` uint8 and a fixed four-byte payload, whatever the type.                       |
 | `ValueTag`             | type     | `Boolean`/`Integer`/`Float`/`String` — a `const` object and the union of its values. |
+
+## `./ini/save`
+
+| Export               | Kind     |                                                                              |
+| -------------------- | -------- | ---------------------------------------------------------------------------- |
+| `HEADER_BYTE_LENGTH` | const    | The signature, and the whole of the header — no version field, no length.    |
+| `isSave`             | function | Whether a buffer starts with the `FLS1` signature. Check this, not the suffix. |
+| `mask`               | function | Applies the mask to a body, and is its own inverse.                          |
+| `read`               | function | Reads a masked save into sections.                                           |
+| `SIGNATURE`          | const    | `FLS1`, read as a little-endian `uint32`.                                    |
+| `write`              | function | Writes a document as a masked save.                                          |
 | `VERSION`              | const    | The only version retail carries, in all 1,251 files.                                 |
 | `write`                | function | Writes sections as a BINI, reproducing the original compiler's byte layout.          |
 

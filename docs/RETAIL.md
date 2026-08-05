@@ -22,8 +22,9 @@ Three sweeps, because the formats want different handles:
 Two directories outside `DATA` matter:
 
 - **`EXE/`** — `freelancer.ini`, `dacom.ini`, `dacomsrv.ini`, the three plain-text INIs and the only
-  place `@include` appears; and the seven **resource DLLs** every `ids_name` and `ids_info` resolves
-  into, read and written by `./resource`. See [RESOURCE.md](RESOURCE.md).
+  place `@include` appears; `newplayer.fl` and `mpnewcharacter.fl`, the two starting-state saves,
+  read and written by `./ini/save`; and the seven **resource DLLs** every `ids_name` and `ids_info`
+  resolves into, read and written by `./resource`. See [RESOURCE.md](RESOURCE.md).
 - **`DLLS/`** — holds only `BIN/content.dll`, which carries a version block and nothing else. The
   resource numbers do **not** resolve here, a natural guess and a wrong one.
 
@@ -40,6 +41,7 @@ matching means the reader drifted, not that the number needs updating.**
 | — BINI (signature `BINI`)            | 1,251                  |
 | — plain text                         | 1 (`initialworld.ini`) |
 | `.ini` files under `EXE`             | 3, all plain text      |
+| `.fl` files under `EXE`              | 2, one of them masked  |
 | BINI version values seen             | `1`, in all 1,251      |
 | Sections                             | 70,250                 |
 | Distinct section names (case-folded) | 256                    |
@@ -137,6 +139,8 @@ The text formats and the resource DLLs:
 | BINI → interim → BINI                   | **Byte-exact, 1,251 of 1,251**                                                       |
 | BINI → interim → text → interim → BINI  | **Byte-exact, 1,251 of 1,251**                                                       |
 | text → interim → text                   | Fixed point over all 1,252 files                                                     |
+| save body → unmasked → save body        | **Byte-exact**; the mask is its own inverse over the exact bytes                     |
+| save → interim → save                   | Fixed point over both `.fl` files                                                    |
 | THN bytecode → interim → text → interim | **Exact** over all 1,506 scripts                                                     |
 | THN typed → interim → typed             | **Identity** over all 1,506                                                          |
 | THN interim → typed → interim           | Fixed point; 3 of 1,506 are exact and 72 more differ only in how numbers are spelled |
@@ -175,6 +179,8 @@ Collected so a reader recognizes them instead of treating them as bugs.
 | Backslash paths, wrong case         | everywhere `file =` appears                                                            | `Universe\Systems\Li01\Bases\…` — needs separator translation and case-folded lookup                 |
 | Doubled backslashes                 | `[Trigger] Act_CallThorn`, `act_AddRTC`                                                | `missions\\m12\\M12_Osiris.thn` beside `missions\m11\M11_Walker1.thn` — collapse repeated separators |
 | `@include`                          | `EXE/dacom.ini`                                                                        | Opens with `@include FL_Dev.ini`; unresolved whether the game honours it                             |
+| One extension, two encodings        | `EXE/newplayer.fl`, `EXE/mpnewcharacter.fl`                                            | Only the first is masked; the second is plain text INI full of `%%NAME%%` placeholders               |
+| U+00A0 padding again                | `EXE/newplayer.fl`                                                                     | 12 bytes of it, on four `locked_gate` lines — the same authoring habit as `initialworld.ini`         |
 
 The 1,506 `.thn` files are **not INI** — all of them are compiled Lua 3.2, and they are read by
 `./thn`. See [THN.md](THN.md) so a sweep does not try to parse one as INI, and does not write one

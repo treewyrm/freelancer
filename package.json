@@ -86,6 +86,10 @@
       "import": "./dist/ini/binary/index.js",
       "types": "./dist/ini/binary/index.d.ts"
     },
+    "./ini/save": {
+      "import": "./dist/ini/save/index.js",
+      "types": "./dist/ini/save/index.d.ts"
+    },
     "./thn": {
       "import": "./dist/thn/index.js",
       "types": "./dist/thn/index.d.ts"

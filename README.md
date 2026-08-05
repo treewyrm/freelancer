@@ -53,6 +53,7 @@ it: resolution order, defaults, caches and output conventions belong to the cons
 | `@treewyrm/freelancer/ini`         | `Document`, `Section`, `Property`, `Value`, coercion, lookups, `read` / `write`     | [INI.md](docs/INI.md)               |
 | `@treewyrm/freelancer/ini/text`    | Text INI parser and serializer                                                      | [INI.md](docs/INI.md)               |
 | `@treewyrm/freelancer/ini/binary`  | BINI reader and writer                                                              | [INI.md](docs/INI.md)               |
+| `@treewyrm/freelancer/ini/save`    | `.fl` saves: text under a positional XOR mask                                       | [INI.md](docs/INI.md)               |
 | `@treewyrm/freelancer/thn`         | `Document`, `Global`, `Value`, value helpers, `read` / `write`                      | [THN.md](docs/THN.md)               |
 | `@treewyrm/freelancer/thn/text`    | Lua source parser and serializer                                                    | [THN.md](docs/THN.md)               |
 | `@treewyrm/freelancer/thn/bytecode`| Compiled Lua 3.2 reader, and the opcode table                                       | [THN.md](docs/THN.md)               |
@@ -141,10 +142,11 @@ const parts = readSurfaceLibrary(BufferView.from(readFileSync('ships/li_fighter.
 
 ## Reading data
 
-### INI, both spellings
+### INI, all three spellings
 
 The signature decides which parser runs, never the extension or the location. Retail `DATA` holds
-1,251 BINI files and one text file, all named `.ini`, and `EXE/` holds three more text ones.
+1,251 BINI files and one text file, all named `.ini`, `EXE/` holds three more text ones, and the two
+`.fl` saves beside them are one masked and one plain.
 
 ```ts
 import { findByNickname, getValue, read, value } from '@treewyrm/freelancer/ini'
@@ -165,7 +167,7 @@ knowing, all of them the engine's: a string coerced to a boolean accepts only `t
 name (so `yes` is **false**); a float coerced to an integer truncates toward zero; an unparseable
 string yields `0` rather than failing, because that is what the game gets.
 
-Writing emits either encoding from the same document:
+Writing emits any of the three encodings from the same document:
 
 ```ts
 import { addProperty, addSection, value, write, type Document } from '@treewyrm/freelancer/ini'
@@ -179,7 +181,12 @@ addProperty(good, 'separable') // a flag is a property with no values
 
 writeFileSync('goods.ini', write(document, 'binary'))
 writeFileSync('goods.txt', write(document, 'text'))
+writeFileSync('goods.fl', write(document, 'save')) // FLS1, masked
 ```
+
+The mask on a `.fl` is obfuscation and nothing more — the pad depends only on a byte's position, so
+it is its own inverse and `save.mask` both reads and writes it. A document does not remember what it
+was read from, so `'save'` has to be asked for; the default stays `binary`.
 
 **Repeats are lists, not mistakes.** `[Loadout] equip` occurs 16,074 times across retail and 156
 files repeat a section name, so every lookup comes in a singular and a plural form and the plural is
@@ -264,6 +271,7 @@ the same bytes. Byte-exactness holds where the format permits it:
 | ----------------------------------- | ---------------------------------------------------- |
 | BINI → model → BINI                 | **Byte-exact**, verified over all 1,251 retail files |
 | BINI → model → text → model → BINI  | **Byte-exact**, same corpus                          |
+| Save body → unmasked → save body    | **Byte-exact**; the mask is its own inverse          |
 | THN bytecode → model → text → model | **Exact**, verified over all 1,506 retail scripts    |
 | DLL → resources → DLL               | **Exact**, verified over all 37 DLLs in retail `EXE` |
 | resources → `.rsrc`                 | **Byte-identical to retail**, 5 libraries of 7       |
@@ -303,7 +311,7 @@ decisions not worth re-litigating.
 | [MATERIAL.md](docs/MATERIAL.md)      | Shader types, colours, texture slots, and why every property is optional     |
 | [DEFORMABLE.md](docs/DEFORMABLE.md)  | `.dfm` characters: the bone table, skinned meshes, detail levels             |
 | [ALCHEMY.md](docs/ALCHEMY.md)        | `.ale` particle effects, the node library, the case-sensitive hash           |
-| [INI.md](docs/INI.md)                | Both encodings, the shared document model, how the game reads a value        |
+| [INI.md](docs/INI.md)                | All three encodings, the shared document model, how the game reads a value   |
 | [SCHEMA.md](docs/SCHEMA.md)          | Interim → typed for INI: coercion, optionality, references, nicknames        |
 | [MODULES.md](docs/MODULES.md)        | Every retail section name, and which module would own it                     |
 | [THN.md](docs/THN.md)                | The scene script format, its value domain, and why it is not INI             |

@@ -3,6 +3,7 @@ import * as assert from 'node:assert/strict'
 import * as corpus from '#/corpus.js'
 import { formatOf, read } from './index.js'
 import * as binary from './binary/index.js'
+import * as save from './save/index.js'
 import * as text from './text/index.js'
 import { decode } from '#/utility/encoding.js'
 
@@ -198,6 +199,67 @@ describe('retail corpus', { skip: corpus.skip }, () => {
         const properties = read(dacom!.data).flatMap(({ properties }) => properties)
 
         assert.ok(properties.some(({ name }) => name.startsWith('@include')))
+      })
+    },
+  )
+
+  describe(
+    'saves',
+    { skip: corpus.glob(corpus.executables, '**/*.fl').length ? false : 'no EXE directory' },
+    () => {
+      const assets = corpus.glob(corpus.executables, '**/*.fl')
+
+      // Which is why the signature decides here too. One extension, two encodings, and the plain
+      // one is the multiplayer template — the `%%NAME%%` placeholders the server fills in.
+      it('holds two files, only newplayer.fl masked', () => {
+        assert.equal(assets.length, 2)
+
+        const masked = assets.filter(({ data }) => formatOf(data) === 'save')
+
+        assert.equal(masked.length, 1)
+        assert.match(masked[0]!.path, /newplayer\.fl$/i)
+      })
+
+      it('reads 4 sections and 316 properties across both', () => {
+        let sections = 0
+        let properties = 0
+
+        for (const { data } of assets) {
+          const document = read(data)
+          sections += document.length
+          for (const section of document) properties += section.properties.length
+        }
+
+        assert.equal(sections, 4)
+        assert.equal(properties, 316)
+      })
+
+      it('reads newplayer.fl as [Player], [StoryInfo] and [mPlayer]', () => {
+        const asset = assets.find(({ path }) => /newplayer\.fl$/i.test(path))
+
+        assert.deepEqual(
+          read(asset!.data).map(({ name }) => name),
+          ['Player', 'StoryInfo', 'mPlayer'],
+        )
+      })
+
+      // The mask is not where fidelity can be lost — it is its own inverse over the exact bytes,
+      // so unmasking and re-masking the file returns it verbatim, comments and U+00A0 padding and
+      // all. Only the trip through the document drops those, which is the text writer's limit.
+      it('re-masks newplayer.fl byte for byte', () => {
+        const asset = assets.find(({ path }) => /newplayer\.fl$/i.test(path))
+        const body = asset!.data.subarray(save.HEADER_BYTE_LENGTH)
+        const again = save.mask(save.mask(body))
+
+        assert.equal(again.length, body.length)
+        assert.ok(again.every((byte, i) => byte === body[i]))
+      })
+
+      it('is a fixed point over both files', () => {
+        for (const { path, data } of assets) {
+          const once = save.write(read(data))
+          assert.deepEqual(save.write(save.read(once)), once, `${path} is not a fixed point`)
+        }
       })
     },
   )

@@ -1,10 +1,10 @@
 # INI and BINI
 
 Freelancer's configuration data is INI: a flat sequence of bracketed sections, each holding
-properties, each holding comma-separated values. It ships in two encodings — plain text, and
-**BINI**, the compiled binary form the game's tools produce. **The two carry the same document, so
-one model serves both**, and a reader that accepts either plus a writer that emits either is also a
-BINI compiler and decompiler.
+properties, each holding comma-separated values. It ships in three encodings — plain text; **BINI**,
+the compiled binary form the game's tools produce; and the **save** form, which is text under a
+positional XOR mask. **All three carry the same document, so one model serves them all**, and a
+reader that accepts any plus a writer that emits any is also a BINI compiler and decompiler.
 
 **The game has one reader and two parsers behind it.** `INI_Reader`, in `common.dll` — built from
 `E:\FL\Scratch\Source\Common\Ini.cpp` — reads a 12-byte header, compares it against `BINI`, and sets
@@ -23,9 +23,13 @@ Two consequences, and they pull in different directions:
 
 The document model above is still what both paths agree on, which is why one model serves both.
 
+The save form is not one of the two `INI_Reader` branches on — it has no `BINI` signature, so by the
+time it reaches that class it has to have been unmasked already. Where that happens has not been
+traced. See [Save form](#save-form).
+
 Retail `DATA` holds **1,252 `.ini` files: 1,251 BINI and exactly one text** (`initialworld.ini`).
-The three under `EXE/` — `freelancer.ini`, `dacom.ini`, `dacomsrv.ini` — are text as well. **Check
-the signature, never the extension.**
+The three under `EXE/` — `freelancer.ini`, `dacom.ini`, `dacomsrv.ini` — are text as well, and the
+two `.fl` beside them are one masked and one plain. **Check the signature, never the extension.**
 
 ## The document model
 
@@ -175,6 +179,45 @@ All are zero-value properties, all round-trip fine, and none means anything. **T
 carries them through untouched; the typed layer ignores unknown properties rather than throwing.**
 An unrecognized property is the normal state of a 2003 data file, not a parse failure.
 
+## Save form
+
+A third encoding, and the shallowest: **text INI under a positional XOR mask**. Files carry the
+extension `.fl` and open with the four ASCII bytes `FLS1`; everything after them is the text form,
+masked byte by byte. There is no version field and no length — the signature is the whole header.
+
+```
+pad[i] = (('Gene'[i % 4] + i) % 256) | 0x80        i counted from the start of the body
+body[i] ^= pad[i]
+```
+
+Three things follow from the pad depending on **position and nothing else**:
+
+- It is **its own inverse**, so one routine reads and writes. `./ini/save` is one file for that
+  reason.
+- It is **obfuscation, not encryption**. The sequence repeats every 256 bytes and one known section
+  header recovers all of it. The `| 0x80` is the point of the exercise: it forces every output byte
+  out of the printable range, so the file does not look editable in a text editor.
+- Nothing in the file selects the key. `Gene` does not appear as a string in any retail executable,
+  so where the word came from is unknown.
+
+Retail ships two `.fl`, both in `EXE/`, and **only one of them is masked**:
+
+| File                     | Opens with | Contents                                                                    |
+| ------------------------ | ---------- | --------------------------------------------------------------------------- |
+| `EXE/newplayer.fl`       | `FLS1`     | `[Player]`, `[StoryInfo]`, `[mPlayer]` — 227 properties, the singleplayer start |
+| `EXE/mpnewcharacter.fl`  | `[Player]` | plain text, 89 properties, `%%NAME%%` / `%%MONEY%%` / `%%HOME_BASE%%` placeholders the server fills in |
+
+So **check the signature, never the extension** applies here twice over: once between BINI and text,
+and again between masked and plain within one extension. `formatOf` reports `binary`, `text` or
+`save`, and `read` routes on the signature without being told which it has.
+
+Under the mask is ordinary text, with no dialect of its own — `newplayer.fl` even carries the
+**U+00A0 column padding** that [initialworld.ini](#text-form) does, 12 bytes of it on four
+`locked_gate` lines. The text reader takes it verbatim.
+
+**Writing never masks unless asked.** A document does not remember what it was read from, so
+`write(document, 'save')` is explicit and the default stays `binary`.
+
 ## How the game reads a value
 
 From `common.dll`, since it constrains what the typed layer in [SCHEMA.md](SCHEMA.md) is allowed to
@@ -271,6 +314,8 @@ point everywhere** — what is written reads back identical and writes again to 
 | BINI → interim → BINI                  | **Byte-exact for all 1,251 files. Measured, not aspired to** — see below |
 | text → interim → text                  | Fixed point; comments and layout are **not** preserved unless modelled   |
 | BINI → interim → text → interim → BINI | Byte-exact, since text is the richer encoding                            |
+| save body → unmasked → save body       | **Byte-exact.** The mask is its own inverse over the exact bytes         |
+| save → interim → save                  | Fixed point over both `.fl`, with the text direction's losses and no others |
 | interim → typed → interim              | Fixed point for known sections; unknown properties survive               |
 
 **Dictionary ordering is settled, and it is derivable.** The compiler's emission order is exactly:
