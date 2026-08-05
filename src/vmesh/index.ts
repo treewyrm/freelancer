@@ -18,4 +18,11 @@ export {
 export { type VMeshPart, readVMeshPart, writeVMeshPart } from './part.js'
 export { type MultiLevel, atRange, readMultiLevel, writeMultiLevel } from './multilevel.js'
 export { type VMeshWire, type VWireData, readVMeshWire, writeVMeshWire } from './wireframe.js'
-export { type VMeshLibrary, readVMeshLibrary, writeVMeshLibrary } from './library.js'
+export {
+  type MeshDraw,
+  type VMeshLibrary,
+  getMesh,
+  getMeshDraw,
+  readVMeshLibrary,
+  writeVMeshLibrary,
+} from './library.js'

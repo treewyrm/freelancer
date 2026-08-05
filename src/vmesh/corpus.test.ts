@@ -5,7 +5,7 @@ import type Directory from '#/utf/directory.js'
 import type File from '#/utf/file.js'
 import { getResourceId } from '#/hash.js'
 import { Format, Primitive, readVMeshData, vertexByteLength } from './data.js'
-import { getMeshDraw, readVMeshLibrary, writeVMeshLibrary } from './library.js'
+import { getMesh, getMeshDraw, readVMeshLibrary, writeVMeshLibrary } from './library.js'
 import { readMultiLevel } from './multilevel.js'
 import { readVMeshPart, writeVMeshPart } from './part.js'
 import { readVMeshWire, writeVMeshWire } from './wireframe.js'
@@ -191,20 +191,62 @@ describe('retail asset corpus', { skip }, () => {
           const part = readVMeshPart(directory)
           if (!part) continue
 
-          try {
-            const draws = [...getMeshDraw(library, part.reference)]
-            strictEqual(draws.length, part.reference.groupCount)
-            resolved++
-          } catch (error) {
-            ok(error instanceof RangeError)
+          const data = getMesh(library, part.reference.meshId)
+
+          if (!data) {
             external++
+            continue
           }
+
+          const draws = [...getMeshDraw(data, part.reference)]
+          strictEqual(draws.length, part.reference.groupCount)
+          resolved++
         }
       }
 
       // Interface models keep their geometry in a shared library file.
       ok(resolved > 8000, `resolved ${resolved}`)
       ok(external < resolved / 4, `unresolved ${external} of ${resolved + external}`)
+    })
+
+    // Both fields are derived rather than authored, so a reader that drifts on either one
+    // disagrees with the reference itself rather than merely drawing the wrong thing.
+    it('carries the index and vertex extents its own groups add up to', () => {
+      let checked = 0
+
+      for (const { path, root } of assets()) {
+        const library = readVMeshLibrary(root)
+
+        for (const directory of walk(root)) {
+          const part = readVMeshPart(directory)
+          if (!part) continue
+
+          const { reference } = part
+          const data = getMesh(library, reference.meshId)
+          if (!data) continue
+
+          const draws = [...getMeshDraw(data, reference)]
+          if (!draws.length) continue
+
+          const prior = data.groups
+            .slice(0, reference.groupStart)
+            .reduce((sum, { elementCount }) => sum + elementCount, 0)
+
+          strictEqual(reference.indexStart, prior, `${path}/${directory.name}: indexStart`)
+
+          const total = draws.reduce((sum, { elementCount }) => sum + elementCount, 0)
+          strictEqual(reference.indexCount, total, `${path}/${directory.name}: indexCount`)
+
+          // baseVertex carries ref.vertexStart, which cancels across the span.
+          const lowest = Math.min(...draws.map(({ baseVertex }) => baseVertex))
+          const highest = Math.max(...draws.map((d) => d.baseVertex + d.numVertices - 1))
+
+          strictEqual(reference.vertexCount, highest - lowest + 1, `${path}/${directory.name}`)
+          checked++
+        }
+      }
+
+      ok(checked > 8000, `checked ${checked}`)
     })
   })
 

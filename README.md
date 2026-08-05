@@ -292,6 +292,7 @@ decisions not worth re-litigating.
 
 | Document                             | Subject                                                                      |
 | ------------------------------------ | ---------------------------------------------------------------------------- |
+| [API.md](docs/API.md)                | Every export of every subpath, and what no barrel re-exports                 |
 | [UTF.md](docs/UTF.md)                | The container, `Directory` / `File`, hashing, the utilities                  |
 | [VMESH.md](docs/VMESH.md)            | Mesh parts, the `VMeshWire` overlay, the mesh library, LOD levels            |
 | [COMPOUND.md](docs/COMPOUND.md)      | The `Cmpnd` hierarchy, constraints, joints, hardpoints                       |

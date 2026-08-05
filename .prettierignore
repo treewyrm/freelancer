@@ -1,0 +1,3 @@
+# Prettier is for code. Markdown is hand-wrapped and hand-tabled; its reflow
+# destroys line breaks that carry meaning. See CLAUDE.md, "Code style".
+*.md

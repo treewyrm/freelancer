@@ -310,7 +310,10 @@ RIGID, MATERIAL, TEXTURE, DEFORMABLE, RENDERER, INI, SCHEMA, THN, THORN and RESO
 
 ## Code style
 
-- Prettier: single quotes, no semicolons, 100-char print width.
+- Prettier: single quotes, no semicolons, 100-char print width. **Code only — never `.md`.** Its
+  reflow rewrites line breaks that carry meaning in the documents under `docs/`: the property tables,
+  the hand-set wrapping, the status markers. Markdown is edited by hand. `.prettierignore` enforces
+  it; do not narrow it.
 - `verbatimModuleSyntax` — use `import type` for type-only imports.
 - All imports use `.js` extensions (NodeNext resolution, even for `.ts` sources).
 - `noUncheckedIndexedAccess` — array indexing returns `T | undefined`.

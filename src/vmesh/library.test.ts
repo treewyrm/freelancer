@@ -1,9 +1,9 @@
-import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert/strict'
+import { deepStrictEqual, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import Directory from '#/utf/directory.js'
 import { getResourceId } from '#/hash.js'
 import { Format, Primitive, vertexByteLength, type VMeshData } from './data.js'
-import { getMeshDraw, readVMeshLibrary, writeVMeshLibrary } from './library.js'
+import { getMesh, getMeshDraw, readVMeshLibrary, writeVMeshLibrary } from './library.js'
 import type { VMeshGroup } from './group.js'
 import type { VMeshRef } from './ref.js'
 
@@ -83,11 +83,28 @@ describe('readVMeshLibrary', () => {
   })
 })
 
-describe('getMeshDraw', () => {
+describe('getMesh', () => {
   const library = [mesh('a.vms'), mesh('b.vms')]
 
+  it('finds a mesh by the CRC a reference names it with', () => {
+    strictEqual(getMesh(library, getResourceId('b.vms')), library[1])
+  })
+
+  it('finds a mesh by name, case-insensitively', () => {
+    strictEqual(getMesh(library, 'A.VMS'), library[0])
+  })
+
+  // Absence is normal: 530 retail references resolve into a library file of their own.
+  it('returns undefined when the library does not hold the mesh', () => {
+    strictEqual(getMesh(library, 'missing.vms'), undefined)
+  })
+})
+
+describe('getMeshDraw', () => {
+  const data = mesh('a.vms')
+
   it('yields one draw call per group in the reference slice', () => {
-    const draws = [...getMeshDraw(library, reference('a.vms'))]
+    const draws = [...getMeshDraw(data, reference('a.vms'))]
 
     strictEqual(draws.length, 2)
     deepStrictEqual(
@@ -96,75 +113,69 @@ describe('getMeshDraw', () => {
     )
   })
 
-  it('resolves the mesh by CRC of its name, case-insensitively', () => {
-    const draws = [...getMeshDraw(library, reference('A.VMS'))]
-
-    strictEqual(draws[0]?.materialId, 0x11111111)
-  })
-
-  it('throws RangeError when the mesh is not in the library', () => {
-    throws(() => [...getMeshDraw(library, reference('missing.vms'))], RangeError)
-  })
-
   it('walks the index buffer forward by each group element count', () => {
-    const draws = [...getMeshDraw(library, reference('a.vms'))]
+    const draws = [...getMeshDraw(data, reference('a.vms'))]
 
     deepStrictEqual(
-      draws.map(({ base }) => base),
-      [0, 3],
+      draws.map(({ startIndex, elementCount }) => [startIndex, elementCount]),
+      [
+        [0, 3],
+        [3, 6],
+      ],
     )
-    deepStrictEqual([...draws[0]!.elements], [0, 1, 2])
-    deepStrictEqual([...draws[1]!.elements], [3, 4, 5, 5, 4, 3])
   })
 
   it('starts from indexStart rather than the beginning of the buffer', () => {
-    const [draw] = [...getMeshDraw(library, reference('a.vms', { indexStart: 6, groupCount: 1 }))]
+    const [draw] = [...getMeshDraw(data, reference('a.vms', { indexStart: 6, groupCount: 1 }))]
 
-    strictEqual(draw?.base, 6)
-    deepStrictEqual([...draw.elements], [5, 4, 3])
+    strictEqual(draw?.startIndex, 6)
   })
 
   it('skips to groupStart and stops after groupCount groups', () => {
-    const draws = [...getMeshDraw(library, reference('a.vms', { groupStart: 1, groupCount: 1 }))]
+    const draws = [...getMeshDraw(data, reference('a.vms', { groupStart: 1, groupCount: 1 }))]
 
     strictEqual(draws.length, 1)
     strictEqual(draws[0]?.materialId, 0x22222222)
   })
 
+  // Both offsets apply. Read with group.vertexStart alone, every reference into a shared
+  // mesh bases at 0 and they overlap instead of tiling — 6,535 of 8,792 retail references.
+  it('bases each group at ref.vertexStart plus group.vertexStart', () => {
+    const draws = [...getMeshDraw(data, reference('a.vms', { vertexStart: 100 }))]
+
+    deepStrictEqual(
+      draws.map(({ baseVertex }) => baseVertex),
+      [100, 103],
+    )
+  })
+
+  it('bases at group.vertexStart alone when the reference starts at zero', () => {
+    const draws = [...getMeshDraw(data, reference('a.vms'))]
+
+    deepStrictEqual(
+      draws.map(({ baseVertex }) => baseVertex),
+      [0, 3],
+    )
+  })
+
   // vertexEnd is the last vertex of the group, so a group spanning 0..2 covers
   // three vertices. Treating it as exclusive silently drops the final one.
-  it('includes the vertex at vertexEnd in the slice', () => {
-    const draws = [...getMeshDraw(library, reference('a.vms'))]
+  it('counts the vertex at vertexEnd', () => {
+    const draws = [...getMeshDraw(data, reference('a.vms'))]
 
-    for (const { vertices } of draws) strictEqual(vertices.byteLength, 3 * stride)
+    for (const { numVertices } of draws) strictEqual(numVertices, 3)
   })
 
-  it('slices the vertex buffer from vertexStart', () => {
-    const [, second] = [...getMeshDraw(library, reference('a.vms'))]
-    const { vertices } = library[0]!
-
-    ok(second)
-    deepStrictEqual([...second.vertices], [...vertices.subarray(3 * stride, 6 * stride)])
-  })
-
-  it('yields an empty vertex slice for a degenerate group whose end precedes its start', () => {
+  it('reports no vertices for a degenerate group whose end precedes its start', () => {
     const broken = mesh('c.vms')
     broken.groups = [group(0, 5, 1, 3)]
 
-    const [draw] = [...getMeshDraw([broken], reference('c.vms', { groupCount: 1 }))]
-    strictEqual(draw?.vertices.byteLength, 0)
-  })
-
-  it('reports the format and stride alongside the geometry', () => {
-    const [draw] = [...getMeshDraw(library, reference('a.vms'))]
-
-    strictEqual(draw?.format, Format.Position | Format.Normal | Format.Texture1)
-    strictEqual(draw.size, stride)
-    strictEqual(draw.primitive, Primitive.TriangleList)
+    const [draw] = [...getMeshDraw(broken, reference('c.vms', { groupCount: 1 }))]
+    strictEqual(draw?.numVertices, 0)
   })
 
   it('stops early when groupCount runs past the end of the group list', () => {
-    const draws = [...getMeshDraw(library, reference('a.vms', { groupCount: 5 }))]
+    const draws = [...getMeshDraw(data, reference('a.vms', { groupCount: 5 }))]
 
     strictEqual(draws.length, 2)
   })

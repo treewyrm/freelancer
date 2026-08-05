@@ -228,10 +228,14 @@ device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST,
   group.elementCount / 3);
 ```
 
-> **`getMeshDraw` in [`src/vmesh/library.ts`](../src/vmesh/library.ts) omits `ref.vertexStart`.** It
-> slices the vertex buffer at `group.vertexStart * stride`, which is the overlapping reading above:
-> correct for the 2,257 references whose `vertexStart` is 0, wrong for the other 6,535. Its index
-> slice is right. Treat its `vertices` field as unusable until that is fixed, and compute the base
+> **`getMeshDraw` in [`src/vmesh/library.ts`](../src/vmesh/library.ts) yields exactly those four
+> numbers**, per group: `startIndex`, `elementCount`, `baseVertex` — which is the sum above, not
+> `group.vertexStart` alone — and `numVertices`. It slices nothing, because `baseVertex` is a draw
+> parameter here and has to become something else under §3.3.
+>
+> It used to slice the vertex buffer at `group.vertexStart * stride`, the overlapping reading:
+> correct for the 2,257 references whose `ref.vertexStart` is 0, wrong for the other 6,535. If you
+> hold an older copy of the package, treat its `vertices` field as unusable and compute the base
 > yourself.
 
 ### 3.3 WebGL2 has no base vertex

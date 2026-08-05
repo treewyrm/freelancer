@@ -23,7 +23,7 @@ VMeshWire (UTF directory)
   └─ VWireData (UTF file) ── meshId (CRC), vertex slice, LineList indices
 ```
 
-A `VMeshRef` identifies a mesh by the CRC32 of its name (`meshId`) and selects a slice of that mesh's groups, indices, and vertices. `getMeshDraw` resolves the reference against a loaded `VMeshLibrary` and yields per-group draw calls ready to pass to `DrawIndexedPrimitive`.
+A `VMeshRef` identifies a mesh by the CRC32 of its name (`meshId`) and selects a slice of that mesh's groups, indices, and vertices. `getMesh` finds that mesh in a loaded `VMeshLibrary`, and `getMeshDraw` walks the reference over it, yielding the per-group offsets `DrawIndexedPrimitive` takes.
 
 `VMeshWire` is a sibling of `VMeshPart` rather than a child: it addresses the same `VMeshLibrary` mesh by CRC, but carries its own index buffer describing edges instead of faces.
 
@@ -310,41 +310,48 @@ Reads/writes the `MultiLevel` subtree inside `parent`. `readMultiLevel` returns 
 ## `library.ts` — Mesh Library
 
 ```ts
-type VMeshLibrary = Map<number, VMeshData>
+type VMeshLibrary = VMeshData[]
 ```
 
-The library is a `Map` keyed by the CRC32 of each mesh's name (computed via `getResourceId`). Conceptually this is a pool of shared GPU vertex/index buffers; multiple `VMeshRef`s can address into the same `VMeshData`.
+The library is a flat list, in the order the meshes appear under the `VMeshLibrary` directory; `getMesh` finds one by the CRC32 of its name (computed via `getResourceId`). Conceptually this is a pool of shared GPU vertex/index buffers; multiple `VMeshRef`s can address into the same `VMeshData`.
 
 ### Functions
 
-| Function                          | Description                                                                      |
-| --------------------------------- | -------------------------------------------------------------------------------- |
-| `readVMeshLibrary(parent)`        | Generator — yields each `VMeshData` found inside the `VMeshLibrary` subdirectory |
-| `writeVMeshLibrary(values)`       | Creates a `VMeshLibrary` directory containing one subdirectory per `VMeshData`   |
-| `getMesh(library, name)`          | Looks up a `VMeshData` by name string or CRC                                     |
-| `getMeshDraw(library, reference)` | Generator — resolves a `VMeshRef` and yields per-group draw descriptors          |
+| Function                       | Description                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| `readVMeshLibrary(parent)`     | Reads every `VMeshData` inside the `VMeshLibrary` subdirectory                 |
+| `writeVMeshLibrary(values)`    | Creates a `VMeshLibrary` directory containing one subdirectory per `VMeshData` |
+| `getMesh(library, name)`       | Looks up a `VMeshData` by name string or CRC; `undefined` if absent            |
+| `getMeshDraw(data, reference)` | Generator — yields one `MeshDraw` per group of the reference, in index order   |
 
-### `getMeshDraw` yield shape
+### `MeshDraw`
 
 ```ts
 {
   materialId: number // int32 CRC of material — set active material before issuing this draw call
-  primitive: Primitive // D3DPRIMITIVETYPE
-  base: number // StartIndex for DrawIndexedPrimitive (accumulated per group)
-  elements: Uint16Array // subarray of the mesh's D3DFMT_INDEX16 index buffer
-  format: Format // D3DFVF bitmask — pass to SetVertexShader (D3D8) or SetFVF (D3D9)
-  size: number // vertex stride in bytes = vertexByteLength(format)
-  vertices: Uint8Array // subarray of the mesh's vertex buffer
+  startIndex: number // StartIndex: where the group's indices begin in the mesh index buffer
+  elementCount: number // NumIndices; elementCount / 3 primitives for a TriangleList
+  baseVertex: number // BaseVertex and MinIndex: ref.vertexStart + group.vertexStart
+  numVertices: number // NumVertices: vertexEnd - vertexStart + 1, vertexEnd being inclusive
 }
 ```
 
-Each yielded object provides everything needed to issue one `DrawIndexedPrimitive` call. The `elements` and `vertices` slices are `subarray` views into the shared `VMeshData` buffers — no copying occurs.
+Together with `data.primitive` and `data.format`, which belong to the mesh rather than to any one group, that is one `DrawIndexedPrimitive`:
+
+```cpp
+device->DrawIndexedPrimitive(data.primitive,
+  draw.baseVertex, draw.numVertices, draw.startIndex, draw.elementCount / 3);
+```
+
+**Offsets, not slices.** Nothing here subarrays `indices` or `vertices`. `baseVertex` is a draw parameter in Direct3D and has nowhere to go in an API without one — WebGL2's `drawElements` takes a byte offset and nothing else — so a consumer there folds it into the index values, the attribute pointers or the upload. [RENDERER.md](RENDERER.md) §3.3 weighs the four options; picking one is the consumer's, which is why `getMeshDraw` hands out the numbers and stops.
+
+Both offsets in `baseVertex` apply and neither is absolute on its own: 6,535 of the 8,792 retail references carry a non-zero `ref.vertexStart`, and dropping it draws the wrong geometry rather than failing. See §3.2 of the same document for the measurement.
 
 ---
 
 ## Mesh resolution is global, not per file
 
-A `VMeshRef` names its mesh by CRC alone, with nothing to say which file that mesh lives in. At runtime Freelancer resolves it against every library currently loaded, so a model may reference geometry that its own `VMeshLibrary` does not contain — and `getMeshDraw` will throw `RangeError` for it when handed only the one file's library.
+A `VMeshRef` names its mesh by CRC alone, with nothing to say which file that mesh lives in. At runtime Freelancer resolves it against every library currently loaded, so a model may reference geometry that its own `VMeshLibrary` does not contain — and `getMesh` returns `undefined` for it when handed only the one file's library.
 
 The retail data has exactly one case: **`INTERFACE/interface.generic.vms`**, a bare UTF tree whose only child is a `VMeshLibrary` holding two meshes.
 
