@@ -4,9 +4,20 @@ Retail `DATA` holds **256 distinct section names across 70,250 sections**. This 
 every one to a proposed module, so the typed layer is built domain by domain against a known target
 rather than file by file against whatever turns up.
 
-Modules are proposed, not fixed. Counts are section occurrences across the retail sweep; the
-directory column is where they predominantly live. Sections marked **shared** appear in more than
-one domain's files and are the reason the boundaries below are not simply directory names.
+Modules are proposed, not fixed — except `./fx`, which is **built** ([FX.md](FX.md)). Counts are
+section occurrences across the retail sweep; the directory column is where they predominantly live.
+Sections marked **shared** appear in more than one domain's files and are the reason the boundaries
+below are not simply directory names.
+
+Two things the counts here do not capture, both found while building `./fx`, and both worth expecting
+in the other twelve:
+
+- **A count is what is on disk, not what the game loads.** `FX/fuse_li_battleship.ini` is present and
+  absent from `[Data] fuses`, so 209 fuse scripts on disk are 192 in the running game. Walk the load
+  list, not the tree — see [GAME.md](GAME.md).
+- **A flat count can hide the structure.** The twelve `start_effect` / `destroy_*` / `damage_*` rows
+  under `./fx` below are not twelve independent section kinds; they are the **members of 209 `[fuse]`
+  scripts**, owned by position. The table counted sections correctly and said nothing about that.
 
 ## Proposed entry points
 
@@ -16,7 +27,7 @@ one domain's files and are the reason the boundaries below are not simply direct
 | `./universe`       | 23       | 12,881      | —                          |
 | `./missions`       | 36       | 11,325      | universe, ships, equipment |
 | `./base`           | 10       | 6,329       | universe                   |
-| `./fx`             | 25       | 4,283       | —                          |
+| `./fx` **built**   | 25       | 4,283       | —                          |
 | `./equipment`      | 33       | 3,754       | —                          |
 | `./solar`          | 25       | 1,766       | —                          |
 | `./ships`          | 11       | 1,741       | equipment                  |
@@ -193,7 +204,7 @@ on: many small sections, one repeated shape, and no cross-file resolution to wor
 `[DataNode]` and `[DecisionNode]` form a graph — the random-mission generator's decision tree — so
 this module is a resolver over a node table more than a set of independent records.
 
-## `./fx`
+## `./fx` — built, see [FX.md](FX.md)
 
 | Section                 | Count | Section               | Count |
 | ----------------------- | ----- | --------------------- | ----- |
@@ -208,10 +219,15 @@ this module is a resolver over a node table more than a set of independent recor
 plus `Layer` 8, `damage_root` 7, `EffectLOD` 6, `JumpGateEffect` 5, `Gate_Tunnel` 4, `BeamBolt` 4,
 `damage_group` 3, `JumpShipEffect` 1, `make_invincible` 1, `dump_cargo` 1, `tumble` 1.
 
-`[Effect]` and `[VisEffect]` are the join to the asset side: a `VisEffect` names an `.ale` file and a node
-inside it, which is where an INI reference becomes an Alchemy effect. `[Fuse]` and the
-`destroy_*` / `damage_*` families are the death-sequence scripting and are ordered instruction lists,
-so section order genuinely matters here.
+`[Effect]` and `[VisEffect]` are the join to the asset side: a `VisEffect` names an `.ale` file and an
+effect inside it, which is where an INI reference becomes an Alchemy effect. **The `effect_crc` that
+picks it is the case-sensitive hash** — see [FX.md](FX.md).
+
+`[Fuse]` and the `destroy_*` / `damage_*` families are the death-sequence scripting, and the ordering
+is stronger than "section order matters": **`[fuse]` opens a run and the sections after it belong to
+that script until the next `[fuse]`**, so the twelve action rows above are members of 209 scripts
+rather than independent sections. Spelled `fuse` lowercase in all 209 occurrences, and identified by
+`name` rather than `nickname`.
 
 ## `./audio`
 

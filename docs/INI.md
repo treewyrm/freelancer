@@ -31,6 +31,11 @@ Retail `DATA` holds **1,252 `.ini` files: 1,251 BINI and exactly one text** (`in
 The three under `EXE/` — `freelancer.ini`, `dacom.ini`, `dacomsrv.ini` — are text as well, and the
 two `.fl` beside them are one masked and one plain. **Check the signature, never the extension.**
 
+Which of the 1,252 the game actually loads, and in what order, is a separate question this module
+does not answer — see [GAME.md](GAME.md). `EXE/freelancer.ini`'s `[Data]` block names 97 of them, and
+another 58 are opened by names compiled into `content.dll` and `Freelancer.exe`. At least one file
+(`FX/fuse_li_battleship.ini`) is present and named by neither, so it never loads at all.
+
 ## The document model
 
 The interim layer, and the thing both encodings parse into:

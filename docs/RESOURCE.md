@@ -20,6 +20,12 @@ They are in **`EXE/`**, beside `freelancer.ini` — not in `DLLS/`, which holds 
 `resources.dll` loads first and is not listed anywhere; the rest are the `[Resources]` block of
 `freelancer.ini`, in the order written there.
 
+**Reading that block is [`./game`](GAME.md)'s job** — `readLibraries` prepends `resources.dll` and
+returns the seven paths, and `Game.open` hands them to `readLibrary` here. The two are kept apart so
+a resource DLL can be read without an INI parser, and so a mod that reorders the list is not fighting
+a constant compiled into this module. Retail yields **13,121 names and 5,307 infocards** across the
+seven, which `./game`'s corpus suite asserts end to end.
+
 | #   | Library                   | Sections | Entry point | Image base  |   `.rsrc` | Strings | Cards | Highest local id |
 | --- | ------------------------- | -------: | ----------- | ----------- | --------: | ------: | ----: | ---------------: |
 | 0   | `resources.dll`           |        4 | `0x1000`    | `0x6c40000` |   731,876 |   3,873 |     0 |           60,252 |

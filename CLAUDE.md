@@ -15,9 +15,12 @@ It covers the binary **UTF** containers the assets ship in, **INI** (plain text 
 in the log.
 
 **Status.** Everything listed under _Modules_ below reads and writes. For INI the encoding and
-interim layers are implemented and pinned by the corpus, and the typed layer and domain modules are
-designed and unwritten ([SCHEMA.md](docs/SCHEMA.md), [MODULES.md](docs/MODULES.md)). The
-cross-reference layer — archetype → model, material → texture library, fx → node — is deferred.
+interim layers are implemented and pinned by the corpus. **The typed layer has its first domain
+module, [`./fx`](docs/FX.md), and the install layer above it, [`./game`](docs/GAME.md)** — the
+remaining twelve domains are designed and unwritten ([SCHEMA.md](docs/SCHEMA.md),
+[MODULES.md](docs/MODULES.md)), and `./game`'s reader switch names each of them where it will land.
+The cross-reference layer is partly here: `fx → node` resolves, and archetype → model and
+material → texture library are deferred.
 
 Every count in `docs/` was measured from the retail install rather than recalled, and the corpus
 suites assert those numbers back, so a figure that stops matching means a reader drifted rather than
@@ -77,6 +80,11 @@ Every format is read in the same three steps, and each step is usable on its own
 
 1. **No filesystem, no fetching.** The library resolves *references* — this hash, into this
    structure you handed me. The consumer supplies the loader. This is what keeps it isomorphic.
+   `./game` follows the game's load order across a whole install and still honours this, because the
+   filesystem is **injected** as an interface it never implements; `platform: 'neutral'` in
+   `tsdown.config.ts` is what keeps that true rather than aspirational. **`src/game/` is also the
+   only asynchronous module** — every reader stays synchronous and is handed bytes that have already
+   arrived.
 2. **Dependency direction.** Format modules never import each other's meaning layer or the
    cross-reference layer; the cross-reference layer imports downward only.
 3. **Lossless read-modify-write.** Anything the library does not model survives a round trip
@@ -90,7 +98,10 @@ Every format is read in the same three steps, and each step is usable on its own
    should do with it.* If a behaviour can be falsified against retail assets or by observation in
    game, it belongs here. If it needs a policy — resolution order, default, budget, cache, output
    convention — it belongs to the consumer. This is what keeps [RENDERER.md](docs/RENDERER.md) a
-   document instead of a `renderer/` module.
+   document instead of a `renderer/` module. **A load order is not a policy** — it is the game's, it
+   is written down in `freelancer.ini`, and it is falsifiable, which is why `./game` is a module and
+   `renderer/` is not. What stays with the consumer there is where the files are, how much to keep,
+   and when to drop it.
 
 ## Package entry points
 
@@ -117,8 +128,10 @@ Every format is read in the same three steps, and each step is usable on its own
 | `./thn/bytecode` | `src/thn/bytecode/index.ts` | Compiled Lua 3.2 reader, and the opcode table. **No writer** |
 | `./thn/scene` | `src/thn/scene/index.ts` | The typed layer: entities and events as records, and THORN's vocabulary |
 | `./resource` | `src/resource/index.ts` | Resource DLLs: the PE container, `RT_STRING` tables, `RT_HTML` infocards, the `ids_*` id space |
+| `./fx` | `src/fx/index.ts` | Effects: `[Effect]`, `[VisEffect]`, beam appearances, and the fuse scripts |
+| `./game` | `src/game/index.ts` | The install: the injected filesystem, case-folding path resolution, `freelancer.ini`, the load order |
 | _planned_ `./schema` | — | Typed-layer machinery for INI: coercion, optionality, repeated fields, references |
-| _planned_ domain | — | `./universe`, `./base`, `./solar`, `./equipment`, `./ships`, `./missions`, `./ai`, `./fx`, `./audio`, `./interface`, … |
+| _planned_ domain | — | `./universe`, `./base`, `./solar`, `./equipment`, `./ships`, `./missions`, `./ai`, `./audio`, `./interface`, … |
 
 `./thn/scene` is deliberately *not* re-exported from `./thn`, so a consumer that wants the interim
 model does not pull the vocabulary in with it. The planned domain split is a partition of all 256
@@ -268,6 +281,30 @@ format tables do.
   directory-relative. **A string resource is not a string**: the table is blocked sixteen to an
   entry, and a hole must be written as a zero-length run.
 
+### Domain
+
+- **[FX.md](docs/FX.md)** (`src/fx/`) — the first typed layer over INI, and the join from the data
+  graph to an asset. **`[VisEffect] effect_crc` is `getResourceId(name, true)`, the case-SENSITIVE
+  hash**: it resolves 1,210 of 1,218, where the folded hash resolves a strict subset of 1,150 —
+  losing the 60 mixed-case names and gaining none, which is why the wrong choice looks like it works.
+  **A fuse is a script, not a record**: `[fuse]` opens a run of action sections that belong to it
+  until the next `[fuse]`, with nothing but position linking them, so a flat read yields 1,960
+  orphans and loses every death sequence in the game. `at_t` is optional (39 actions have none) and
+  keeps its arity (17 carry a two-value range, which is a min/max rather than a start and an end).
+
+### The install
+
+- **[GAME.md](docs/GAME.md)** (`src/game/`) — the layer above every format module: what to load and
+  in what order. Takes an **injected** `FileSystem`, which is how it keeps Invariant 1, and is the
+  **only asynchronous module** here. Three things it exists for: `resources.dll` is library 0 and
+  `[Resources]` does not list it, so a naive reader shifts every `ids_name` by 0x10000; `[Data]` is
+  99 properties over 34 keys where the *name* selects the reader, order is load-bearing across keys,
+  `bases` carries no value and `fonts_dir` is a directory; and **paths need case folding** —
+  `missions\mBases.ini` is `MISSIONS/mbases.ini` on disk, resolved through a lazy per-directory
+  folded index that is unambiguous because 8,368 retail files produce zero folded collisions.
+  `hardcoded.ts` carries the 58 INI paths compiled into `content.dll` and `Freelancer.exe` that
+  `[Data]` never mentions.
+
 ## Documents that are not per-module
 
 - **[RETAIL.md](docs/RETAIL.md)** — the retail install as a whole: where the corpus lives, what is in
@@ -298,7 +335,7 @@ format tables do.
 A document's last section before its footer is **`## TODO`**, holding what is pending *observation in
 the running game* rather than pending code: the question, why the corpus cannot settle it, the
 reading taken meanwhile, and the experiment that would decide it. Present in ALCHEMY, ANIMATION,
-RIGID, MATERIAL, TEXTURE, DEFORMABLE, RENDERER, INI, SCHEMA, THN, THORN and RESOURCE;
+RIGID, MATERIAL, TEXTURE, DEFORMABLE, RENDERER, INI, SCHEMA, THN, THORN, RESOURCE, FX and GAME;
 [RETAIL.md](docs/RETAIL.md#todo--what-is-pending-in-the-game) indexes all of them in one table.
 
 - **Everything listed round-trips already.** A `TODO` marks an unread meaning, never an unread byte

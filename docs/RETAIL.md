@@ -114,6 +114,18 @@ Each of these decided a design position. The position is in the linked document;
 | Most values in one property                                         | 25 (format allows 255)                    |                                                                                                                             |
 | Most properties in one section                                      | 3,126                                     |                                                                                                                             |
 | Longest property name                                               | 49 characters                             |                                                                                                                             |
+| Files in `DATA` colliding when the whole path is case-folded        | 0 of 8,368                                | A folded index resolves unambiguously; no spelling probe needed — [GAME.md](GAME.md#case)                                   |
+| `[Data]` properties / distinct keys                                 | 99 / 34                                   | The property name selects the reader; order is load-bearing — [GAME.md](GAME.md#data--99-properties-34-keys)                |
+| `[Data]` keys carrying no value                                     | 1 (`bases`)                               | A key can mark a position in the load order rather than name a file — same                                                  |
+| `[Data]` entries that do not resolve                                | 1 (`fonts_dir = fonts\files\`)            | The one dangling reference in the load list; reported, not a fault — same                                                    |
+| Resource DLLs / the one `[Resources]` omits                         | 7 / `resources.dll` at index 0            | Missing it shifts every `ids_name` by 0x10000 — [RESOURCE.md](RESOURCE.md)                                                   |
+| Names / infocards across the seven libraries                        | 13,121 / 5,307                            | Same                                                                                                                        |
+| INI paths compiled into the binaries and absent from `[Data]`       | 58 (of 79 strings swept)                  | `[Data]` is not the whole load list — [GAME.md](GAME.md#what-data-does-not-say)                                             |
+| `[VisEffect]` resolving by case-sensitive vs folded hash            | 1,210 vs 1,150 of 1,218                   | `effect_crc` is `getResourceId(name, true)`; folded is a strict subset — [FX.md](FX.md)                                     |
+| `[VisEffect]` texture references, and unresolved among them         | 3,818 / 0                                 | The folded path index against real data                                                                                     |
+| Fuse scripts on disk vs loaded                                      | 209 / 192                                 | Walk the load list, not the tree — [GAME.md](GAME.md#why-reading-the-list-beats-walking-the-tree)                           |
+| Fuse actions, and those appearing before any `[fuse]`               | 1,960 / 0                                 | The grouping is total; a run always has an owner — [FX.md](FX.md#a-fuse-is-a-script-not-a-record)                           |
+| Fuse actions carrying `at_t`, and those carrying two values         | 1,921 / 17                                | `at_t` is optional and keeps its arity — same                                                                               |
 
 ## Round-trip fidelity
 
@@ -181,6 +193,11 @@ Collected so a reader recognizes them instead of treating them as bugs.
 | `@include`                          | `EXE/dacom.ini`                                                                        | Opens with `@include FL_Dev.ini`; unresolved whether the game honours it                             |
 | One extension, two encodings        | `EXE/newplayer.fl`, `EXE/mpnewcharacter.fl`                                            | Only the first is masked; the second is plain text INI full of `%%NAME%%` placeholders               |
 | U+00A0 padding again                | `EXE/newplayer.fl`                                                                     | 12 bytes of it, on four `locked_gate` lines — the same authoring habit as `initialworld.ini`         |
+| A file present but never loaded     | `FX/fuse_li_battleship.ini`                                                            | Absent from `[Data] fuses`, so 209 fuse scripts on disk are 192 in the game — [GAME.md](GAME.md)      |
+| A `[Data]` entry pointing at nothing | `fonts_dir = fonts\files\`                                                             | `DATA/FONTS` holds only `fonts.ini` and `rich_fonts.ini`; the one dangling reference in the load list |
+| Dead `[VisEffect]` references       | `FX/SHIELDS/shields_ale.ini`                                                           | `gf_{br,ku,li,rh}_shield0{2,3}` name a `…shield01.ale` defining only `…shield01` — 8 of 1,218         |
+| A property name that is punctuation | `FX/effects_explosion.ini`                                                             | `[Effect] :` = a row of `=` signs — a separator line written without a comment marker                |
+| Uppercase directories, lowercase files | the whole `DATA` tree                                                                | Why `missions\mBases.ini` needs `MISSIONS/mbases.ini`; 8,368 files, 0 folded collisions              |
 
 The 1,506 `.thn` files are **not INI** — all of them are compiled Lua 3.2, and they are read by
 `./thn`. See [THN.md](THN.md) so a sweep does not try to parse one as INI, and does not write one
@@ -279,6 +296,13 @@ that cannot go visibly wrong, and the open question is which reading is right.
 | Which bit is `PATH_POSITION` and which is `USE_SCRIPT_DURATION` | [THORN.md](THORN.md#todo) | Bit 16 is unclaimed in the attach namespace; suggestive, not evidence |
 | Whether a rewritten `resources.dll` loads with no entry point | [RESOURCE.md](RESOURCE.md#todo) | Replace it with a rewritten one and start the game |
 | Whether an eighth resource library is honoured | [RESOURCE.md](RESOURCE.md#todo) | Add a `DLL =` line and reference an id at `0x70000` |
+| What a two-value `at_t` means — read as a min/max the game picks a moment from, on three lines of corroboration | [FX.md](FX.md#todo) | Give two `destroy_hp_attachment` actions the same wide window and watch whether they come off together |
+| What `lifetime` bounds, given 61 timed actions fire after their fuse's, one by 100× | [FX.md](FX.md#todo) | Set `lifetime` below an action's `at_t` and see whether it still fires |
+| Whether the eight dead shield `[VisEffect]` references are ignored or fall back to the `01` effect | [FX.md](FX.md#todo) | Fit a ship with `gf_br_shield02` and see whether anything draws |
+| Whether trailing values past a beam field's known arity are read | [FX.md](FX.md#todo) | Extend `tip_color` by a fourth value |
+| Whether `fonts_dir` is dead or the game creates `FONTS/files` at runtime | [GAME.md](GAME.md#todo) | Watch file opens under `FONTS` with `[Error] log = $Text, 'f'` |
+| Whether a `[Data]` key the engine does not know is ignored or is an error | [GAME.md](GAME.md#todo) | Add an invented key to `[Data]` and see whether the game starts |
+| Whether `FX/fuse_li_battleship.ini` is unreachable or reached another way | [GAME.md](GAME.md#todo) | Add it to `[Data] fuses` and see whether a Liberty battleship's death changes |
 | Whether the resource language must be `0x409` | [RESOURCE.md](RESOURCE.md#todo) | Write a library at `LANG_NEUTRAL` and see whether its strings resolve |
 | Whether the resource code page field is read at all | [RESOURCE.md](RESOURCE.md#todo) | Change it and observe; expected to be invisible |
 

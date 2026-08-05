@@ -109,6 +109,14 @@
     "./resource": {
       "import": "./dist/resource/index.js",
       "types": "./dist/resource/index.d.ts"
+    },
+    "./fx": {
+      "import": "./dist/fx/index.js",
+      "types": "./dist/fx/index.d.ts"
+    },
+    "./game": {
+      "import": "./dist/game/index.js",
+      "types": "./dist/game/index.d.ts"
     }
   },
   "main": "./dist/index.js",

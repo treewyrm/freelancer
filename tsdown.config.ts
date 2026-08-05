@@ -24,6 +24,8 @@ export default defineConfig({
     './src/thn/bytecode/index.ts',
     './src/thn/scene/index.ts',
     './src/resource/index.ts',
+    './src/fx/index.ts',
+    './src/game/index.ts',
   ],
   platform: 'neutral',
 })

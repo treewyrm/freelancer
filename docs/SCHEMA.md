@@ -4,8 +4,9 @@ Turning an interim `Document` into structures with real types, and back. The int
 that `[Good]` holds a property called `price`; this layer knows that a good has a price, that it is
 a number, and that `[Good]` in `EQUIPMENT/goods.ini` is the same shape as `[Good]` anywhere else.
 
-Everything here is a design position argued from the retail sweep, not yet code. Counts come from
-[RETAIL.md](RETAIL.md).
+Most of what is here is a design position argued from the retail sweep. **The first domain module,
+[`./fx`](FX.md), is now written**, and where building it settled something the position has been
+replaced with what it settled — marked _(settled by `./fx`)_. Counts come from [RETAIL.md](RETAIL.md).
 
 ## What the retail data forces
 
@@ -108,18 +109,23 @@ outright authoring residue (`[Object] 260800`, `[start_effect] ONLY` — see
 has never heard of. A typed structure keeps its unrecognized properties in the interim form so a
 read-modify-write cycle does not quietly delete a third party's data.
 
-Three questions the sketch above deliberately leaves open, to be settled when the first two domain
-modules exist rather than guessed now:
+Three questions the sketch above left open, to be settled when the first domain modules existed
+rather than guessed. Two are now answered.
 
-1. Whether schemas are runtime objects that infer their TypeScript type, or hand-written types with
-   separate read/write functions per section — the first is less to maintain, the second is more
-   readable and matches how the UTF readers are written today.
+1. **Runtime schema objects, or hand-written readers?** _(settled by `./fx`)_ **Hand-written
+   readers**, over a handful of field helpers — `src/fx/field.ts`. The section shapes are small,
+   heterogeneous and full of one-off residue, and a declarative schema able to express all of it
+   would be larger than the readers it replaced. It also reads the way every UTF reader here already
+   reads. If a second domain module wants those helpers unchanged they move to `./schema`; that is
+   when this is worth revisiting, and not before.
 2. Whether one schema per section is enough, or whether a section's shape genuinely depends on the
-   file it appears in. `[Sound]` is the test case: 1,817 occurrences carry a `nickname` and 23,997
-   do not, and the split is by file (voice banks vs sound definitions), not by content.
-3. Whether validation is strict (throw on a type mismatch) or lenient (report and continue).
-   Leaning lenient with a diagnostics channel, because the corpus is the authority and it contains
-   nonsense that the game itself tolerates.
+   file it appears in. **Still open** — `./fx` does not test it, because none of its sections change
+   shape by file. `[Sound]` is still the case that decides it: 1,817 occurrences carry a `nickname`
+   and 23,997 do not, and the split is by file (voice banks vs sound definitions), not by content.
+3. **Strict or lenient validation?** _(settled by `./fx`)_ **Lenient with a diagnostics channel**, as
+   this was leaning. A missing *identity* throws naming the section, because a `[fuse]` with no
+   `name` cannot be referenced by anything; every other property is optional and everything
+   unrecognized is kept.
 
 ## Identity and nicknames
 
@@ -134,6 +140,19 @@ the useful structural fact in the whole data set:
   are, not by what they are called.
 - **The three that vary** are `[Sound]` (1,817 / 23,997), `[Voice]` (109 / 90) and `[TrueType]`
   (21 / 1). Each is a real split to model, not an inconsistency to smooth over.
+
+There is a **fourth kind** the split above does not cover, found while building [`./fx`](FX.md):
+
+- **An opener that owns the run following it.** `[fuse]` is one section and then every section after
+  it belongs to that script until the next `[fuse]` — 209 openers owning 1,960 action sections, with
+  nothing but position linking them and **no action ever appearing before the first opener**. It is
+  neither an archetype (nothing references an action), nor a singleton, nor positional in the
+  `[Object]` sense (position within a *run*, not within a file). It also identifies itself by
+  **`name` rather than `nickname`**, alone in the data, so a lookup assuming `nickname` finds no
+  fuses at all — `getNickname` already takes the property name as a parameter.
+
+  `[Trigger]`'s `act_*` lists and the `destroy_*` families in a ship's death sequence are the same
+  shape, which is why it was worth building first somewhere small.
 
 Cross-references are by nickname string, and the game hashes them with **`getObjectId`** (id32),
 which is also the function that names `DATA/AUDIO` voice files. `getResourceId` (CRC32) is the
@@ -171,6 +190,13 @@ file's sections, and a separate resolver that walks the graph — so that readin
 implies touching the filesystem for another. `UNIVERSE/universe.ini` is the practical root: it lists
 every `[Base]` and `[System]` with its file.
 
+_(settled by `./fx`)_ **Both halves now exist in [`./game`](GAME.md).** Separator translation and the
+case-insensitive lookup are `Resolver`, over an injected `FileSystem`, and the fold is `stricmp`'s
+rather than `toLowerCase` for the reason `utility/string.ts` gives. The approach is a lazy folded
+index per directory rather than probing spellings, which is safe because **8,368 retail files produce
+zero collisions when the whole path is folded**. Reading one file still never touches another: the
+resolver resolves, and the walk is `Game`'s.
+
 `ids_name` and `ids_info` values are numeric resource IDs into the game's DLLs (`ids_name = 196766`),
 not strings in the data. **The typed layer keeps them as numbers** — but no longer because resolving
 them is out of reach: `./resource` reads and writes those DLLs, and `readLibrary` turns the numbers
@@ -187,8 +213,13 @@ DLLs from a path nothing in the section knows.
 The typed layer is a fixed point, not byte-exact — coercion discards the int/float distinction the
 BINI encoding recorded. What must hold:
 
-1. `interim → typed → interim` preserves section order, property order within a section, repeated
-   property order, and every unrecognized property.
+1. `interim → typed → interim` preserves section order, repeated property order, and every
+   unrecognized property. **Not property _interleaving_** — _(settled by `./fx`)_ recognized fields
+   go out in the order the reader declares them and unrecognized ones follow in their original
+   relative order, which is weaker than "property order within a section" by exactly the width of
+   the interleave. Preserving it would mean carrying an index per property for no reader's benefit;
+   a tool that must not perturb bytes edits the interim document, which is what `Game.documents`
+   keeps it for.
 2. `typed → interim → typed` is identity.
 3. An absent property stays absent; a zero-value property stays zero-value.
 

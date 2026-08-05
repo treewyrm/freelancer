@@ -1,7 +1,8 @@
-import { globSync, readFileSync, statSync } from 'node:fs'
+import { globSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import Directory from '#/utf/directory.js'
+import type { Entry, FileSystem } from '#/game/filesystem.js'
 
 /**
  * Locates retail Freelancer data so tests can read the real thing.
@@ -18,6 +19,9 @@ export const root = process.env['FREELANCER_DATA'] ?? join(homedir(), 'Downloads
  * when missing.
  */
 export const executables = join(root, '../EXE')
+
+/** The install root — the directory holding `DATA` and `EXE`, which is what `./game` mounts. */
+export const install = join(root, '..')
 
 const exists = (path: string): boolean => {
   try {
@@ -100,6 +104,26 @@ export const glob = (from: string = root, pattern = '**/*.ini'): Asset[] => {
 
   return assets
 }
+
+/**
+ * A {@link FileSystem} over the real install, for the `./game` suites.
+ *
+ * Deliberately literal: it reads exactly the path it is handed and does no case folding of its own,
+ * because folding is what the resolver is being tested for. A host that quietly matched case would
+ * make the suite pass on a case-insensitive volume and prove nothing.
+ */
+export const filesystem = (from: string = install): FileSystem => ({
+  async read(path: string): Promise<Uint8Array> {
+    return readFileSync(join(from, path))
+  },
+
+  async list(path: string): Promise<Iterable<Entry>> {
+    return readdirSync(join(from, path), { withFileTypes: true }).map((entry) => ({
+      name: entry.name,
+      directory: entry.isDirectory(),
+    }))
+  },
+})
 
 export interface TreeAsset {
   /** Path relative to the data root. */

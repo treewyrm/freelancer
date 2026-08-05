@@ -11,9 +11,10 @@ import { readStrings } from './strings.js'
  * purely positional, which is why adding a DLL anywhere but the end renumbers everything after it.
  *
  * The order is `resources.dll` first, hardcoded into the executable, then the `[Resources] DLL =`
- * entries of `freelancer.ini` in the order they appear. Reading that list is the `ini` module's
- * job, and this one takes the result — the two are kept apart so a resource DLL can be read without
- * an INI parser, and so a mod that reorders the list is not fighting a constant compiled in here.
+ * entries of `freelancer.ini` in the order they appear. Reading that list is `./game`'s job —
+ * `readLibraries` there, which prepends `resources.dll` — and this one takes the result. The two are
+ * kept apart so a resource DLL can be read without an INI parser, and so a mod that reorders the
+ * list is not fighting a constant compiled in here.
  */
 
 /** Retail's order, as `freelancer.ini` gives it. A default and a reference, not a rule. */
