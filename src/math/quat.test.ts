@@ -5,7 +5,7 @@ import Vector3 from './vector3.js'
 import Vector4 from './vector4.js'
 
 const qApprox = (a: Vector4, b: Vector4, eps = 1e-6) =>
-  Vector4.equal(a, b, eps) || Vector4.equal(a, Vector4.multipyScalar(b, -1), eps)
+  Vector4.equal(a, b, eps) || Vector4.equal(a, Vector4.multiplyScalar(b, -1), eps)
 
 const qExact = (a: Vector4, b: Vector4, eps = 1e-6) => Vector4.equal(a, b, eps)
 
@@ -289,7 +289,7 @@ describe('Quat.nlerp', () => {
 
   it('negates b when dot product is negative', () => {
     const q = q90Z
-    const qNeg = Vector4.multipyScalar(q, -1)
+    const qNeg = Vector4.multiplyScalar(q, -1)
     const r1 = Quat.nlerp(Quat.identity, q, 0.5)
     const r2 = Quat.nlerp(Quat.identity, qNeg, 0.5)
     assert.ok(qApprox(r1, r2), `nlerp should produce same result regardless of b's sign`)
@@ -323,7 +323,7 @@ describe('Quat.slerp', () => {
   })
 
   it('negates b when dot product is negative', () => {
-    const qNeg = Vector4.multipyScalar(q90Z, -1)
+    const qNeg = Vector4.multiplyScalar(q90Z, -1)
     const r1 = Quat.slerp(Quat.identity, q90Z, 0.5)
     const r2 = Quat.slerp(Quat.identity, qNeg, 0.5)
     assert.ok(qApprox(r1, r2), `slerp should handle negated b`)

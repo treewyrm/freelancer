@@ -131,7 +131,7 @@ describe('quaternion storage', () => {
       const result = roundtrip(quat, write, read)
 
       ok(result.w >= 0, 'W is non-negative')
-      ok(Vector4.equal(Vector4.multipyScalar(quat, -1), result, 1e-4), JSON.stringify(result))
+      ok(Vector4.equal(Vector4.multiplyScalar(quat, -1), result, 1e-4), JSON.stringify(result))
     }
   })
 })

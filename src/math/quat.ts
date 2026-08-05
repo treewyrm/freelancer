@@ -165,7 +165,7 @@ const Quat = {
 
   /** Normalised linear interpolation — cheaper than slerp, accurate for small angles. */
   nlerp(a: Vector4, b: Vector4, t: number): Vector4 {
-    if (Vector4.dot(a, b) < 0) b = Vector4.multipyScalar(b, -1)
+    if (Vector4.dot(a, b) < 0) b = Vector4.multiplyScalar(b, -1)
     return Vector4.normalize({
       x: a.x + t * (b.x - a.x),
       y: a.y + t * (b.y - a.y),
@@ -180,7 +180,7 @@ const Quat = {
 
     if (d < 0) {
       d = -d
-      b = Vector4.multipyScalar(b, -1)
+      b = Vector4.multiplyScalar(b, -1)
     }
 
     let u = 1.0 - t

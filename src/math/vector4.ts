@@ -92,7 +92,7 @@ const Vector4 = {
   },
 
   /** Multiplies quaternion by a scalar value. */
-  multipyScalar(a: Vector4, b: number): Vector4 {
+  multiplyScalar(a: Vector4, b: number): Vector4 {
     return {
       x: a.x * b,
       y: a.y * b,
