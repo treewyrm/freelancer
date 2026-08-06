@@ -59,8 +59,7 @@ it: resolution order, defaults, caches and output conventions belong to the cons
 | `@treewyrm/freelancer/thn/bytecode`| Compiled Lua 3.2 reader, and the opcode table                                       | [THN.md](docs/THN.md)               |
 | `@treewyrm/freelancer/thn/scene`   | Entities and events as typed records, and THORN's vocabulary                        | [THORN.md](docs/THORN.md)           |
 | `@treewyrm/freelancer/resource`    | Resource DLLs: `read` / `write`, string tables, infocards, the `ids_*` id space     | [RESOURCE.md](docs/RESOURCE.md)     |
-| _planned_ `./schema`               | The typed layer for INI: coercion, optionality, ordering                            | [SCHEMA.md](docs/SCHEMA.md)         |
-| _planned_ domain modules           | Universe, equipment, ships, solar, missions, FX, audio, interface                   | [MODULES.md](docs/MODULES.md)       |
+| `@treewyrm/freelancer/schema`      | Typed-layer machinery for INI: coercion, optionality, ordering, `readSection`       | —                                    |
 
 Freelancer's voice banks under `DATA/AUDIO` need no module of their own — they are flat UTF
 directories of RIFF waveforms, handled with `Directory` and `File` directly. See
@@ -312,8 +311,6 @@ decisions not worth re-litigating.
 | [DEFORMABLE.md](docs/DEFORMABLE.md)  | `.dfm` characters: the bone table, skinned meshes, detail levels             |
 | [ALCHEMY.md](docs/ALCHEMY.md)        | `.ale` particle effects, the node library, the case-sensitive hash           |
 | [INI.md](docs/INI.md)                | All three encodings, the shared document model, how the game reads a value   |
-| [SCHEMA.md](docs/SCHEMA.md)          | Interim → typed for INI: coercion, optionality, references, nicknames        |
-| [MODULES.md](docs/MODULES.md)        | Every retail section name, and which module would own it                     |
 | [THN.md](docs/THN.md)                | The scene script format, its value domain, and why it is not INI             |
 | [THORN.md](docs/THORN.md)            | The scene vocabulary: entities, events, properties, and where each came from |
 | [RESOURCE.md](docs/RESOURCE.md)      | The resource DLLs: the PE container, string tables, infocards, the id space  |

@@ -389,8 +389,8 @@ above shape it:
   because they are different bytecode; the typed layer reads both as `'SCENE'`, which is only
   possible because the enums above are now measured rather than assumed. Writing back always emits
   the symbolic form — so `interim → typed → interim` normalises, and only `typed → interim → typed`
-  is an identity. That is the same fixed-point caveat [SCHEMA.md](SCHEMA.md#round-trip) states for
-  INI, arriving for a different reason.
+  is an identity. That is the same fixed-point caveat `@treewyrm/freelancer-game`'s
+  `docs/SCHEMA.md#round-trip` states for INI, arriving for a different reason.
 - **It refuses what it has not measured.** An unknown entity type, event action, enum value or flag
   bit is an error naming the value, not a silent pass-through — because every alternative is a guess,
   and all 41,250 entities and 50,785 retail events resolve without one.
@@ -418,4 +418,5 @@ retail, cross-checked against the string table and against Direct3D's two enums.
 
 ---
 
-[THN.md](THN.md) · [INI.md](INI.md) · [SCHEMA.md](SCHEMA.md) · [RETAIL.md](RETAIL.md)
+[THN.md](THN.md) · [INI.md](INI.md) · [RETAIL.md](RETAIL.md) ·
+`SCHEMA.md` in `@treewyrm/freelancer-game`

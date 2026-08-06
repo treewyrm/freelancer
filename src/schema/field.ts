@@ -7,9 +7,9 @@ import type { Fixed, Unrecognized } from './types.js'
 /**
  * Reading one property as the type a field declares it to be.
  *
- * These began as `src/fx/field.ts`, answering the open question in
- * [SCHEMA.md](../../docs/SCHEMA.md) about whether the typed layer should be runtime schema objects
- * or hand-written readers: **hand-written readers, over a handful of field helpers.** That answer
+ * These began as `src/fx/field.ts`, answering the open question in `@treewyrm/freelancer-game`'s
+ * `docs/SCHEMA.md` about whether the typed layer should be runtime schema objects or hand-written
+ * readers: **hand-written readers, over a handful of field helpers.** That answer
  * stands. What moved them here is the rest of the same sentence — *"if a second domain module wants
  * those helpers they move to `./schema`"* — and `./ai` is the second. Invariant 2 makes the move
  * mandatory rather than tidy: `./ai` importing `#/fx/field.js` would be one domain module reaching
@@ -20,7 +20,7 @@ import type { Fixed, Unrecognized } from './types.js'
  * radius` means the same number whether the compiler wrote it as an int or a float.
  *
  * Two helpers arrived with `./ai` and are general rather than its own —
- * [DICTIONARY.md](../../docs/DICTIONARY.md) counts dozens of fields in the shape they cover:
+ * `@treewyrm/freelancer-game`'s `docs/DICTIONARY.md` counts dozens of fields in the shape they cover:
  *
  * - {@link values}, a **mixed tuple**. `evade_dodge_style_weight = waggle, 0.5` is a string and a
  *   number, and so are `[Zone] faction`, `[Group] rep`, `[Explosion] debris_type` and
@@ -60,8 +60,8 @@ export const boolean = (section: Section, name: string): boolean | undefined => 
  * Every value of one property as numbers, or absent.
  *
  * **Arity is kept as read** rather than padded to the field's usual width, because arity varies
- * across retail and inventing the missing value is what SCHEMA.md warns reading `[Sound] range` as a
- * fixed pair does — it makes up a second number for 11 sounds.
+ * across retail and inventing the missing value is what `docs/SCHEMA.md` warns reading `[Sound] range`
+ * as a fixed pair does — it makes up a second number for 11 sounds.
  */
 export const numbers = (section: Section, name: string): number[] | undefined =>
   getValues(section, name)?.map((value) => toFloat(value))

@@ -15,8 +15,8 @@ import type { Fixed, Keys, Report, Unrecognized } from './types.js'
  *   sections holding **634 `exclusion` openers and zero member properties before the first one**;
  *   each owns the `fog_far`, `zone_shell`, `max_alpha` and `exclusion_tint` that follow it. Read
  *   flat, that is nine unrelated lists and which shell belongs to which zone is gone.
- *   {@link Fields.group} is the shape, and it is `[fuse]`'s run ([FX.md](../../docs/FX.md)) one level
- *   down.
+ *   {@link Fields.group} is the shape, and it is `[fuse]`'s run (`@treewyrm/freelancer-game`'s
+ *   `docs/FX.md`) one level down.
  * - **A repeat re-runs the instruction.** 202 pairs repeat inside one section, so a singular field is
  *   **last-wins** — what an assignment in a loop does. A lookup reader silently takes the first. The
  *   visible difference across all of retail is three `[start_effect]` actions, which is small, but it
@@ -27,7 +27,7 @@ import type { Fixed, Keys, Report, Unrecognized } from './types.js'
  *   that the two agree, and a name dropped from the array moves a field into `unrecognized` while the
  *   field still reads correctly.
  *
- * **This is not the runtime schema [SCHEMA.md](../../docs/SCHEMA.md) rejected**, and the difference
+ * **This is not the runtime schema `@treewyrm/freelancer-game`'s `docs/SCHEMA.md` rejected**, and the difference
  * is worth being precise about because the rejection still stands. A {@link Table} declares which INI
  * name does what to which **already-declared** field. It infers no TypeScript type, validates
  * nothing, and the interfaces in each module's `types.ts` remain hand-written and remain the contract
@@ -68,7 +68,7 @@ export interface Instruction<T> {
   /**
    * Emits the field back, appending to `properties` in table order.
    *
-   * An absent field emits nothing, which is [SCHEMA.md](../../docs/SCHEMA.md)'s
+   * An absent field emits nothing, which is `@treewyrm/freelancer-game`'s `docs/SCHEMA.md`
    * absent-stays-absent: a default written out is a claim about the game's behaviour that the file
    * did not make.
    *
@@ -93,8 +93,8 @@ const get = <V>(record: object, into: string): V | undefined => Reflect.get(reco
  *
  * **Identity is not read here.** A section with no `nickname` throws in its own module, before the
  * walk starts, because a record nothing can reference is a different failure from a field this
- * library has not heard of — [SCHEMA.md](../../docs/SCHEMA.md)'s lenient-with-a-diagnostics-channel,
- * unchanged.
+ * library has not heard of — `@treewyrm/freelancer-game`'s `docs/SCHEMA.md`
+ * lenient-with-a-diagnostics-channel, unchanged.
  *
  * Two behaviours that are easy to get backwards:
  *
@@ -103,8 +103,8 @@ const get = <V>(record: object, into: string): V | undefined => Reflect.get(reco
  *   `unrecognized`. Otherwise what is in `unrecognized` would depend on whether the data was
  *   well-formed, and writing back would emit the property twice.
  * - **Recognized fields come out in table order**, whatever order the file used. That is the read
- *   half of [SCHEMA.md](../../docs/SCHEMA.md)'s round trip; leaving it to the writer alone would make
- *   a record's shape depend on how the file happened to be written.
+ *   half of `@treewyrm/freelancer-game`'s `docs/SCHEMA.md` round trip; leaving it to the writer alone
+ *   would make a record's shape depend on how the file happened to be written.
  *
  * @param section Section to read.
  * @param table Property name to instruction.
@@ -141,7 +141,8 @@ export const readSection = <T extends Unrecognized>(
  *
  * Recognized fields go out in table order and `unrecognized` follows, in the relative order it was
  * read. That is weaker than preserving the original interleaving, deliberately — see
- * [SCHEMA.md](../../docs/SCHEMA.md)'s round trip, and edit the interim document when bytes matter.
+ * `@treewyrm/freelancer-game`'s `docs/SCHEMA.md` round trip, and edit the interim document when bytes
+ * matter.
  *
  * The result is a **fixed point, not byte-exact**: the int/float tag is authoring residue and is
  * re-inferred here, so a value the file wrote as `100.0` comes back as an integer.

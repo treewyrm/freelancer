@@ -20,7 +20,7 @@ They are in **`EXE/`**, beside `freelancer.ini` — not in `DLLS/`, which holds 
 `resources.dll` loads first and is not listed anywhere; the rest are the `[Resources]` block of
 `freelancer.ini`, in the order written there.
 
-**Reading that block is [`./game`](GAME.md)'s job** — `readLibraries` prepends `resources.dll` and
+**Reading that block is `./game`'s job** (`@treewyrm/freelancer-game`'s `docs/GAME.md`) — `readLibraries` prepends `resources.dll` and
 returns the seven paths, and `Game.open` hands them to `readLibrary` here. The two are kept apart so
 a resource DLL can be read without an INI parser, and so a mod that reorders the list is not fighting
 a constant compiled into this module. Retail yields **13,121 names and 5,307 infocards** across the
@@ -240,5 +240,5 @@ _Experiment_: change it and observe — expected to be invisible.
 
 ---
 
-[INI.md](INI.md) · [SCHEMA.md](SCHEMA.md) · [MODULES.md](MODULES.md) · [THN.md](THN.md) ·
-[RETAIL.md](RETAIL.md)
+[INI.md](INI.md) · [THN.md](THN.md) · [RETAIL.md](RETAIL.md) ·
+`SCHEMA.md` and `MODULES.md` in `@treewyrm/freelancer-game`

@@ -16,8 +16,8 @@ in the log.
 
 **Status.** Everything listed under _Modules_ below reads and writes. For INI the encoding and
 interim layers are implemented and pinned by the corpus. **The typed layer itself is unwritten
-here** — no domain module is an entry point of this package anymore ([SCHEMA.md](docs/SCHEMA.md),
-[MODULES.md](docs/MODULES.md) still carry the design and the section-to-module assignment). The
+here** — no domain module is an entry point of this package anymore (`@treewyrm/freelancer-game`'s
+`docs/SCHEMA.md` and `docs/MODULES.md` carry the design and the section-to-module assignment). The
 cross-reference layer is undone here too: `fx → node` resolving, and archetype → model and
 material → texture library remaining deferred, are now facts about the sibling package below.
 
@@ -137,8 +137,8 @@ Every format is read in the same three steps, and each step is usable on its own
 
 `./thn/scene` is deliberately *not* re-exported from `./thn`, so a consumer that wants the interim
 model does not pull the vocabulary in with it. The planned domain split is a partition of all 256
-retail section names, computed rather than guessed; [MODULES.md](docs/MODULES.md) carries the
-assignment and the recommended build order. `./fx`, `./ai`, `./base`, `./universe` and the install
+retail section names, computed rather than guessed; `@treewyrm/freelancer-game`'s `docs/MODULES.md`
+carries the assignment and the recommended build order. `./fx`, `./ai`, `./base`, `./universe` and the install
 layer above them, `./game`, are written already, but as entry points of the sibling
 `@treewyrm/freelancer-game` package rather than this one — see that package's own `CLAUDE.md`.
 
@@ -298,30 +298,20 @@ this section used to.
 
 ## Documents that are not per-module
 
-- **[RETAIL.md](docs/RETAIL.md)** — the retail install as a whole: where the corpus lives, what is in
-  it, what each module round-trips, the measurement table with what each number pins, the quirks
-  index, and the five **openFLAME** files (leftovers from Digital Anvil's *Conquest: Frontier Wars*)
-  that share only the container. **Find them, skip them, do not implement them** — every reader
-  already yields nothing on them without throwing, deliberately. It also indexes every open question
-  across the modules.
-- **[SCHEMA.md](docs/SCHEMA.md)** — INI's interim → typed layer, and every design question it opened
-  is now closed by `./fx` or `./ai`. **The value type tag is authoring residue**: 266 fields carry
-  more than one type signature across retail, so the typed layer coerces to its declared type and
-  never switches on the tag. **A section is read sequentially, the way `INI_Reader` reads one** —
-  one pass over the properties, each name selecting an instruction — because a lookup-per-field
-  reader cannot express a property that owns the properties after it (`[Exclusion Zones]`, 634
-  openers), derives `unrecognized` from a `known: string[]` nothing checks, and answers the
-  repeated-scalar question by accident. **A repeat overrides**: last-wins, visible on five fields in
-  three retail sections. The tables still infer no types — `types.ts` is hand-written and is the
-  contract.
-- **[DICTIONARY.md](docs/DICTIONARY.md)** — **the document a domain module is built from**: all
-  **2,080 retail `(section, property)` pairs**, grouped by the module that will read them, with the
-  measurement beside the reading. Joins the retail sweep to the community wiki, which reaches 60% of
-  them and carries the half the sweep cannot produce — which fields are paths, which enumerations are
-  closed, what a number means. Every row carries ALCHEMY.md's `confirmed / inferred / guessed /
-  unread`, and a wiki claim enters at `guessed`. Prose is restated, never reproduced: the wiki is
-  GPL-3.0 and this package is MIT.
-- **[MODULES.md](docs/MODULES.md)** — every retail section name, its count, and which module owns it.
+- **[RETAIL.md](docs/RETAIL.md)** — the retail install as it bears on the format layer: where the
+  corpus lives, what is in it, what each format module round-trips, the measurement table with what
+  each number pins, the quirks index, and the five **openFLAME** files (leftovers from Digital
+  Anvil's *Conquest: Frontier Wars*) that share only the container. **Find them, skip them, do not
+  implement them** — every reader already yields nothing on them without throwing, deliberately. It
+  indexes every open question across the format modules; the domain layer's own measurements and
+  TODOs moved to `@treewyrm/freelancer-game`'s own `docs/RETAIL.md` along with the modules they pin.
+- **`SCHEMA.md`, `DICTIONARY.md` and `MODULES.md`** — INI's interim → typed layer, the document a
+  domain module is built from, and the section-to-module assignment, respectively. All three moved to
+  the sibling `@treewyrm/freelancer-game` package's `docs/` when its four domain modules (`ai`, `base`,
+  `universe`, `fx`) and the install layer above them (`game`) were extracted from this one — a domain
+  module reaches for the whole format layer as a dependency, not the other way around, so the
+  documents describing how to build one belong where the modules themselves now live. `./schema`
+  (`src/schema/`) still lives here; only its design rationale moved.
 - **[THORN.md](docs/THORN.md)** — the scene vocabulary the typed THN layer is built from. **Every row
   carries a provenance mark** — `thorn.dll`'s string table, the corpus, or the author's scripting
   guide — because the three disagree and the disagreements are the content. **A value is recorded

@@ -3,9 +3,9 @@ import type { Property } from '#/ini/types.js'
 /**
  * What every typed INI record shares, and the type-level vocabulary its readers are written in.
  *
- * One interface, in the one place both `./fx` and `./ai` can reach, because
- * [SCHEMA.md](../../docs/SCHEMA.md)'s lossless round trip is a contract of the typed layer as a
- * whole rather than of any module in it. Invariant 3 is stated once here and inherited everywhere.
+ * One interface, in the one place both `./fx` and `./ai` can reach, because `@treewyrm/freelancer-game`'s
+ * `docs/SCHEMA.md` lossless round trip is a contract of the typed layer as a whole rather than of any
+ * module in it. Invariant 3 is stated once here and inherited everywhere.
  */
 
 /** Anything read from a section keeps what its reader did not recognize. */
@@ -37,8 +37,8 @@ export type Fixed<N extends number, A extends number[] = []> = A['length'] exten
  * Keys of `T` whose declared type accepts `V`, ignoring the optionality every field here has.
  *
  * How a reader names the field it fills without the type being inferred from what it reads:
- * `[SCHEMA.md](../../docs/SCHEMA.md)` settled that the interfaces are hand-written and are the
- * contract, so this checks against one rather than producing one.
+ * `@treewyrm/freelancer-game`'s `docs/SCHEMA.md` settled that the interfaces are hand-written and are
+ * the contract, so this checks against one rather than producing one.
  *
  * **A tuple is assignable to an array**, so `Keys<T, number[]>` also matches a `[number, number]`
  * field and cannot stop a variable-width read from filling a fixed-width one. Use {@link Fixed}

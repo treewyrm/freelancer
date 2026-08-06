@@ -19,7 +19,7 @@ Two consequences, and they pull in different directions:
 - **The two paths are not interchangeable in their details.** A behaviour measured on one is not
   automatically a behaviour of the other — see the coercion table below, where the same value
   reaches a caller by a different route in each. Any parser-behaviour claim here or in
-  [SCHEMA.md](SCHEMA.md) has to name which encoding it was measured on.
+  `@treewyrm/freelancer-game`'s `docs/SCHEMA.md` has to name which encoding it was measured on.
 
 The document model above is still what both paths agree on, which is why one model serves both.
 
@@ -32,7 +32,7 @@ The three under `EXE/` — `freelancer.ini`, `dacom.ini`, `dacomsrv.ini` — are
 two `.fl` beside them are one masked and one plain. **Check the signature, never the extension.**
 
 Which of the 1,252 the game actually loads, and in what order, is a separate question this module
-does not answer — see [GAME.md](GAME.md). `EXE/freelancer.ini`'s `[Data]` block names 97 of them, and
+does not answer — see `@treewyrm/freelancer-game`'s `docs/GAME.md`. `EXE/freelancer.ini`'s `[Data]` block names 97 of them, and
 another 58 are opened by names compiled into `content.dll` and `Freelancer.exe`. At least one file
 (`FX/fuse_li_battleship.ini`) is present and named by neither, so it never loads at all.
 
@@ -81,7 +81,7 @@ empty =                              ; '=' and nothing after it — also zero va
 - **A section name is opaque text, not an identifier.** `INTERFACE/keymap.ini` carries a section
   literally named `keymap=1.1` — an `=` inside a section header.
 - Values are untyped in text and cast at query time by whatever reads them. This is the reason the
-  typed layer coerces rather than switches on a tag; see [SCHEMA.md](SCHEMA.md).
+  typed layer coerces rather than switches on a tag; see `@treewyrm/freelancer-game`'s `docs/SCHEMA.md`.
 - Whitespace around names and values is insignificant — but `initialworld.ini` pads numbers with
   **U+00A0 (`0xA0`)**, not spaces, so a trimmer that only strips ASCII space and tab leaves a
   non-breaking space stuck to the value. Retail's one text data file is also its one file that needs
@@ -225,8 +225,9 @@ Under the mask is ordinary text, with no dialect of its own — `newplayer.fl` e
 
 ## How the game reads a value
 
-From `common.dll`, since it constrains what the typed layer in [SCHEMA.md](SCHEMA.md) is allowed to
-do. A caller never asks "what type is this value" — there is no such accessor. It asks for the type
+From `common.dll`, since it constrains what the typed layer in `@treewyrm/freelancer-game`'s
+`docs/SCHEMA.md` is allowed to do. A caller never asks "what type is this value" — there is no such
+accessor. It asks for the type
 it wants, by index, and the reader coerces:
 
 | Accessor           | tag `0x0` bool        | tag `0x1` int32 | tag `0x2` float32                | tag `0x3` string                                  |
@@ -350,7 +351,8 @@ Remaining obstacles, all in the text direction:
   therefore lossy; matching the game is the wrong target.
 - **Int vs float authoring.** `[Good] price` is authored `int` 812 times and `float` 12 times for
   the same field. The interim layer must keep the tag as read, because dropping it costs
-  byte-exactness even though the typed layer discards it. See [SCHEMA.md](SCHEMA.md#coercion).
+  byte-exactness even though the typed layer discards it. See `@treewyrm/freelancer-game`'s
+  `docs/SCHEMA.md#coercion`.
 
 ## TODO
 
@@ -378,4 +380,5 @@ all 1,251 files byte-exactly. See [Round-trip](#round-trip).
 
 ---
 
-[SCHEMA.md](SCHEMA.md) · [MODULES.md](MODULES.md) · [RETAIL.md](RETAIL.md) · [THN.md](THN.md)
+[RETAIL.md](RETAIL.md) · [THN.md](THN.md) ·
+`SCHEMA.md` and `MODULES.md` in `@treewyrm/freelancer-game`
