@@ -13,7 +13,7 @@
  * Folding is deliberately not done here either. A path is carried in the case it was written in
  * right up to the lookup, because that is what has to be written back out.
  */
-import { fold } from '#/utility/string.js'
+import { fold } from './string.js'
 
 /** What {@link join} emits and what {@link import('./filesystem.js').FileSystem} takes. */
 export const SEPARATOR = '/'

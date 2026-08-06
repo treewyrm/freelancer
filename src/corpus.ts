@@ -2,7 +2,21 @@ import { globSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import Directory from '#/utf/directory.js'
-import type { Entry, FileSystem } from '#/game/filesystem.js'
+
+/**
+ * The shape `./game`'s `FileSystem` interface names, restated rather than imported — `./game`
+ * moved to the sibling `@treewyrm/freelancer-game` package, which depends on this one, not the
+ * other way around, and this corpus helper stays free of that dependency by structural typing.
+ */
+interface Entry {
+  name: string
+  directory: boolean
+}
+
+interface FileSystem {
+  read(path: string): Promise<Uint8Array>
+  list(path: string): Promise<Iterable<Entry>>
+}
 
 /**
  * Locates retail Freelancer data so tests can read the real thing.

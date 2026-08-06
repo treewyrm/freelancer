@@ -15,12 +15,16 @@ It covers the binary **UTF** containers the assets ship in, **INI** (plain text 
 in the log.
 
 **Status.** Everything listed under _Modules_ below reads and writes. For INI the encoding and
-interim layers are implemented and pinned by the corpus. **The typed layer has its first domain
-module, [`./fx`](docs/FX.md), and the install layer above it, [`./game`](docs/GAME.md)** — the
-remaining twelve domains are designed and unwritten ([SCHEMA.md](docs/SCHEMA.md),
-[MODULES.md](docs/MODULES.md)), and `./game`'s reader switch names each of them where it will land.
-The cross-reference layer is partly here: `fx → node` resolves, and archetype → model and
-material → texture library are deferred.
+interim layers are implemented and pinned by the corpus. **The typed layer itself is unwritten
+here** — no domain module is an entry point of this package anymore ([SCHEMA.md](docs/SCHEMA.md),
+[MODULES.md](docs/MODULES.md) still carry the design and the section-to-module assignment). The
+cross-reference layer is undone here too: `fx → node` resolving, and archetype → model and
+material → texture library remaining deferred, are now facts about the sibling package below.
+
+**`fx`, `ai`, `base`, `universe` and the install layer above them, `game`, live in the sibling
+`@treewyrm/freelancer-game` package** (`../freelancer-game`), which depends on this one — none of
+them are entry points of this package. `./game`'s reader switch (in that sibling repository) still
+names every remaining domain where it will land, `fx`/`ai`/`base`/`universe` included.
 
 Every count in `docs/` was measured from the retail install rather than recalled, and the corpus
 suites assert those numbers back, so a figure that stops matching means a reader drifted rather than
@@ -129,15 +133,14 @@ Every format is read in the same three steps, and each step is usable on its own
 | `./thn/scene` | `src/thn/scene/index.ts` | The typed layer: entities and events as records, and THORN's vocabulary |
 | `./resource` | `src/resource/index.ts` | Resource DLLs: the PE container, `RT_STRING` tables, `RT_HTML` infocards, the `ids_*` id space |
 | `./schema` | `src/schema/index.ts` | Typed-layer machinery for INI: the sequential `readSection`/`writeSection` walk and its field constructors, `runs` for opener-owned section runs, the `field.*` lookup helpers, and the `Unrecognized` contract every typed record extends |
-| `./fx` | `src/fx/index.ts` | Effects: `[Effect]`, `[VisEffect]`, beam appearances, and the fuse scripts |
-| `./ai` | `src/ai/index.ts` | Pilots: `[Pilot]` and the seventeen behaviour blocks it names |
-| `./game` | `src/game/index.ts` | The install: the injected filesystem, case-folding path resolution, `freelancer.ini`, the load order |
-| _planned_ domain | — | `./universe`, `./base`, `./solar`, `./equipment`, `./ships`, `./missions`, `./audio`, `./interface`, … |
+| _planned_ domain | — | `./solar`, `./equipment`, `./ships`, `./missions`, `./audio`, `./interface`, … |
 
 `./thn/scene` is deliberately *not* re-exported from `./thn`, so a consumer that wants the interim
 model does not pull the vocabulary in with it. The planned domain split is a partition of all 256
 retail section names, computed rather than guessed; [MODULES.md](docs/MODULES.md) carries the
-assignment and the recommended build order.
+assignment and the recommended build order. `./fx`, `./ai`, `./base`, `./universe` and the install
+layer above them, `./game`, are written already, but as entry points of the sibling
+`@treewyrm/freelancer-game` package rather than this one — see that package's own `CLAUDE.md`.
 
 ## Structure
 
@@ -284,35 +287,14 @@ format tables do.
 
 ### Domain
 
-- **[FX.md](docs/FX.md)** (`src/fx/`) — the first typed layer over INI, and the join from the data
-  graph to an asset. **`[VisEffect] effect_crc` is `getResourceId(name, true)`, the case-SENSITIVE
-  hash**: it resolves 1,210 of 1,218, where the folded hash resolves a strict subset of 1,150 —
-  losing the 60 mixed-case names and gaining none, which is why the wrong choice looks like it works.
-  **A fuse is a script, not a record**: `[fuse]` opens a run of action sections that belong to it
-  until the next `[fuse]`, with nothing but position linking them, so a flat read yields 1,960
-  orphans and loses every death sequence in the game. `at_t` is optional (39 actions have none) and
-  keeps its arity (17 carry a two-value range, which is a min/max rather than a start and an end).
-- **[AI.md](docs/AI.md)** (`src/ai/`) — the second typed layer over INI, and the first written from
-  [DICTIONARY.md](docs/DICTIONARY.md) rather than from the files. **`[Pilot]` is two sections sharing
-  a name**: 319 are the AI pilots and the one in `CHARACTERS/newcharacter.ini` is the new-character
-  record, sharing only `nickname`. **`inherit` is on 290 of the 319**, so a reader that does not walk
-  the chain reads almost nothing. The `*_style_weight` fields are **mixed tuples that repeat**, and
-  flattening them loses which weight went with which name. **These files are not in `[Data]`** —
-  `content.dll` opens them, so `Game.open` needs `hardcoded: true`. Building it moved the coercion
-  helpers to `./schema` and closed SCHEMA.md's last two open design questions.
-
-### The install
-
-- **[GAME.md](docs/GAME.md)** (`src/game/`) — the layer above every format module: what to load and
-  in what order. Takes an **injected** `FileSystem`, which is how it keeps Invariant 1, and is the
-  **only asynchronous module** here. Three things it exists for: `resources.dll` is library 0 and
-  `[Resources]` does not list it, so a naive reader shifts every `ids_name` by 0x10000; `[Data]` is
-  99 properties over 34 keys where the *name* selects the reader, order is load-bearing across keys,
-  `bases` carries no value and `fonts_dir` is a directory; and **paths need case folding** —
-  `missions\mBases.ini` is `MISSIONS/mbases.ini` on disk, resolved through a lazy per-directory
-  folded index that is unambiguous because 8,368 retail files produce zero folded collisions.
-  `hardcoded.ts` carries the 58 INI paths compiled into `content.dll` and `Freelancer.exe` that
-  `[Data]` never mentions.
+No domain module is an entry point of this package. `./fx`, `./ai`, `./base`, `./universe` and the
+install layer above them, `./game`, are written, but as part of the sibling
+`@treewyrm/freelancer-game` package (`../freelancer-game`) rather than this one — a domain module
+built this far in reaches for the whole format layer (`ini`, `schema`, `utf`, `hash`, `alchemy`,
+`material`, `resource`, `texture`, `vmesh`) as a dependency rather than as a sibling, `./fx` included
+once four modules existed side by side and none of them fed anything back into the format layer.
+That package's own `CLAUDE.md` and `docs/FX.md`/`AI.md`/`BASE.md`/`UNIVERSE.md`/`GAME.md` carry what
+this section used to.
 
 ## Documents that are not per-module
 

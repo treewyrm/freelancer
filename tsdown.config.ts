@@ -25,9 +25,6 @@ export default defineConfig({
     './src/thn/scene/index.ts',
     './src/resource/index.ts',
     './src/schema/index.ts',
-    './src/fx/index.ts',
-    './src/ai/index.ts',
-    './src/game/index.ts',
   ],
   platform: 'neutral',
 })
