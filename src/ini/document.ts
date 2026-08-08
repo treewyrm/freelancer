@@ -54,6 +54,24 @@ export class Document implements Iterable<Section> {
     return section
   }
 
+  /**
+   * Inserts a section after `after`, appending when it is absent or belongs to another document.
+   *
+   * `addSection` pushes onto `entries`, which is right for a section that stands on its own and
+   * wrong for one that belongs to the section above it: `[LOD]` names no owner and is read as a
+   * trailer of the preceding entry — 388 retail equipment LODs follow a `[Gun]`, in 194 runs of two.
+   * The property-level twin of this is `Section.insertProperty`.
+   */
+  insertSection(name: string, after?: Section, ...entries: (Property | Line)[]): Section {
+    const section = new Section(name, ...entries)
+
+    const index = after === undefined ? -1 : this.entries.indexOf(after)
+    if (index < 0) this.entries.push(section)
+    else this.entries.splice(index + 1, 0, section)
+
+    return section
+  }
+
   /** Removes every section with this name. */
   deleteSection(name: string): this {
     this.entries = this.entries.filter(

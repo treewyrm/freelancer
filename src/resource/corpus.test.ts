@@ -1,11 +1,11 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import * as corpus from '#/corpus.js'
-import { isImage, read } from './read.js'
+import { inspect, isImage, read } from './read.js'
 import { write, writeSection } from './write.js'
-import { readStrings, writeStrings } from './strings.js'
+import { readBlock, readStrings, writeStrings } from './strings.js'
 import { readInfocards, writeInfocards } from './infocards.js'
-import { globalIdOf, readLibrary, RETAIL_LIBRARIES } from './library.js'
+import { globalIdOf, languageOf, readLibrary, RETAIL_LIBRARIES, writeLibrary } from './library.js'
 import { CODE_PAGE_WINDOWS_1252, LANGUAGE_ENGLISH_US, LANGUAGE_NEUTRAL, Type } from './data.js'
 
 /**
@@ -82,6 +82,39 @@ describe('retail corpus', { skip: corpus.skip }, () => {
           }
 
       assert.equal(neutral, RETAIL_LIBRARIES.length)
+    })
+
+    /**
+     * What `write` costs each library, measured rather than assumed.
+     *
+     * `write` mints a resource-only image — `.rsrc` and `.reloc`, entry point zero — so a library
+     * with more sections than that loses them. Six of the seven are already entry-point-less, and
+     * `infocards.dll` and `misctextinfo2.dll` are exactly the two sections `write` produces, which
+     * is what says the minted shape is one the game already loads.
+     *
+     * `resources.dll` is the exception on both counts: four sections, entry point `0x1000`, and a
+     * 23-byte `DllMain` whose only act is `DisableThreadLibraryCalls`.
+     */
+    it('gives every library its own image base, and only resources.dll an entry point', () => {
+      const bases = new Set<number>()
+
+      for (const { path, data } of libraries) {
+        const { imageBase, entryPoint, sections } = inspect(data)
+
+        assert.ok(!bases.has(imageBase), `${path} shares an image base`)
+        bases.add(imageBase)
+
+        if (path.toLowerCase() === 'resources.dll') {
+          assert.equal(entryPoint, 0x1000)
+          assert.deepEqual(sections, ['.text', '.rdata', '.rsrc', '.reloc'])
+        } else {
+          assert.equal(entryPoint, 0, `${path} entry point`)
+          assert.ok(!sections.includes('.text'), `${path} carries code`)
+        }
+      }
+
+      assert.deepEqual(inspect(named('infocards.dll')!.data).sections, ['.rsrc', '.reloc'])
+      assert.deepEqual(inspect(named('misctextinfo2.dll')!.data).sections, ['.rsrc', '.reloc'])
     })
 
     // Neither is Freelancer's, and both are why the reader models an id as `number | string` and
@@ -259,6 +292,62 @@ describe('retail corpus', { skip: corpus.skip }, () => {
     it('never uses one id for both a name and an infocard, though it could', () => {
       const shared = [...library.names.keys()].filter((id) => library.infocards.has(id))
       assert.deepEqual(shared, [])
+    })
+
+    /**
+     * A block of sixteen holes decodes to nothing, so it leaves no trace in the map and no writer
+     * driven from one can emit it. `offerbriberesources.dll` is the only library that ships any —
+     * 141 of its 232 blocks, ids 88 upward, where the mission-offer tables are sparse — and they
+     * are the reason `writeLibrary` carries a vacant block rather than letting the round trip
+     * quietly shrink the file by 11,280 bytes.
+     */
+    it('ships 141 all-hole string blocks, all of them in offerbriberesources.dll', () => {
+      let hollow = 0
+
+      for (const { path, resources } of libraries) {
+        const blocks = resources.filter(({ type }) => type === Type.String)
+        const vacant = blocks.filter(({ id, data }) => readBlock(data, Number(id)).size === 0)
+
+        if (vacant.length)
+          assert.equal(path.toLowerCase(), 'offerbriberesources.dll', `${path} has vacant blocks`)
+
+        hollow += vacant.length
+      }
+
+      assert.equal(hollow, 141)
+    })
+
+    it('finds one language per library, the version block excepted', () => {
+      for (const { path, resources } of libraries)
+        assert.equal(languageOf(resources), LANGUAGE_ENGLISH_US, `${path} language`)
+    })
+
+    /**
+     * `writeLibrary` one layer above the section test: rewriting a library with the text it was
+     * read with reproduces the resources it was read from, so the `.rsrc` it lays out is the one
+     * the original list lays out — filler and all.
+     *
+     * This is what makes an editor that models only names and infocards safe to point at a file
+     * that holds more than those. The carry-through rule is the complement of what the two readers
+     * consume, and the version block each library ships is the counterexample that catches a
+     * carry-through rule written as "keep what is not a string or a card".
+     */
+    it('rewrites every library with its own text, byte for byte', () => {
+      for (const { path, resources } of libraries) {
+        const language = languageOf(resources)
+        assert.ok(language !== undefined, `${path} has one language`)
+
+        const rewritten = writeLibrary(
+          resources,
+          {
+            names: readStrings(resources, language),
+            infocards: readInfocards(resources, language),
+          },
+          { language },
+        )
+
+        assert.deepEqual(writeSection(rewritten, 0x1000), writeSection(resources, 0x1000), path)
+      }
     })
 
     /** Two libraries have all but exhausted their 0x10000 band. */

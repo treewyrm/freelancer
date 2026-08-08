@@ -85,6 +85,46 @@ describe('building', () => {
   })
 })
 
+describe('inserting by identity', () => {
+  // A `[LOD]` belongs to the section above it, not at the end of the file.
+  it('inserts a section directly after the given one', () => {
+    const built = new Document()
+    const gun = new Section('Gun')
+    const next = new Section('Gun')
+    built.append(gun, next)
+
+    const inserted = built.insertSection('LOD', gun)
+
+    assert.deepEqual(built.entries, [gun, inserted, next])
+  })
+
+  it('inserts after a trailing comment rather than before it, when that is where the anchor is', () => {
+    const built = new Document()
+    const first = new Section('A')
+    built.append(first, '; note')
+
+    const inserted = built.insertSection('B', first)
+
+    assert.deepEqual(built.entries, [first, inserted, '; note'])
+  })
+
+  it('appends when no anchor is given', () => {
+    const built = new Document()
+    const first = built.addSection('A')
+
+    const inserted = built.insertSection('B')
+
+    assert.deepEqual(built.entries, [first, inserted])
+  })
+
+  it('appends when the anchor belongs to another document', () => {
+    const built = new Document()
+    const inserted = built.insertSection('B', new Section('A'))
+
+    assert.deepEqual(built.entries, [inserted])
+  })
+})
+
 describe('removing by identity', () => {
   // Duplicate section names are legal — 156 retail files repeat one.
   it('removes only the given section, leaving its namesake and any comment above it', () => {

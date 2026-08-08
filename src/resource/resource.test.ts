@@ -4,8 +4,16 @@ import { isImage, read } from './read.js'
 import { write, writeSection } from './write.js'
 import { readBlock, readStrings, writeStrings, blockOf, slotOf, indexOf } from './strings.js'
 import { readCard, readInfocards, writeCard, writeInfocards } from './infocards.js'
-import { globalIdOf, libraryOf, localOf, partition, readLibrary } from './library.js'
-import { LANGUAGE_ENGLISH_US, Type } from './data.js'
+import {
+  globalIdOf,
+  languageOf,
+  libraryOf,
+  localOf,
+  partition,
+  readLibrary,
+  writeLibrary,
+} from './library.js'
+import { LANGUAGE_ENGLISH_US, LANGUAGE_NEUTRAL, Type } from './data.js'
 import type { Resource } from './types.js'
 
 /**
@@ -382,5 +390,117 @@ describe('library', () => {
 
   it('refuses an id past the requested library count', () => {
     assert.throws(() => partition(new Map([[globalIdOf(4, 1), 'a']]), 2), RangeError)
+  })
+})
+
+describe('languageOf', () => {
+  const at = (language: number, type: Type = Type.String): Resource => ({
+    type,
+    id: 1,
+    language,
+    codePage: 1252,
+    data: new Uint8Array(),
+  })
+
+  it('finds the language every content resource shares', () => {
+    assert.equal(languageOf([at(0x409), { ...at(0x409), id: 2 }]), 0x409)
+  })
+
+  it('ignores the version block, which sits at neutral', () => {
+    assert.equal(languageOf([at(LANGUAGE_NEUTRAL, Type.Version), at(0x409)]), 0x409)
+  })
+
+  it('gives up when they disagree, rather than picking one', () => {
+    assert.equal(languageOf([at(0x409), { ...at(0x411), id: 2 }]), undefined)
+  })
+
+  it('has nothing to derive from a library with no content', () => {
+    assert.equal(languageOf([at(LANGUAGE_NEUTRAL, Type.Version)]), undefined)
+  })
+})
+
+/**
+ * The carry-through rules, each pinned by the counterexample retail does not supply.
+ *
+ * Every case here is something the maps cannot represent, so a writer that treats "not a string or
+ * a card" as the whole of what to keep deletes it — silently, since the loss is a resource that was
+ * never in the map to be missed.
+ */
+describe('writeLibrary', () => {
+  const resource = (over: Partial<Resource> = {}): Resource => ({
+    type: Type.String,
+    id: 1,
+    language: LANGUAGE_ENGLISH_US,
+    codePage: 1252,
+    data: new Uint8Array(),
+    ...over,
+  })
+
+  const find = (resources: Resource[], type: Resource['type'], id: Resource['id']) =>
+    resources.find((entry) => entry.type === type && entry.id === id)
+
+  it('keeps a resource of a type it does not model', () => {
+    const version = resource({ type: Type.Version, data: Uint8Array.of(1, 2, 3) })
+    const written = writeLibrary([version], { names: new Map([[0, 'a']]) })
+
+    assert.deepEqual(find(written, Type.Version, 1), version)
+  })
+
+  it('keeps a string or card whose entry id is a name, which no reader consumes', () => {
+    const named = resource({ id: 'PREPSTUBDATA', data: Uint8Array.of(9) })
+    const written = writeLibrary([named], { names: new Map([[0, 'a']]) })
+
+    assert.deepEqual(find(written, Type.String, 'PREPSTUBDATA'), named)
+  })
+
+  it('keeps content at a language other than the one being written', () => {
+    const other = resource({ language: 0x411, id: 3, data: Uint8Array.of(7) })
+    const written = writeLibrary([other], { names: new Map([[0, 'a']]) })
+
+    assert.deepEqual(
+      written.find((entry) => entry.language === 0x411),
+      other,
+    )
+  })
+
+  it('keeps a block that was all holes when it was read', () => {
+    const [hollow] = writeStrings(new Map([[16, '']]))
+    assert.ok(hollow)
+
+    const written = writeLibrary([hollow], { names: new Map([[0, 'a']]) })
+
+    assert.deepEqual(find(written, Type.String, 2), hollow)
+    assert.equal(readStrings(written).size, 1)
+  })
+
+  /**
+   * The other half of the rule above. A block absent from the map because the caller emptied it is
+   * not the same thing as one that held nothing to begin with, and carrying it would undo the
+   * deletion — so the two are told apart by reading the original, not by its absence from the map.
+   */
+  it('drops a block the caller emptied, rather than resurrecting it', () => {
+    const filled = writeStrings(new Map([[16, 'gone']]))
+    const written = writeLibrary(filled, { names: new Map([[0, 'a']]) })
+
+    assert.equal(find(written, Type.String, 2), undefined)
+  })
+
+  it('carries each entry’s code page rather than stamping the option across them', () => {
+    const original = writeStrings(new Map([[0, 'a']]), { codePage: 932 })
+    const written = writeLibrary(original, { names: new Map([[0, 'b']]) })
+
+    assert.equal(find(written, Type.String, 1)?.codePage, 932)
+  })
+
+  it('reproduces a list built from strings and cards', () => {
+    const names = new Map([[0, 'Object Unknown']])
+    const infocards = new Map([[7, '<RDL><PUSH/><POP/></RDL>']])
+    const original = [...writeStrings(names), ...writeInfocards(infocards)]
+
+    const written = writeLibrary(original, { names, infocards })
+
+    assert.deepEqual(readStrings(written), names)
+    assert.deepEqual(readInfocards(written), infocards)
+    assert.deepEqual(writeSection(written, 0x1000), writeSection(original, 0x1000))
   })
 })

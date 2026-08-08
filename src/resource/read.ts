@@ -23,6 +23,57 @@ export const isImage = (data: ArrayBufferView | ArrayBufferLike): boolean => {
   return offset + 4 <= view.byteLength && view.getUint32(offset, true) === PE_SIGNATURE
 }
 
+/** What an image says about itself, apart from its resources. */
+export interface Image {
+  /** Preferred load address. Retail gives each library its own so none has to be rebased. */
+  imageBase: number
+
+  /** Entry point RVA. Zero in six of the seven libraries — `/NOENTRY`, no `DllMain` to call. */
+  entryPoint: number
+
+  /** Section names, in table order. `write` mints `.rsrc` and `.reloc` and nothing else. */
+  sections: string[]
+}
+
+/**
+ * Reads the header fields a caller needs to decide what a rewrite would cost.
+ *
+ * Separate from {@link read} because they answer different questions and a caller usually wants
+ * only one: `read` says what is in the image, this says what the image *is*. It exists so a
+ * consumer can carry the image base across a rewrite, and warn about a library whose sections
+ * `write` will not reproduce, without parsing a PE header of its own.
+ *
+ * @throws TypeError on anything that is not a PE32 image.
+ */
+export const inspect = (data: ArrayBufferView | ArrayBufferLike): Image => {
+  const view = BufferView.from(data as ArrayBufferLike)
+
+  if (!isImage(view)) throw new TypeError('Not a PE image')
+
+  const pe = view.getUint32(PE_OFFSET_POINTER, true)
+  const coff = pe + 4
+  const sectionCount = view.getUint16(coff + 2, true)
+  const optionalSize = view.getUint16(coff + 16, true)
+  const optional = coff + 20
+
+  if (view.getUint16(optional, true) !== OPTIONAL_MAGIC) throw new TypeError('Not a PE32 image')
+
+  const sections: string[] = []
+
+  for (let i = 0; i < sectionCount; i++) {
+    const offset = optional + optionalSize + i * SECTION_BYTE_LENGTH
+    sections.push(
+      String.fromCharCode(...view.bytes.subarray(offset, offset + 8)).replace(/\0+$/, ''),
+    )
+  }
+
+  return {
+    imageBase: view.getUint32(optional + 28, true),
+    entryPoint: view.getUint32(optional + 16, true),
+    sections,
+  }
+}
+
 /** One entry of the section table, as far as mapping an RVA back to a file offset needs it. */
 interface Section {
   name: string
