@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import * as corpus from '#/corpus.js'
-import { formatOf, read } from './index.js'
+import { Document, formatOf, Property, read, Section } from './index.js'
 import * as binary from './binary/index.js'
 import * as save from './save/index.js'
 import * as text from './text/index.js'
@@ -49,7 +49,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
       let properties = 0
 
       for (const { document } of documents) {
-        sections += document.length
+        sections += document.sections.length
         for (const section of document) properties += section.properties.length
       }
 
@@ -139,7 +139,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
       const [asset] = plain
       const document = text.read(decode(asset!.data))
 
-      assert.ok(document.length > 0)
+      assert.ok(document.sections.length > 0)
 
       for (const section of document)
         for (const property of section.properties)
@@ -153,7 +153,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
     it('keeps initialworld.ini nickname hashes exact', () => {
       const [asset] = plain
       const document = text.read(decode(asset!.data))
-      const gates = document.filter(({ name }) => name.toLowerCase() === 'locked_gates')
+      const gates = document.sections.filter(({ name }) => name.toLowerCase() === 'locked_gates')
 
       assert.equal(gates.length, 1)
 
@@ -161,10 +161,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
 
       assert.ok(values.length > 0)
       for (const value of values)
-        assert.match(
-          text.write([{ name: 'x', properties: [{ name: 'y', values: [value] }] }]),
-          /\d/,
-        )
+        assert.match(text.write(new Document(new Section('x', new Property('y', value)))), /\d/)
     })
 
     it('is a fixed point over every file', () => {
@@ -189,14 +186,14 @@ describe('retail corpus', { skip: corpus.skip }, () => {
       // freelancer.ini carries [;Display] and keymap-style names; dacom.ini opens with @include.
       it('reads them, keeping a section commented out by its name', () => {
         const documents = assets.map(({ data }) => read(data))
-        const names = documents.flat().map(({ name }) => name)
+        const names = documents.flatMap((document) => document.sections).map(({ name }) => name)
 
         assert.ok(names.includes(';Display'))
       })
 
       it('keeps @include as a property rather than following it', () => {
         const dacom = assets.find(({ path }) => /dacom\.ini$/i.test(path))
-        const properties = read(dacom!.data).flatMap(({ properties }) => properties)
+        const properties = read(dacom!.data).sections.flatMap(({ properties }) => properties)
 
         assert.ok(properties.some(({ name }) => name.startsWith('@include')))
       })
@@ -226,7 +223,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
 
         for (const { data } of assets) {
           const document = read(data)
-          sections += document.length
+          sections += document.sections.length
           for (const section of document) properties += section.properties.length
         }
 
@@ -238,7 +235,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
         const asset = assets.find(({ path }) => /newplayer\.fl$/i.test(path))
 
         assert.deepEqual(
-          read(asset!.data).map(({ name }) => name),
+          read(asset!.data).sections.map(({ name }) => name),
           ['Player', 'StoryInfo', 'mPlayer'],
         )
       })

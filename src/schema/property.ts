@@ -1,4 +1,6 @@
-import type { Property, Section, Value } from '#/ini/types.js'
+import { Property } from '#/ini/property.js'
+import { Section } from '#/ini/section.js'
+import type { Value } from '#/ini/types.js'
 import { from, toBoolean, toFloat, toText } from '#/ini/value.js'
 import { fold } from '#/utility/string.js'
 import type { Fixed, Keys, Report, Unrecognized } from './types.js'
@@ -163,7 +165,7 @@ export const writeSection = <T extends Unrecognized>(
 
   if (value.unrecognized) properties.push(...value.unrecognized)
 
-  return { name, properties }
+  return new Section(name, ...properties)
 }
 
 /**
@@ -316,7 +318,7 @@ export const fields = <T>(): Fields<T> => {
     },
     write(properties, value, name) {
       const held = get<V>(value, into)
-      if (held !== undefined) properties.push({ name, values: to(held) })
+      if (held !== undefined) properties.push(new Property(name, ...to(held)))
     },
   })
 
@@ -343,7 +345,7 @@ export const fields = <T>(): Fields<T> => {
     },
     write(properties, value, name) {
       for (const row of get<readonly R[]>(value, into) ?? [])
-        properties.push({ name, values: to(row) })
+        properties.push(new Property(name, ...to(row)))
     },
   })
 
@@ -410,7 +412,7 @@ export const fields = <T>(): Fields<T> => {
       },
       write(properties, value, name) {
         for (const entry of get<readonly string[]>(value, into) ?? [])
-          properties.push({ name, values: [from(entry)] })
+          properties.push(new Property(name, from(entry)))
       },
     }),
 
@@ -436,7 +438,7 @@ export const fields = <T>(): Fields<T> => {
             // The opener emits its row and that row's members together, so the file's interleave
             // comes back rather than every opener followed by every member.
             for (const row of get<readonly R[]>(value, into) ?? []) {
-              properties.push({ name, values: values(row) })
+              properties.push(new Property(name, ...values(row)))
               for (const [member, instruction] of entries) instruction.write(properties, row, member)
             }
           },

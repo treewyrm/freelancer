@@ -1,4 +1,6 @@
-import type { Document, Section, Value } from '#/ini/types.js'
+import type { Document } from '#/ini/document.js'
+import type { Section } from '#/ini/section.js'
+import type { Value } from '#/ini/types.js'
 import BufferView from '#/utility/bufferview.js'
 import {
   HEADER_BYTE_LENGTH,
@@ -31,7 +33,7 @@ import Dictionary from './dictionary.js'
  * @param document Sections to write.
  */
 export const write = (document: Document): Uint8Array => {
-  const sections = [...document]
+  const sections = document.sections
   const dictionary = new Dictionary()
 
   /** Interns a name and refuses one the `uint16` field could not address. */

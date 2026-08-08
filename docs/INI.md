@@ -38,16 +38,39 @@ another 58 are opened by names compiled into `content.dll` and `Freelancer.exe`.
 
 ## The document model
 
-The interim layer, and the thing both encodings parse into:
+The interim layer, and the thing both encodings parse into. `Document`, `Section` and `Property` are
+classes — identity and mutation are the point, the same as `utf/`'s `Directory`/`File` — rather than
+plain records, so a caller navigates and builds a document with `get*`/`filter*`/`add*`/`delete*`/
+`append` methods instead of importing a scatter of free functions:
 
 ```
 Document
-  └─ sections: Section[]              ordered, duplicates legal
-       ├─ name: string                as authored, not folded
-       └─ properties: Property[]      ordered, duplicates legal and common
-            ├─ name: string
-            └─ values: Value[]        0..255; boolean | number | string
+  └─ entries: (Section | Line)[]        ordered; a Line is a verbatim unparsed source line
+       └─ sections: Section[]           computed getter, duplicates legal
+            ├─ name: string             as authored, not folded
+            ├─ comment: string          trailing comment on the section's own line, text-only
+            └─ entries: (Property | Line)[]   ordered
+                 └─ properties: Property[]    computed getter, duplicates legal and common
+                      ├─ name: string
+                      ├─ comment: string      trailing same-line comment, text-only
+                      └─ values: Value[]      0..255; boolean | number | string
 ```
+
+A `Line` is `string` — a blank line, a comment-only line, or anything else the text parser did not
+interpret, kept in position so a write-back reproduces it. Only text carries them: BINI has no
+comment syntax, so a `Line` never appears in a document read from binary, and the binary writer
+silently drops any that end up in a hand-built one. Lookups (`getSection`, `getProperty`, …) compare
+by name — case-folded, never in place — and never by hash, unlike `utf/`'s `Directory.getFile`; only
+a `nickname` *value* is hashed, via `Document.findByNickname`. `addSection`/`addProperty` always
+append rather than find-or-replace, because duplicate names are the normal case (see rule 2 below),
+unlike `Directory.setFile`'s find-or-insert.
+
+`read`/`write`/`formatOf` stay free functions in `./ini`'s barrel rather than becoming
+`Document.read`/`.write`, because INI has three encodings, each in its own submodule (`binary/`,
+`text/`, `save/`), and each one constructs `Document`/`Section`/`Property` instances to return them —
+so a `Document.read` that dispatched to those submodules would import back into the module that
+defines it. `utf/`'s `Directory.read`/`.write` don't have this problem because UTF has exactly one
+binary encoding, implemented inline rather than in a sibling submodule.
 
 Four rules the model exists to enforce, each of which a naive `Record<string, string>` breaks:
 
@@ -73,11 +96,22 @@ flag                                 ; no '=' at all — zero values
 empty =                              ; '=' and nothing after it — also zero values
 ```
 
-- `;` begins a comment, to end of line. **BINI has no comment syntax**, so comments are lost on
-  compile; the convention for a comment that must survive is a property literally named `comment`.
+- `;` begins a comment, to end of line. **BINI has no comment syntax**, so a comment is lost on
+  compile to BINI; the convention for a comment that must survive *that* trip is a property literally
+  named `comment`. Text→interim→text is a different trip — see below, and
+  [Round-trip](#round-trip) — and does preserve it.
 - A section is commented out by prefixing its name, not its line: `EXE/freelancer.ini` carries
   `[;Display]`, which is a section whose name is `;Display` and which therefore matches nothing.
   Round-tripping it means treating a section header as opaque text.
+- **A comment-only line, a blank line, or a property line's trailing `; …` survives a
+  text→interim→text round trip**, landing back in the same position — modded content leans on this
+  heavily: a live mod's `Data` folder measures 39,388 comment-only lines, 150,268 blank lines and
+  19,276 trailing comments across 1.8M lines, commonly annotating a hashed nickname or faction id
+  (`rep = -0.65, fc_c_grp ;Corsairs`). What is **not** preserved is the original spacing of a *parsed*
+  line — `a=1` and `a = 1` both write back through `WriteOptions.spaceAroundAssignment`'s policy, not
+  as read. Blank-line placement between sections is data (an empty `Line` entry), not a writer
+  policy — there is deliberately no `spaceBetweenSections` option; a hand-built document that wants
+  one carries an explicit `''` entry.
 - **A section name is opaque text, not an identifier.** `INTERFACE/keymap.ini` carries a section
   literally named `keymap=1.1` — an `=` inside a section header.
 - Values are untyped in text and cast at query time by whatever reads them. This is the reason the
@@ -327,7 +361,7 @@ point everywhere** — what is written reads back identical and writes again to 
 | Direction                              | Target                                                                   |
 | -------------------------------------- | ------------------------------------------------------------------------ |
 | BINI → interim → BINI                  | **Byte-exact for all 1,251 files. Measured, not aspired to** — see below |
-| text → interim → text                  | Fixed point; comments and layout are **not** preserved unless modelled   |
+| text → interim → text                  | Fixed point; unparsed lines (comments, blanks) and trailing same-line comments are preserved verbatim, in position; a *parsed* line's original spacing is not — it re-serializes through `WriteOptions` |
 | BINI → interim → text → interim → BINI | Byte-exact, since text is the richer encoding                            |
 | save body → unmasked → save body       | **Byte-exact.** The mask is its own inverse over the exact bytes         |
 | save → interim → save                  | Fixed point over both `.fl`, with the text direction's losses and no others |

@@ -15,7 +15,7 @@
  * takes it verbatim, U+00A0 column padding and all, the same as it takes `initialworld.ini`.
  */
 
-import type { Document } from '#/ini/types.js'
+import type { Document } from '#/ini/document.js'
 import * as text from '#/ini/text/index.js'
 import BufferView from '#/utility/bufferview.js'
 import { decode, encode } from '#/utility/encoding.js'

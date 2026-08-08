@@ -1,7 +1,9 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
-import type { Property, Section, Value } from '#/ini/types.js'
+import { Property } from '#/ini/property.js'
+import type { Section } from '#/ini/section.js'
 import { read as readText } from '#/ini/text/read.js'
+import type { Value } from '#/ini/types.js'
 import * as value from '#/ini/value.js'
 import { field } from './index.js'
 import { fields, readSection, writeSection, type Table } from './property.js'
@@ -13,7 +15,7 @@ import { fields, readSection, writeSection, type Table } from './property.js'
  * reader depends on the tag — which is the thing the typed layer must never do.
  */
 const parse = (...lines: string[]): Section => {
-  const [section] = readText(['[Test]', ...lines].join('\n'))
+  const [section] = readText(['[Test]', ...lines].join('\n')).sections
   assert.ok(section)
   return section
 }
@@ -100,8 +102,8 @@ describe('reading a section sequentially', () => {
       nickname: 'a',
       price: 3,
       unrecognized: [
-        { name: '260800', values: [value.integer(1)] },
-        { name: ':', values: [value.integer(2)] },
+        new Property('260800', value.integer(1)),
+        new Property(':', value.integer(2)),
       ],
     })
   })
@@ -110,7 +112,7 @@ describe('reading a section sequentially', () => {
   it('keeps a property whose missing separator swallowed its value', () => {
     const read = readSection(parse('system st02'), TABLE)
 
-    assert.deepEqual(read.unrecognized, [{ name: 'system st02', values: [] }])
+    assert.deepEqual(read.unrecognized, [new Property('system st02')])
   })
 
   it('folds case on lookup and never in place', () => {
@@ -153,10 +155,10 @@ describe('flag', () => {
 
   it('writes bare when true and explicit when false', () => {
     assert.deepEqual(writeSection('Test', TABLE, { separable: true }).properties, [
-      { name: 'separable', values: [] },
+      new Property('separable'),
     ])
     assert.deepEqual(writeSection('Test', TABLE, { separable: false }).properties, [
-      { name: 'separable', values: [value.string('false')] },
+      new Property('separable', value.string('false')),
     ])
   })
 })
@@ -205,8 +207,8 @@ describe('merge and numbers', () => {
     const written = writeSection('Test', TABLE, { libraries: ['a.mat', 'b.mat'] })
 
     assert.deepEqual(written.properties, [
-      { name: 'material_library', values: [value.string('a.mat')] },
-      { name: 'material_library', values: [value.string('b.mat')] },
+      new Property('material_library', value.string('a.mat')),
+      new Property('material_library', value.string('b.mat')),
     ])
   })
 })
@@ -303,7 +305,7 @@ describe('group', () => {
     const read = readSection(parse('fog_far = 9000', 'exclusion = zone_1'), ZONES, report)
 
     assert.deepEqual(read.exclusions, [{ zone: 'zone_1' }])
-    assert.deepEqual(read.unrecognized, [{ name: 'fog_far', values: [value.integer(9000)] }])
+    assert.deepEqual(read.unrecognized, [new Property('fog_far', value.integer(9000))])
     assert.deepEqual(messages, ['fog_far: no open exclusion to attach to'])
   })
 
@@ -347,7 +349,7 @@ describe('writing a section', () => {
     const written = writeSection('Test', TABLE, {
       price: 100,
       nickname: 'a',
-      unrecognized: [{ name: '260800', values: [] }],
+      unrecognized: [new Property('260800')],
     })
 
     assert.deepEqual(
@@ -358,7 +360,7 @@ describe('writing a section', () => {
 
   it('emits nothing for an absent field', () => {
     assert.deepEqual(writeSection('Test', TABLE, { nickname: 'a' }).properties, [
-      { name: 'nickname', values: [value.string('a')] },
+      new Property('nickname', value.string('a')),
     ])
   })
 

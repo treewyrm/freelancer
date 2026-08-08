@@ -1,100 +1,93 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
-import * as query from './section.js'
-import type { Document } from './types.js'
+import { Property } from './property.js'
+import { Section } from './section.js'
 import * as value from './value.js'
 
-const document: Document = [
-  {
-    name: 'Good',
-    properties: [
-      { name: 'nickname', values: [value.string('commodity_gold')] },
-      { name: 'price', values: [value.integer(100)] },
-    ],
-  },
-  {
-    name: 'Loadout',
-    properties: [
-      { name: 'nickname', values: [value.string('li_elite')] },
-      { name: 'equip', values: [value.string('a')] },
-      { name: 'equip', values: [value.string('b')] },
-      { name: 'separable', values: [] },
-    ],
-  },
-  { name: 'loadout', properties: [{ name: 'nickname', values: [value.string('li_freighter')] }] },
-]
+const loadout = new Section(
+  'Loadout',
+  new Property('nickname', value.string('li_elite')),
+  new Property('equip', value.string('a')),
+  '; disabled below',
+  new Property('equip', value.string('b')),
+  new Property('separable'),
+)
 
-describe('section lookup', () => {
-  // Six retail section names are spelled more than one way: ObjList and Objlist, zone and Zone.
-  it('folds case', () => {
-    assert.equal(query.findSection(document, 'LOADOUT')?.name, 'Loadout')
+describe('label', () => {
+  it('is the case-folded name, leaving name untouched', () => {
+    assert.equal(loadout.label, 'loadout')
+    assert.equal(loadout.name, 'Loadout')
   })
+})
 
-  it('returns every match in file order', () => {
+describe('properties', () => {
+  it('filters unparsed lines out of entries', () => {
     assert.deepEqual(
-      query.filterSections(document, 'loadout').map(({ name }) => name),
-      ['Loadout', 'loadout'],
+      loadout.properties.map(({ name }) => name),
+      ['nickname', 'equip', 'equip', 'separable'],
     )
-  })
-
-  it('returns undefined for a name that is not there', () => {
-    assert.equal(query.findSection(document, 'Base'), undefined)
   })
 })
 
 describe('property lookup', () => {
-  const loadout = query.findSection(document, 'Loadout')!
-
   // A repeated property is a list. equip repeats 16,074 times across retail.
   it('returns every repeat, not just the first', () => {
-    assert.equal(query.filterProperties(loadout, 'equip').length, 2)
-    assert.equal(query.findProperty(loadout, 'equip')?.values[0]?.value, 'a')
+    assert.equal(loadout.filterProperties('equip').length, 2)
+    assert.equal(loadout.getProperty('equip')?.values[0]?.value, 'a')
   })
 
   it('reads a value by index', () => {
-    assert.deepEqual(query.getValue(loadout, 'nickname'), value.string('li_elite'))
-    assert.equal(query.getValue(loadout, 'nickname', 1), undefined)
+    assert.deepEqual(loadout.getValue('nickname'), value.string('li_elite'))
+    assert.equal(loadout.getValue('nickname', 1), undefined)
   })
 
   // A property present with no values is a flag that is set, and 1,063 retail properties are that.
   // An empty array and undefined are different answers.
   it('distinguishes a valueless property from a missing one', () => {
-    assert.deepEqual(query.getValues(loadout, 'separable'), [])
-    assert.equal(query.getValues(loadout, 'absent'), undefined)
-    assert.ok(query.hasProperty(loadout, 'separable'))
-    assert.ok(!query.hasProperty(loadout, 'absent'))
+    assert.deepEqual(loadout.getValues('separable'), [])
+    assert.equal(loadout.getValues('absent'), undefined)
+    assert.ok(loadout.hasProperty('separable'))
+    assert.ok(!loadout.hasProperty('absent'))
   })
 })
 
-describe('nicknames', () => {
+describe('nickname', () => {
   it('reads a nickname as text', () => {
-    assert.equal(query.getNickname(document[0]!), 'commodity_gold')
+    assert.equal(loadout.getNickname(), 'li_elite')
   })
 
-  // The game resolves a cross-file reference by hash, so a lookup that matches here matches there.
-  it('finds a section by hashed nickname, folding case', () => {
-    assert.equal(query.findByNickname(document, 'LI_ELITE')?.name, 'Loadout')
-    assert.equal(query.findByNickname(document, 'li_freighter')?.name, 'loadout')
-    assert.equal(query.findByNickname(document, 'nothing'), undefined)
+  it('is undefined when the property is absent', () => {
+    assert.equal(new Section('Empty').getNickname(), undefined)
   })
 })
 
 describe('building', () => {
-  it('appends sections and properties in order', () => {
-    const built: Document = []
-    const section = query.addSection(built, 'Good')
+  it('always appends a property, never find-or-replace', () => {
+    const section = new Section('Good')
 
-    query.addProperty(section, 'nickname', [value.string('a')])
-    query.addProperty(section, 'equip')
+    section.addProperty('nickname', value.string('a'))
+    section.addProperty('equip')
+    section.addProperty('equip', value.string('b'))
 
-    assert.deepEqual(built, [
-      {
-        name: 'Good',
-        properties: [
-          { name: 'nickname', values: [value.string('a')] },
-          { name: 'equip', values: [] },
-        ],
-      },
-    ])
+    assert.deepEqual(
+      section.properties.map(({ name }) => name),
+      ['nickname', 'equip', 'equip'],
+    )
+  })
+
+  it('appends unparsed lines alongside properties, preserving order', () => {
+    const section = new Section('Good')
+    section.append(new Property('a', value.integer(1)), '; note', new Property('b'))
+
+    assert.equal(section.entries.length, 3)
+    assert.equal(section.entries[1], '; note')
+  })
+
+  it('removes every property with a name, leaving unparsed lines untouched', () => {
+    const section = new Section('Good')
+    section.append(new Property('a', value.integer(1)), '; note', new Property('a', value.integer(2)))
+    section.deleteProperty('a')
+
+    assert.deepEqual(section.entries, ['; note'])
   })
 })

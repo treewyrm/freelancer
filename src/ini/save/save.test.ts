@@ -1,8 +1,11 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import { HEADER_BYTE_LENGTH, isSave, mask, read, write } from './index.js'
+import { Document } from '#/ini/document.js'
 import { formatOf, read as readAny, write as writeAny } from '#/ini/index.js'
-import type { Document } from '#/ini/types.js'
+import { Property } from '#/ini/property.js'
+import { Section } from '#/ini/section.js'
+import * as value from '#/ini/value.js'
 
 /** Masks a body by hand, so a reader test does not depend on the writer. */
 const fls1 = (body: string): Uint8Array => {
@@ -51,16 +54,14 @@ describe('mask', () => {
 
 describe('read', () => {
   it('reads a section and a property from under the mask', () => {
-    assert.deepEqual(read(fls1('[Player]\r\nmoney = 500\r\n')), [
-      {
-        name: 'Player',
-        properties: [{ name: 'money', values: [{ type: 'integer', value: 500 }] }],
-      },
-    ])
+    assert.deepEqual(
+      read(fls1('[Player]\r\nmoney = 500\r\n')),
+      new Document(new Section('Player', new Property('money', value.integer(500)))),
+    )
   })
 
   it('reads a signature-only file as an empty document', () => {
-    assert.deepEqual(read(fls1('')), [])
+    assert.deepEqual(read(fls1('')), new Document())
   })
 
   it('refuses an unmasked buffer rather than unmasking it anyway', () => {
@@ -75,7 +76,7 @@ describe('write', () => {
   })
 
   it('writes the signature and masks the body', () => {
-    const bytes = write([{ name: 'Player', properties: [] }])
+    const bytes = write(new Document(new Section('Player')))
 
     assert.deepEqual(
       bytes.subarray(0, HEADER_BYTE_LENGTH),
@@ -87,9 +88,7 @@ describe('write', () => {
 })
 
 describe('the top-level entry', () => {
-  const document: Document = [
-    { name: 'Player', properties: [{ name: 'rank', values: [{ type: 'integer', value: 0 }] }] },
-  ]
+  const document = new Document(new Section('Player', new Property('rank', value.integer(0))))
 
   it('routes a masked buffer here without being told to', () => {
     const bytes = write(document)

@@ -1,11 +1,11 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
-import type { Document } from '#/ini/types.js'
+import { Document } from '#/ini/document.js'
+import { Section } from '#/ini/section.js'
 import { runs } from './document.js'
 
 /** A document from section names alone — what a run is made of is position, not content. */
-const document = (...names: string[]): Document =>
-  names.map((name) => ({ name, properties: [] }))
+const document = (...names: string[]): Document => new Document(...names.map((name) => new Section(name)))
 
 /** `opener: member, member` per run, which is the whole shape under test. */
 const shape = (document: Document, openers: string[], options?: Parameters<typeof runs>[2]) =>

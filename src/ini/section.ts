@@ -1,95 +1,111 @@
-import type { Document, Property, Section, Value } from './types.js'
-import { getObjectId } from '#/hash.js'
-import { equals as sameName } from '#/utility/string.js'
+import { Property } from './property.js'
+import type { Line, Value } from './types.js'
 import { toText } from './value.js'
+import { equals as sameName, fold } from '#/utility/string.js'
 
 /**
- * Reading a document.
+ * A named list of properties, and the unparsed lines interleaved with them.
+ *
+ * The name is opaque text, not an identifier: retail carries `[Exclusion Zones]` with a space,
+ * `[keymap=1.1]` with an equals sign, and `[;Display]` which is a section commented out by its name
+ * and therefore matches nothing.
  *
  * Every lookup here folds case and none of them string-compares, because six retail section names
  * and 32 property names are spelled more than one way — `ObjList` and `Objlist`, `zone` and `Zone`.
- * Nothing folds a name *in place*: what was read is what gets written back.
- *
- * Every lookup also comes in a singular and a plural form, and the plural is usually the honest
- * one. A repeated property is a list, not a mistake.
+ * Nothing folds a name *in place*: what was read is what gets written back. Lookups compare by name,
+ * never by hash — unlike `utf/`'s `Directory`, INI property and section names are never hashed for
+ * lookup, only a `nickname` *value* is (see `Document.findByNickname`).
  */
+export class Section {
+  /** Unparsed lines and parsed properties, in read/write order. */
+  entries: (Property | Line)[]
 
-/** First section with this name, or `undefined`. */
-export const findSection = (document: Document, name: string): Section | undefined =>
-  document.find((section) => sameName(section.name, name))
+  /** Trailing comment on the section's own `[Name]` line. Text-only. */
+  comment = ''
 
-/** Every section with this name, in file order. */
-export const filterSections = (document: Document, name: string): Section[] =>
-  document.filter((section) => sameName(section.name, name))
+  /** @param name As authored. Compared case-insensitively, never folded in place. */
+  constructor(
+    public name: string,
+    ...entries: (Property | Line)[]
+  ) {
+    this.entries = entries
+  }
 
-/** First property with this name, or `undefined`. */
-export const findProperty = (section: Section, name: string): Property | undefined =>
-  section.properties.find((property) => sameName(property.name, name))
+  /** Case-folded `name`, for a caller's own comparisons. */
+  get label(): string {
+    return fold(this.name)
+  }
 
-/** Every property with this name, in file order. */
-export const filterProperties = (section: Section, name: string): Property[] =>
-  section.properties.filter((property) => sameName(property.name, name))
+  /** 0..65,535 properties; the count is a `uint16` in BINI. Unparsed lines filtered out. */
+  get properties(): Property[] {
+    return this.entries.filter((entry): entry is Property => entry instanceof Property)
+  }
 
-/**
- * Values of the first property with this name, or `undefined` when there is no such property.
- *
- * An empty array is not the same answer: a property that is present with no values is a flag that
- * is set, and 1,063 retail properties are exactly that.
- */
-export const getValues = (section: Section, name: string): Value[] | undefined =>
-  findProperty(section, name)?.values
+  /** First property with this name, or `undefined`. */
+  getProperty(name: string): Property | undefined {
+    return this.properties.find((property) => sameName(property.name, name))
+  }
 
-/** First value of the first property with this name. */
-export const getValue = (section: Section, name: string, index = 0): Value | undefined =>
-  getValues(section, name)?.[index]
+  /** Every property with this name, in file order. */
+  filterProperties(name: string): Property[] {
+    return this.properties.filter((property) => sameName(property.name, name))
+  }
 
-/** Whether a property is present at all, whatever its values. */
-export const hasProperty = (section: Section, name: string): boolean =>
-  findProperty(section, name) !== undefined
+  /**
+   * First value of the first property with this name.
+   * @param index Position within the property's values. Default 0.
+   */
+  getValue(name: string, index = 0): Value | undefined {
+    return this.getProperty(name)?.values[index]
+  }
 
-/** Appends a property, which is how a repeated property is added. */
-export const addProperty = (section: Section, name: string, values: Value[] = []): Property => {
-  const property: Property = { name, values }
-  section.properties.push(property)
-  return property
-}
+  /**
+   * Values of the first property with this name, or `undefined` when there is no such property.
+   *
+   * An empty array is not the same answer: a property that is present with no values is a flag that
+   * is set, and 1,063 retail properties are exactly that.
+   */
+  getValues(name: string): Value[] | undefined {
+    return this.getProperty(name)?.values
+  }
 
-/** Appends a section. */
-export const addSection = (
-  document: Document,
-  name: string,
-  properties: Property[] = [],
-): Section => {
-  const section: Section = { name, properties }
-  document.push(section)
-  return section
-}
+  /** Whether a property is present at all, whatever its values. */
+  hasProperty(name: string): boolean {
+    return this.getProperty(name) !== undefined
+  }
 
-/**
- * The `nickname` a section identifies itself by, as text.
- *
- * 108 of the 256 retail section names always carry one, 136 never do, and three sometimes do.
- */
-export const getNickname = (section: Section, name = 'nickname'): string | undefined => {
-  const value = getValue(section, name)
-  return value === undefined ? undefined : toText(value)
-}
+  /**
+   * Appends a property, which is how a repeated property is added. Always appends — never
+   * find-or-replace, because duplicate names are legal and common (`[Loadout] equip` repeats 16,074
+   * times across retail).
+   */
+  addProperty(name: string, ...values: Value[]): Property {
+    const property = new Property(name, ...values)
+    this.entries.push(property)
+    return property
+  }
 
-/**
- * Finds a section by its `nickname`, comparing hashes rather than text.
- *
- * This is how the game resolves a cross-file reference, so a lookup that matches here matches
- * there — including the case folding, which `getObjectId` does.
- */
-export const findByNickname = (
-  document: Document,
-  nickname: string,
-  name = 'nickname',
-): Section | undefined => {
-  const id = getObjectId(nickname)
+  /** Removes every property with this name. */
+  deleteProperty(name: string): this {
+    this.entries = this.entries.filter(
+      (entry) => !(entry instanceof Property && sameName(entry.name, name)),
+    )
+    return this
+  }
 
-  return document.find((section) => {
-    const value = getNickname(section, name)
-    return value !== undefined && getObjectId(value) === id
-  })
+  /** Appends properties and/or unparsed lines, preserving order. */
+  append(...entries: (Property | Line)[]): this {
+    this.entries.push(...entries)
+    return this
+  }
+
+  /**
+   * The `nickname` a section identifies itself by, as text.
+   *
+   * 108 of the 256 retail section names always carry one, 136 never do, and three sometimes do.
+   */
+  getNickname(name = 'nickname'): string | undefined {
+    const value = this.getValue(name)
+    return value === undefined ? undefined : toText(value)
+  }
 }

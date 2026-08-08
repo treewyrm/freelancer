@@ -1,4 +1,4 @@
-import type { Property } from '#/ini/types.js'
+import type { Property } from '#/ini/property.js'
 
 /**
  * What every typed INI record shares, and the type-level vocabulary its readers are written in.

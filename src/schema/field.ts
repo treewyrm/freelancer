@@ -1,5 +1,6 @@
-import type { Property, Section, Value } from '#/ini/types.js'
-import { filterProperties, getValue, getValues } from '#/ini/section.js'
+import type { Property } from '#/ini/property.js'
+import type { Section } from '#/ini/section.js'
+import type { Value } from '#/ini/types.js'
 import { toBoolean, toFloat, toText } from '#/ini/value.js'
 import { equals as sameName } from '#/utility/string.js'
 import type { Fixed, Unrecognized } from './types.js'
@@ -36,13 +37,13 @@ const of = (value: Value | undefined, convert: (value: Value) => number): number
 
 /** One value as text, or absent. */
 export const text = (section: Section, name: string): string | undefined => {
-  const value = getValue(section, name)
+  const value = section.getValue(name)
   return value === undefined ? undefined : toText(value)
 }
 
 /** One value as a number, or absent. */
 export const number = (section: Section, name: string): number | undefined =>
-  of(getValue(section, name), toFloat)
+  of(section.getValue(name), toFloat)
 
 /**
  * One value as a boolean, or absent.
@@ -52,7 +53,7 @@ export const number = (section: Section, name: string): number | undefined =>
  * boolean, of which there are zero in the whole corpus.
  */
 export const boolean = (section: Section, name: string): boolean | undefined => {
-  const value = getValue(section, name)
+  const value = section.getValue(name)
   return value === undefined ? undefined : toBoolean(value)
 }
 
@@ -64,7 +65,7 @@ export const boolean = (section: Section, name: string): boolean | undefined => 
  * as a fixed pair does — it makes up a second number for 11 sounds.
  */
 export const numbers = (section: Section, name: string): number[] | undefined =>
-  getValues(section, name)?.map((value) => toFloat(value))
+  section.getValues(name)?.map((value) => toFloat(value))
 
 /**
  * A tuple of exactly `count` numbers, or absent when the property is missing or a different width.
@@ -90,7 +91,7 @@ export const tuple = <const N extends number>(
  * accept both and this is how it recognizes the first.
  */
 export const flag = (section: Section, name: string): boolean =>
-  getValues(section, name)?.length === 0
+  section.getValues(name)?.length === 0
 
 /**
  * A repeated property flattened into one ordered list of text, or absent.
@@ -100,7 +101,7 @@ export const flag = (section: Section, name: string): boolean =>
  * repeats are separate records rather than one list.
  */
 export const list = (section: Section, name: string): string[] | undefined => {
-  const properties = filterProperties(section, name)
+  const properties = section.filterProperties(name)
   if (properties.length === 0) return undefined
 
   return properties.flatMap(({ values }) => values.map((value) => toText(value)))
@@ -114,7 +115,7 @@ export const list = (section: Section, name: string): string[] | undefined => {
  * {@link values} rather than seeing 786 loose values.
  */
 export const rows = (section: Section, name: string): Value[][] | undefined => {
-  const properties: Property[] = filterProperties(section, name)
+  const properties: Property[] = section.filterProperties(name)
   return properties.length === 0 ? undefined : properties.map(({ values }) => values)
 }
 

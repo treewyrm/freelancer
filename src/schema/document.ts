@@ -1,4 +1,5 @@
-import type { Document, Section } from '#/ini/types.js'
+import type { Document } from '#/ini/document.js'
+import type { Section } from '#/ini/section.js'
 import { equals as sameName } from '#/utility/string.js'
 import type { Report } from './types.js'
 

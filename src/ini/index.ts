@@ -1,11 +1,13 @@
 import * as binary from './binary/index.js'
+import type { Document } from './document.js'
 import * as save from './save/index.js'
 import * as text from './text/index.js'
-import type { Document } from './types.js'
 import { decode, encode } from '#/utility/encoding.js'
 
 export * from './types.js'
+export * from './property.js'
 export * from './section.js'
+export * from './document.js'
 export * as value from './value.js'
 
 /**

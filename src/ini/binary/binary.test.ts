@@ -3,7 +3,9 @@ import * as assert from 'node:assert/strict'
 import { isBinary, read } from './read.js'
 import { write } from './write.js'
 import Dictionary from './dictionary.js'
-import type { Document } from '#/ini/types.js'
+import { Document } from '#/ini/document.js'
+import { Property } from '#/ini/property.js'
+import { Section } from '#/ini/section.js'
 import * as value from '#/ini/value.js'
 
 /** Assembles a BINI by hand so a reader test does not depend on the writer. */
@@ -32,7 +34,7 @@ describe('isBinary', () => {
 
 describe('read', () => {
   it('reads a header-only file as an empty document', () => {
-    assert.deepEqual(read(bini([], '')), [])
+    assert.deepEqual(read(bini([], '')), new Document())
   })
 
   it('reads a section, a property and a string value', () => {
@@ -56,9 +58,10 @@ describe('read', () => {
       ),
     )
 
-    assert.deepEqual(document, [
-      { name: 'MySection', properties: [{ name: 'MyKey', values: [value.string('MyValue')] }] },
-    ])
+    assert.deepEqual(
+      document,
+      new Document(new Section('MySection', new Property('MyKey', value.string('MyValue')))),
+    )
   })
 
   // The game addresses a value as base + index * 5 before it looks at any tag, and skips a property
@@ -87,7 +90,7 @@ describe('read', () => {
         ],
         'A\0B\0',
       ),
-    )
+    ).sections
 
     assert.deepEqual(section?.properties[0]?.values, [value.boolean(true), value.integer(42)])
   })
@@ -95,7 +98,7 @@ describe('read', () => {
   it('reads a boolean with a zero first byte as false however the rest is set', () => {
     const [section] = read(
       bini([0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x80], 'A\0B\0'),
-    )
+    ).sections
 
     assert.deepEqual(section?.properties[0]?.values, [value.boolean(false)])
   })
@@ -110,7 +113,10 @@ describe('read', () => {
     new DataView(bytes.buffer).setInt32(20, -42, true)
     new DataView(bytes.buffer).setFloat32(25, 1.5, true)
 
-    assert.deepEqual(read(bytes)[0]?.properties[0]?.values, [value.integer(-42), value.float(1.5)])
+    assert.deepEqual(read(bytes).sections[0]?.properties[0]?.values, [
+      value.integer(-42),
+      value.float(1.5),
+    ])
   })
 
   it('rejects a bad signature, version and value type', () => {
@@ -163,17 +169,15 @@ describe('Dictionary', () => {
 })
 
 describe('write', () => {
-  const document: Document = [
-    {
-      name: 'Good',
-      properties: [
-        { name: 'nickname', values: [value.string('commodity_gold')] },
-        { name: 'price', values: [value.integer(100)] },
-        { name: 'bad_sell_price', values: [value.float(100)] },
-        { name: 'separable', values: [] },
-      ],
-    },
-  ]
+  const document = new Document(
+    new Section(
+      'Good',
+      new Property('nickname', value.string('commodity_gold')),
+      new Property('price', value.integer(100)),
+      new Property('bad_sell_price', value.float(100)),
+      new Property('separable'),
+    ),
+  )
 
   it('round-trips a document', () => {
     assert.deepEqual(read(write(document)), document)
@@ -188,20 +192,20 @@ describe('write', () => {
   // write these back as integers.
   it('keeps an integral float a float', () => {
     const [section] = read(
-      write([{ name: 'S', properties: [{ name: 'a', values: [value.float(3)] }] }]),
-    )
+      write(new Document(new Section('S', new Property('a', value.float(3))))),
+    ).sections
     assert.equal(section?.properties[0]?.values[0]?.type, 'float')
   })
 
   it('shares one dictionary entry between a name and an equal string value', () => {
-    const bytes = write([{ name: 'a', properties: [{ name: 'a', values: [value.string('a')] }] }])
+    const bytes = write(new Document(new Section('a', new Property('a', value.string('a')))))
 
     // Header, one 4-byte section, one 3-byte property, one 5-byte value, then "a\0" once.
     assert.equal(bytes.length, 12 + 4 + 3 + 5 + 2)
   })
 
   it('places every name ahead of every value', () => {
-    const bytes = write([{ name: 'S', properties: [{ name: 'p', values: [value.string('v')] }] }])
+    const bytes = write(new Document(new Section('S', new Property('p', value.string('v')))))
 
     const dictionary = new TextDecoder().decode(bytes.subarray(12 + 4 + 3 + 5))
     assert.equal(dictionary, 'S\0p\0v\0')
@@ -209,15 +213,17 @@ describe('write', () => {
 
   it('refuses more values than the count field holds', () => {
     const values = Array.from({ length: 256 }, () => value.integer(0))
-    assert.throws(() => write([{ name: 'S', properties: [{ name: 'p', values }] }]), RangeError)
+    assert.throws(
+      () => write(new Document(new Section('S', new Property('p', ...values)))),
+      RangeError,
+    )
   })
 
   it('refuses a name block past the uint16 limit', () => {
     // Each section name is unique and 200 bytes, so the name block passes 64 KiB well before the end.
-    const document: Document = Array.from({ length: 400 }, (_, index) => ({
-      name: String(index).padStart(200, 'x'),
-      properties: [],
-    }))
+    const document = new Document(
+      ...Array.from({ length: 400 }, (_, index) => new Section(String(index).padStart(200, 'x'))),
+    )
 
     assert.throws(() => write(document), RangeError)
   })

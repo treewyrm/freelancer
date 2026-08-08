@@ -1,4 +1,7 @@
-import type { Document, Property, Section, Value } from '#/ini/types.js'
+import { Document } from '#/ini/document.js'
+import { Property } from '#/ini/property.js'
+import { Section } from '#/ini/section.js'
+import type { Value } from '#/ini/types.js'
 import BufferView from '#/utility/bufferview.js'
 import { decode } from '#/utility/encoding.js'
 import { HEADER_BYTE_LENGTH, SIGNATURE, VALUE_BYTE_LENGTH, ValueTag, VERSION } from './data.js'
@@ -51,7 +54,7 @@ export const read = (data: ArrayBufferView | ArrayBufferLike): Document => {
     return decode(bytes.subarray(start, view.findTerminator(start)))
   }
 
-  const document: Document = []
+  const sections: Section[] = []
 
   while (view.offset < namesOffset) {
     const name = string(view.readUint16())
@@ -62,18 +65,19 @@ export const read = (data: ArrayBufferView | ArrayBufferLike): Document => {
       if (view.offset + 3 > namesOffset)
         throw new RangeError(`Section "${name}" declares more properties than the file holds`)
 
-      const property: Property = { name: string(view.readUint16()), values: [] }
+      const propertyName = string(view.readUint16())
       const values = view.readUint8()
 
       if (view.offset + values * VALUE_BYTE_LENGTH > namesOffset)
-        throw new RangeError(`Property "${property.name}" declares more values than the file holds`)
+        throw new RangeError(`Property "${propertyName}" declares more values than the file holds`)
 
+      const property = new Property(propertyName)
       for (let index = 0; index < values; index++) property.values.push(readValue(view, string))
 
       properties.push(property)
     }
 
-    document.push({ name, properties } satisfies Section)
+    sections.push(new Section(name, ...properties))
   }
 
   if (view.offset !== namesOffset)
@@ -81,7 +85,7 @@ export const read = (data: ArrayBufferView | ArrayBufferLike): Document => {
       `Section block ends at ${view.offset}, ${view.offset - namesOffset} bytes past the dictionary`,
     )
 
-  return document
+  return new Document(...sections)
 }
 
 /**
