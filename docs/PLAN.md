@@ -154,9 +154,9 @@ case-sensitive variant. Picking wrong yields a number, just the wrong one.
    table in [RETAIL.md](RETAIL.md#round-trip-fidelity) is that audit.
 8. Archive both source repos with a pointer. *(Left to do by hand — nothing here deletes them.)*
 
-Deferred, as planned: the cross-reference layer (archetype → model, material → texture library,
-fx → node). It is the reason to merge, but it should be designed against a settled tree rather than
-during the move.
+Deferred, as planned: the cross-reference layer (archetype → model, material → texture library). It
+is the reason to merge, but it should be designed against a settled tree rather than during the
+move.
 
 ### What the merge actually retired
 
@@ -165,7 +165,7 @@ during the move.
 - Two copies of the `id32` table, each with a comment saying the two had to agree.
 - `getObjectId` living in a UTF library because `AUDIO.md` needed it, and again in an INI library
   because that is what INI nicknames are.
-- A `SCHEMA.md` recommendation to take a dependency on a package that was never published.
+- A recommendation to take a dependency on a package that was never published.
 
 ## Open
 

@@ -361,5 +361,4 @@ operand despite ending in neither `W` nor `OP`.
 
 ---
 
-[THORN.md](THORN.md) · [INI.md](INI.md) · [RETAIL.md](RETAIL.md) ·
-`SCHEMA.md` and `MODULES.md` in `@treewyrm/freelancer-game`
+[THORN.md](THORN.md) · [INI.md](INI.md) · [RETAIL.md](RETAIL.md)

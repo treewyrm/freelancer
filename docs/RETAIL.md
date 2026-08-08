@@ -3,9 +3,9 @@
 The retail Freelancer install as it bears on the format layer this package is: where the corpus is,
 what is in it, how faithfully each format module reproduces it, which files are not Freelancer's at
 all, and what has actually been measured versus what is assumed. Per-format detail stays in the
-module documents. **The domain layer's own retail measurements — everything about `./fx`, `./ai`,
-`./base`, `./universe` and `./game` — live in the sibling `@treewyrm/freelancer-game` package's own
-`docs/RETAIL.md`**, alongside the modules those measurements pin.
+module documents. **This package is the format layer and nothing above it** — nothing here
+interprets what a section name means or which files an install loads, so no measurement below
+concerns either.
 
 ## The corpus
 
@@ -95,9 +95,6 @@ full in each module document.
 ## Measured facts and what they pin
 
 Each of these decided a design position. The position is in the linked document; the number is here.
-**The domain layer's own measurements — everything pinning `SCHEMA.md`, `DICTIONARY.md`, `AI.md`,
-`FX.md` or `GAME.md` — moved to `@treewyrm/freelancer-game`'s own `docs/RETAIL.md`**, alongside the
-modules those documents describe.
 
 | Measurement                                                         | Value                                     | Pins                                                                                                                        |
 | ------------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -150,9 +147,8 @@ The text formats and the resource DLLs:
 | DLL → resources → DLL                   | **Exact** over all 37 DLLs in `EXE`                                                  |
 | resources → `.rsrc` section             | **Byte-identical to retail**, 5 libraries of 7 exactly, 2 as a strict prefix         |
 
-The typed layer over INI interim — coercion, the `readSection`/`writeSection` walk, and what each
-domain module round-trips — lives entirely in `@treewyrm/freelancer-game` now; see that package's own
-`docs/RETAIL.md#round-trip-fidelity--the-typed-layer`.
+The INI figures above are the interim model's, measured through both encodings. There is no row
+above the interim document because there is nothing above it here.
 
 Details and the reasoning behind each gap live in [MATERIAL.md](MATERIAL.md),
 [DEFORMABLE.md](DEFORMABLE.md), [TEXTURE.md](TEXTURE.md), [ALCHEMY.md](ALCHEMY.md),
@@ -171,10 +167,9 @@ and resolve to nothing.
 
 ## Quirks a sweep will hit
 
-Collected so a reader recognizes them instead of treating them as bugs. **Everything about resolving
-a path once it is read — case folding, separator translation, which file the load order actually
-reaches — moved to `@treewyrm/freelancer-game`'s own `docs/RETAIL.md#quirks-a-sweep-will-hit`**,
-alongside `./game`'s `Resolver`.
+Collected so a reader recognizes them instead of treating them as bugs. **Resolving a path once it
+is read — case folding, separator translation, which file the load order actually reaches — is not
+covered here**, because nothing in this package opens a file; the consumer supplies the loader.
 
 | Quirk                               | Where                                                                                  | Detail                                                                                               |
 | ----------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -261,9 +256,7 @@ because another engine authored it. The full argument is in [RIGID.md](RIGID.md)
 
 Questions the corpus cannot answer, because the answer is a behaviour rather than a byte. Each
 module document carries its own `TODO` section with the full argument and the experiment; this is
-the index for the format layer. **The domain layer's own TODOs — everything pinning `SCHEMA.md`,
-`DICTIONARY.md`, `AI.md`, `FX.md` or `GAME.md` — moved to `@treewyrm/freelancer-game`'s own
-`docs/RETAIL.md#todo--what-is-pending-in-the-game`.** **Everything listed reads, writes and
+the index for the format layer. **Everything listed reads, writes and
 round-trips today** — the reader picks the reading that cannot go visibly wrong, and the open
 question is which reading is right.
 
@@ -319,6 +312,3 @@ derivable — it is, and reproducing it round-trips all 1,251 files byte-exactly
 [TEXTURE.md](TEXTURE.md) · [MATERIAL.md](MATERIAL.md) · [DEFORMABLE.md](DEFORMABLE.md) ·
 [INI.md](INI.md) · [THN.md](THN.md) · [THORN.md](THORN.md) · [RESOURCE.md](RESOURCE.md) ·
 [AUDIO.md](AUDIO.md) · [RENDERER.md](RENDERER.md)
-
-The domain layer's own documents — `SCHEMA.md`, `MODULES.md`, `DICTIONARY.md`, `FX.md`, `AI.md`,
-`BASE.md`, `UNIVERSE.md`, `GAME.md` — live in the sibling `@treewyrm/freelancer-game` package.

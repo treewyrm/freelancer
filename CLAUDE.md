@@ -14,17 +14,12 @@ It covers the binary **UTF** containers the assets ship in, **INI** (plain text 
 [PLAN.md](docs/PLAN.md) carries the goal, the invariants and the reasoning, and both histories are
 in the log.
 
-**Status.** Everything listed under _Modules_ below reads and writes. For INI the encoding and
-interim layers are implemented and pinned by the corpus. **The typed layer itself is unwritten
-here** — no domain module is an entry point of this package anymore (`@treewyrm/freelancer-game`'s
-`docs/SCHEMA.md` and `docs/MODULES.md` carry the design and the section-to-module assignment). The
-cross-reference layer is undone here too: `fx → node` resolving, and archetype → model and
-material → texture library remaining deferred, are now facts about the sibling package below.
-
-**`fx`, `ai`, `base`, `universe` and the install layer above them, `game`, live in the sibling
-`@treewyrm/freelancer-game` package** (`../freelancer-game`), which depends on this one — none of
-them are entry points of this package. `./game`'s reader switch (in that sibling repository) still
-names every remaining domain where it will land, `fx`/`ai`/`base`/`universe` included.
+**Status.** Everything listed under _Modules_ below reads and writes. **This is the format layer,
+and it stops there.** For INI that means both encodings and the interim document, pinned by the
+corpus — and nothing above them: no entry point of this package interprets what a section *means*,
+and none will. `[Solar]`, `[Ship]`, `[Nebula]` are section names to this library and nothing more.
+Nothing here walks `freelancer.ini` or follows the game's load order either. The cross-reference
+layer — archetype → model, material → texture library — is deferred.
 
 Every count in `docs/` was measured from the retail install rather than recalled, and the corpus
 suites assert those numbers back, so a figure that stops matching means a reader drifted rather than
@@ -58,7 +53,7 @@ Every format is read in the same three steps, and each step is usable on its own
    UTF bytes  ──▶  Directory / File          ◀──▶  rigid, vmesh, texture, material, …
 
    INI text  ─┐
-              ├─▶  Section / Property / Value ◀──▶  typed (designed, unwritten)
+              ├─▶  Section / Property / Value ◀──▶  (not modelled — see Scope)
    BINI bytes ─┘
 
    bytecode  ─┐
@@ -83,12 +78,10 @@ Every format is read in the same three steps, and each step is usable on its own
 ## Invariants
 
 1. **No filesystem, no fetching.** The library resolves *references* — this hash, into this
-   structure you handed me. The consumer supplies the loader. This is what keeps it isomorphic.
-   `./game` follows the game's load order across a whole install and still honours this, because the
-   filesystem is **injected** as an interface it never implements; `platform: 'neutral'` in
-   `tsdown.config.ts` is what keeps that true rather than aspirational. **`src/game/` is also the
-   only asynchronous module** — every reader stays synchronous and is handed bytes that have already
-   arrived.
+   structure you handed me. The consumer supplies the loader, and finding the file, applying the
+   load order and caching the result are all theirs. This is what keeps it isomorphic;
+   `platform: 'neutral'` in `tsdown.config.ts` is what keeps it true rather than aspirational.
+   **Every reader is synchronous** and is handed bytes that have already arrived.
 2. **Dependency direction.** Format modules never import each other's meaning layer or the
    cross-reference layer; the cross-reference layer imports downward only.
 3. **Lossless read-modify-write.** Anything the library does not model survives a round trip
@@ -102,10 +95,10 @@ Every format is read in the same three steps, and each step is usable on its own
    should do with it.* If a behaviour can be falsified against retail assets or by observation in
    game, it belongs here. If it needs a policy — resolution order, default, budget, cache, output
    convention — it belongs to the consumer. This is what keeps [RENDERER.md](docs/RENDERER.md) a
-   document instead of a `renderer/` module. **A load order is not a policy** — it is the game's, it
-   is written down in `freelancer.ini`, and it is falsifiable, which is why `./game` is a module and
-   `renderer/` is not. What stays with the consumer there is where the files are, how much to keep,
-   and when to drop it.
+   document instead of a `renderer/` module. **The line is drawn below meaning-of-a-section, not
+   just below policy**: what a `[Ship]`'s fields do, which files an install loads and in what order,
+   how an archetype becomes a rendered object — all of that is the consumer's, and this library
+   exists so it can be written against types instead of against bytes.
 
 ## Package entry points
 
@@ -132,15 +125,10 @@ Every format is read in the same three steps, and each step is usable on its own
 | `./thn/bytecode` | `src/thn/bytecode/index.ts` | Compiled Lua 3.2 reader, and the opcode table. **No writer** |
 | `./thn/scene` | `src/thn/scene/index.ts` | The typed layer: entities and events as records, and THORN's vocabulary |
 | `./resource` | `src/resource/index.ts` | Resource DLLs: the PE container, `RT_STRING` tables, `RT_HTML` infocards, the `ids_*` id space |
-| `./schema` | `src/schema/index.ts` | Typed-layer machinery for INI: the sequential `readSection`/`writeSection` walk and its field constructors, `runs` for opener-owned section runs, the `field.*` lookup helpers, and the `Unrecognized` contract every typed record extends |
-| _planned_ domain | — | `./solar`, `./equipment`, `./ships`, `./missions`, `./audio`, `./interface`, … |
 
 `./thn/scene` is deliberately *not* re-exported from `./thn`, so a consumer that wants the interim
-model does not pull the vocabulary in with it. The planned domain split is a partition of all 256
-retail section names, computed rather than guessed; `@treewyrm/freelancer-game`'s `docs/MODULES.md`
-carries the assignment and the recommended build order. `./fx`, `./ai`, `./base`, `./universe` and the install
-layer above them, `./game`, are written already, but as entry points of the sibling
-`@treewyrm/freelancer-game` package rather than this one — see that package's own `CLAUDE.md`.
+model does not pull the vocabulary in with it. **The list above is the whole surface** — there is no
+pending entry point, and a new one is a new format, not a new subject.
 
 ## Structure
 
@@ -285,17 +273,6 @@ format tables do.
   directory-relative. **A string resource is not a string**: the table is blocked sixteen to an
   entry, and a hole must be written as a zero-length run.
 
-### Domain
-
-No domain module is an entry point of this package. `./fx`, `./ai`, `./base`, `./universe` and the
-install layer above them, `./game`, are written, but as part of the sibling
-`@treewyrm/freelancer-game` package (`../freelancer-game`) rather than this one — a domain module
-built this far in reaches for the whole format layer (`ini`, `schema`, `utf`, `hash`, `alchemy`,
-`material`, `resource`, `texture`, `vmesh`) as a dependency rather than as a sibling, `./fx` included
-once four modules existed side by side and none of them fed anything back into the format layer.
-That package's own `CLAUDE.md` and `docs/FX.md`/`AI.md`/`BASE.md`/`UNIVERSE.md`/`GAME.md` carry what
-this section used to.
-
 ## Documents that are not per-module
 
 - **[RETAIL.md](docs/RETAIL.md)** — the retail install as it bears on the format layer: where the
@@ -303,15 +280,7 @@ this section used to.
   each number pins, the quirks index, and the five **openFLAME** files (leftovers from Digital
   Anvil's *Conquest: Frontier Wars*) that share only the container. **Find them, skip them, do not
   implement them** — every reader already yields nothing on them without throwing, deliberately. It
-  indexes every open question across the format modules; the domain layer's own measurements and
-  TODOs moved to `@treewyrm/freelancer-game`'s own `docs/RETAIL.md` along with the modules they pin.
-- **`SCHEMA.md`, `DICTIONARY.md` and `MODULES.md`** — INI's interim → typed layer, the document a
-  domain module is built from, and the section-to-module assignment, respectively. All three moved to
-  the sibling `@treewyrm/freelancer-game` package's `docs/` when its four domain modules (`ai`, `base`,
-  `universe`, `fx`) and the install layer above them (`game`) were extracted from this one — a domain
-  module reaches for the whole format layer as a dependency, not the other way around, so the
-  documents describing how to build one belong where the modules themselves now live. `./schema`
-  (`src/schema/`) still lives here; only its design rationale moved.
+  indexes every open question across the format modules.
 - **[THORN.md](docs/THORN.md)** — the scene vocabulary the typed THN layer is built from. **Every row
   carries a provenance mark** — `thorn.dll`'s string table, the corpus, or the author's scripting
   guide — because the three disagree and the disagreements are the content. **A value is recorded
@@ -330,8 +299,7 @@ this section used to.
 A document's last section before its footer is **`## TODO`**, holding what is pending *observation in
 the running game* rather than pending code: the question, why the corpus cannot settle it, the
 reading taken meanwhile, and the experiment that would decide it. Present in ALCHEMY, ANIMATION,
-RIGID, MATERIAL, TEXTURE, DEFORMABLE, RENDERER, INI, SCHEMA, DICTIONARY, THN, THORN, RESOURCE, FX,
-AI and GAME;
+RIGID, MATERIAL, TEXTURE, DEFORMABLE, RENDERER, INI, THN, THORN and RESOURCE;
 [RETAIL.md](docs/RETAIL.md#todo--what-is-pending-in-the-game) indexes all of them in one table.
 
 - **Everything listed round-trips already.** A `TODO` marks an unread meaning, never an unread byte

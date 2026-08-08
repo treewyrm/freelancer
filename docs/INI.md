@@ -18,8 +18,8 @@ Two consequences, and they pull in different directions:
   through to the text parser unconditionally. Nothing about the filename or location is consulted.
 - **The two paths are not interchangeable in their details.** A behaviour measured on one is not
   automatically a behaviour of the other — see the coercion table below, where the same value
-  reaches a caller by a different route in each. Any parser-behaviour claim here or in
-  `@treewyrm/freelancer-game`'s `docs/SCHEMA.md` has to name which encoding it was measured on.
+  reaches a caller by a different route in each. Any parser-behaviour claim here has to name which
+  encoding it was measured on.
 
 The document model above is still what both paths agree on, which is why one model serves both.
 
@@ -31,8 +31,8 @@ Retail `DATA` holds **1,252 `.ini` files: 1,251 BINI and exactly one text** (`in
 The three under `EXE/` — `freelancer.ini`, `dacom.ini`, `dacomsrv.ini` — are text as well, and the
 two `.fl` beside them are one masked and one plain. **Check the signature, never the extension.**
 
-Which of the 1,252 the game actually loads, and in what order, is a separate question this module
-does not answer — see `@treewyrm/freelancer-game`'s `docs/GAME.md`. `EXE/freelancer.ini`'s `[Data]` block names 97 of them, and
+Which of the 1,252 the game actually loads, and in what order, is a separate question this library
+does not answer at all — it is the consumer's. `EXE/freelancer.ini`'s `[Data]` block names 97 of them, and
 another 58 are opened by names compiled into `content.dll` and `Freelancer.exe`. At least one file
 (`FX/fuse_li_battleship.ini`) is present and named by neither, so it never loads at all.
 
@@ -124,8 +124,8 @@ empty =                              ; '=' and nothing after it — also zero va
   one carries an explicit `''` entry.
 - **A section name is opaque text, not an identifier.** `INTERFACE/keymap.ini` carries a section
   literally named `keymap=1.1` — an `=` inside a section header.
-- Values are untyped in text and cast at query time by whatever reads them. This is the reason the
-  typed layer coerces rather than switches on a tag; see `@treewyrm/freelancer-game`'s `docs/SCHEMA.md`.
+- Values are untyped in text and cast at query time by whatever reads them, which is why a consumer
+  reading a field must coerce rather than switch on the tag.
 - Whitespace around names and values is insignificant — but `initialworld.ini` pads numbers with
   **U+00A0 (`0xA0`)**, not spaces, so a trimmer that only strips ASCII space and tab leaves a
   non-breaking space stuck to the value. Retail's one text data file is also its one file that needs
@@ -225,8 +225,8 @@ residue — a half-deleted line or an unclosed comment:
 | `INTERFACE/BASESIDE/navbar.ini`  | `[BaseFrame]`, `[RoomControl1..7]` | `mesh`, `behavior`, `event` ×14                |
 
 All are zero-value properties, all round-trip fine, and none means anything. **The interim layer
-carries them through untouched; the typed layer ignores unknown properties rather than throwing.**
-An unrecognized property is the normal state of a 2003 data file, not a parse failure.
+carries them through untouched** — an unrecognized property is the normal state of a 2003 data file,
+not a parse failure, and nothing here decides which names are recognized.
 
 ## Save form
 
@@ -269,9 +269,8 @@ Under the mask is ordinary text, with no dialect of its own — `newplayer.fl` e
 
 ## How the game reads a value
 
-From `common.dll`, since it constrains what the typed layer in `@treewyrm/freelancer-game`'s
-`docs/SCHEMA.md` is allowed to do. A caller never asks "what type is this value" — there is no such
-accessor. It asks for the type
+From `common.dll`, since it constrains what a consumer reading a field is allowed to conclude. A
+caller never asks "what type is this value" — there is no such accessor. It asks for the type
 it wants, by index, and the reader coerces:
 
 | Accessor           | tag `0x0` bool        | tag `0x1` int32 | tag `0x2` float32                | tag `0x3` string                                  |
@@ -395,8 +394,7 @@ Remaining obstacles, all in the text direction:
   therefore lossy; matching the game is the wrong target.
 - **Int vs float authoring.** `[Good] price` is authored `int` 812 times and `float` 12 times for
   the same field. The interim layer must keep the tag as read, because dropping it costs
-  byte-exactness even though the typed layer discards it. See `@treewyrm/freelancer-game`'s
-  `docs/SCHEMA.md#coercion`.
+  byte-exactness even though a reader coercing to a number would not notice.
 
 ## TODO
 
@@ -424,5 +422,4 @@ all 1,251 files byte-exactly. See [Round-trip](#round-trip).
 
 ---
 
-[RETAIL.md](RETAIL.md) · [THN.md](THN.md) ·
-`SCHEMA.md` and `MODULES.md` in `@treewyrm/freelancer-game`
+[RETAIL.md](RETAIL.md) · [THN.md](THN.md)

@@ -31,7 +31,9 @@ Every format here is read in the same three steps, and each step is usable on it
   material, a texture, a scene. Plain data with no methods and no identity.
 
 The library models what the game's data means. It does not decide what an application should do with
-it: resolution order, defaults, caches and output conventions belong to the consumer.
+it: resolution order, defaults, caches and output conventions belong to the consumer. **For INI that
+third layer is the consumer's too** — this library gives you the document exactly as the file spells
+it, and what a `[Ship]` or a `[Nebula]` means is yours to define.
 
 ## Entry points
 
@@ -59,7 +61,6 @@ it: resolution order, defaults, caches and output conventions belong to the cons
 | `@treewyrm/freelancer/thn/bytecode`| Compiled Lua 3.2 reader, and the opcode table                                       | [THN.md](docs/THN.md)               |
 | `@treewyrm/freelancer/thn/scene`   | Entities and events as typed records, and THORN's vocabulary                        | [THORN.md](docs/THORN.md)           |
 | `@treewyrm/freelancer/resource`    | Resource DLLs: `read` / `write`, string tables, infocards, the `ids_*` id space     | [RESOURCE.md](docs/RESOURCE.md)     |
-| `@treewyrm/freelancer/schema`      | Typed-layer machinery for INI: coercion, optionality, ordering, `readSection`       | —                                    |
 
 Freelancer's voice banks under `DATA/AUDIO` need no module of their own — they are flat UTF
 directories of RIFF waveforms, handled with `Directory` and `File` directly. See

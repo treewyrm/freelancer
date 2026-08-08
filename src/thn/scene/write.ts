@@ -390,8 +390,8 @@ const writeEvent = (event: Event): TableValue => {
  * comes back with `type = SCENE` where it had `type = 9`, and with array literals where it had a hash
  * keyed `1..n`, because the typed layer holds meaning rather than an encoding. So
  * `typed → interim → typed` is an identity and `interim → typed → interim` is a fixed point — the
- * same caveat `@treewyrm/freelancer-game`'s `docs/SCHEMA.md#round-trip` records for INI, arriving here
- * for a different reason. A tool that must not perturb the file edits the interim document instead.
+ * same caveat a typed layer over INI would carry, arriving here for a different reason. A tool that
+ * must not perturb the file edits the interim document instead.
  *
  * Numbers are written with `String`, the shortest form that reads back as the same double, so a
  * literal that was authored as `9e-006` comes back as `0.000009`. Same quantity, different text.

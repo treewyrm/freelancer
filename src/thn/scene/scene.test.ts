@@ -227,8 +227,8 @@ describe('what it keeps', () => {
     )
   })
 
-  // An absent property stays absent rather than being written with a default, which is the same
-  // position SCHEMA.md takes for INI: a default emitted is a claim the file did not make.
+  // An absent property stays absent rather than being written with a default: a default emitted is
+  // a claim the file did not make.
   it('leaves an absent property absent', () => {
     const script = read(withEntity({ entity_name: 'X', type: value.identifier('MARKER') }))
 

@@ -109,10 +109,6 @@
     "./resource": {
       "import": "./dist/resource/index.js",
       "types": "./dist/resource/index.d.ts"
-    },
-    "./schema": {
-      "import": "./dist/schema/index.js",
-      "types": "./dist/schema/index.d.ts"
     }
   },
   "main": "./dist/index.js",

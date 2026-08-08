@@ -4,9 +4,9 @@ import { join } from 'node:path'
 import Directory from '#/utf/directory.js'
 
 /**
- * The shape `./game`'s `FileSystem` interface names, restated rather than imported — `./game`
- * moved to the sibling `@treewyrm/freelancer-game` package, which depends on this one, not the
- * other way around, and this corpus helper stays free of that dependency by structural typing.
+ * The two methods the corpus reader needs of a host, stated locally. The library never touches the
+ * filesystem (invariant 1), so there is no `FileSystem` interface to import — this is a test
+ * helper's own minimum, and structural typing lets any host satisfy it.
  */
 interface Entry {
   name: string
@@ -34,7 +34,7 @@ export const root = process.env['FREELANCER_DATA'] ?? join(homedir(), 'Downloads
  */
 export const executables = join(root, '../EXE')
 
-/** The install root — the directory holding `DATA` and `EXE`, which is what `./game` mounts. */
+/** The install root — the directory holding `DATA` and `EXE`. */
 export const install = join(root, '..')
 
 const exists = (path: string): boolean => {
@@ -120,11 +120,11 @@ export const glob = (from: string = root, pattern = '**/*.ini'): Asset[] => {
 }
 
 /**
- * A {@link FileSystem} over the real install, for the `./game` suites.
+ * A {@link FileSystem} over the real install.
  *
  * Deliberately literal: it reads exactly the path it is handed and does no case folding of its own,
- * because folding is what the resolver is being tested for. A host that quietly matched case would
- * make the suite pass on a case-insensitive volume and prove nothing.
+ * because folding is a resolver's job and this is not one. A host that quietly matched case would
+ * make a suite pass on a case-insensitive volume and prove nothing.
  */
 export const filesystem = (from: string = install): FileSystem => ({
   async read(path: string): Promise<Uint8Array> {
