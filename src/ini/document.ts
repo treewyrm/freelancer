@@ -62,6 +62,23 @@ export class Document implements Iterable<Section> {
     return this
   }
 
+  /**
+   * Removes one section by identity, reporting whether it was there.
+   *
+   * `deleteSection` removes *every* section with a name, and duplicate section names are legal —
+   * 156 retail files repeat one.
+   *
+   * A comment line above the section is left alone: a preceding `Line` cannot be told apart from one
+   * closing the section above it, and deleted text is not recoverable.
+   */
+  removeSection(section: Section): boolean {
+    const index = this.entries.indexOf(section)
+    if (index < 0) return false
+
+    this.entries.splice(index, 1)
+    return true
+  }
+
   /** Appends sections and/or unparsed lines, preserving order. */
   append(...entries: (Section | Line)[]): this {
     this.entries.push(...entries)

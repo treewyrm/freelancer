@@ -84,3 +84,20 @@ describe('building', () => {
     assert.deepEqual(built.entries, ['; note'])
   })
 })
+
+describe('removing by identity', () => {
+  // Duplicate section names are legal — 156 retail files repeat one.
+  it('removes only the given section, leaving its namesake and any comment above it', () => {
+    const built = new Document()
+    const first = new Section('A')
+    const second = new Section('A')
+    built.append(first, '; note', second)
+
+    assert.ok(built.removeSection(second))
+    assert.deepEqual(built.entries, [first, '; note'])
+  })
+
+  it('reports a section that is not in the document', () => {
+    assert.ok(!new Document().removeSection(new Section('A')))
+  })
+})

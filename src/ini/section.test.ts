@@ -85,9 +85,60 @@ describe('building', () => {
 
   it('removes every property with a name, leaving unparsed lines untouched', () => {
     const section = new Section('Good')
-    section.append(new Property('a', value.integer(1)), '; note', new Property('a', value.integer(2)))
+    section.append(
+      new Property('a', value.integer(1)),
+      '; note',
+      new Property('a', value.integer(2)),
+    )
     section.deleteProperty('a')
 
     assert.deepEqual(section.entries, ['; note'])
+  })
+
+  // A new equip belongs next to the other ones, not after the section's trailing comment.
+  it('inserts a property after the last one with the same name', () => {
+    const section = new Section('Good')
+    section.append(new Property('equip', value.string('a')), '; trailing')
+
+    const inserted = section.insertProperty('equip', value.string('b'))
+
+    assert.equal(section.entries[1], inserted)
+    assert.equal(section.entries[2], '; trailing')
+  })
+
+  it('appends when no property carries that name yet', () => {
+    const section = new Section('Good')
+    section.append('; trailing')
+
+    const inserted = section.insertProperty('equip', value.string('a'))
+
+    assert.equal(section.entries[1], inserted)
+  })
+
+  it('matches the insertion point case-insensitively', () => {
+    const section = new Section('Good')
+    section.append(new Property('ObjList', value.string('a')), new Property('other'))
+
+    const inserted = section.insertProperty('objlist', value.string('b'))
+
+    assert.equal(section.entries[1], inserted)
+  })
+})
+
+describe('removing by identity', () => {
+  // One equip row out of forty, not every property called equip.
+  it('removes only the given property', () => {
+    const section = new Section('Good')
+    const first = section.addProperty('equip', value.string('a'))
+    const second = section.addProperty('equip', value.string('b'))
+
+    assert.ok(section.removeProperty(second))
+    assert.deepEqual(section.properties, [first])
+  })
+
+  it('reports a property that is not in the section', () => {
+    const section = new Section('Good')
+
+    assert.ok(!section.removeProperty(new Property('equip')))
   })
 })

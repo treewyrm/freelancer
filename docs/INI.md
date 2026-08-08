@@ -40,8 +40,8 @@ another 58 are opened by names compiled into `content.dll` and `Freelancer.exe`.
 
 The interim layer, and the thing both encodings parse into. `Document`, `Section` and `Property` are
 classes — identity and mutation are the point, the same as `utf/`'s `Directory`/`File` — rather than
-plain records, so a caller navigates and builds a document with `get*`/`filter*`/`add*`/`delete*`/
-`append` methods instead of importing a scatter of free functions:
+plain records, so a caller navigates and builds a document with `get*`/`filter*`/`add*`/`insert*`/
+`delete*`/`remove*`/`append` methods instead of importing a scatter of free functions:
 
 ```
 Document
@@ -64,6 +64,16 @@ by name — case-folded, never in place — and never by hash, unlike `utf/`'s `
 a `nickname` *value* is hashed, via `Document.findByNickname`. `addSection`/`addProperty` always
 append rather than find-or-replace, because duplicate names are the normal case (see rule 2 below),
 unlike `Directory.setFile`'s find-or-insert.
+
+Because duplicates are normal, **name is the wrong handle for an edit**: `deleteProperty`/
+`deleteSection` take a name and remove *every* match, which is right for a scalar field and wrong for
+one `equip` row out of forty. `Section.removeProperty(property)` and `Document.removeSection(section)`
+take the object instead and remove exactly it, reporting whether it was there;
+`Section.insertProperty` is `addProperty` placed after the last property of the same name, so a new
+row lands next to its siblings rather than after the section's trailing comments. All three are
+structural — they do not need to know what the game does with the bytes — and a removal leaves
+neighbouring `Line`s alone, since a comment above a section cannot be told apart from one closing the
+section above it.
 
 `read`/`write`/`formatOf` stay free functions in `./ini`'s barrel rather than becoming
 `Document.read`/`.write`, because INI has three encodings, each in its own submodule (`binary/`,

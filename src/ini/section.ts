@@ -85,12 +85,46 @@ export class Section {
     return property
   }
 
+  /**
+   * Inserts a property after the last one already carrying that name, appending when there is none.
+   *
+   * `addProperty` pushes onto `entries`, which puts a new `equip` after whatever trailing comments
+   * and blank lines the section carries; this puts it next to its siblings, which is what a repeated
+   * property wants. Same appending rule otherwise — never find-or-replace.
+   */
+  insertProperty(name: string, ...values: Value[]): Property {
+    const property = new Property(name, ...values)
+
+    let index = -1
+    for (const [position, entry] of this.entries.entries())
+      if (entry instanceof Property && sameName(entry.name, name)) index = position
+
+    if (index < 0) this.entries.push(property)
+    else this.entries.splice(index + 1, 0, property)
+
+    return property
+  }
+
   /** Removes every property with this name. */
   deleteProperty(name: string): this {
     this.entries = this.entries.filter(
       (entry) => !(entry instanceof Property && sameName(entry.name, name)),
     )
     return this
+  }
+
+  /**
+   * Removes one property by identity, reporting whether it was there.
+   *
+   * `deleteProperty` removes *every* property with a name, which is right for a scalar field and
+   * wrong for one `equip` row out of forty.
+   */
+  removeProperty(property: Property): boolean {
+    const index = this.entries.indexOf(property)
+    if (index < 0) return false
+
+    this.entries.splice(index, 1)
+    return true
   }
 
   /** Appends properties and/or unparsed lines, preserving order. */
