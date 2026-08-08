@@ -48,6 +48,24 @@ inserting a DLL anywhere but the end of the `[Resources]` list renumbers everyth
 leaving 349; `resources.dll` reaches 60,252. A mod adding names has essentially nowhere to put them
 in either and needs a library of its own.
 
+**More than seven libraries works** — measured, not assumed. Discovery lists **eight** `DLL =`
+entries, so with `resources.dll` prepended it runs nine libraries across bands `0x00000`–`0x80000`,
+with `Discovery.dll` at index 7 and `DsyAddition.dll` at index 8. So `freelancer.exe` reads the list
+rather than a fixed-size array, and a mod out of room in `NameResources.dll` can add its own band
+instead of fighting for the 349 ids left. Discovery's two are `NameResources.dll` copied and
+refilled — same image base, same 28-byte `.rdata`.
+
+Two more things that mod settles, both of which a careful reading of retail alone would get wrong:
+
+- **A distinct image base is a nicety, not a requirement.** Retail gives each of the seven its own so
+  none has to be rebased at load, but Discovery ships `NameResources.dll`, `Discovery.dll` and
+  `DsyAddition.dll` all based at `0x6af0000` and runs. The `.reloc` terminator block is what makes
+  that safe, which is also why `write` deliberately leaves `RELOCS_STRIPPED` clear.
+- **The two-section shape `write` emits is one the game already loads.** `InfoCards.dll` is exactly
+  `.rsrc` + `.reloc` with a null entry point, in retail and in Discovery, at index 1. The third
+  section the other libraries carry is a 4 KB `.rdata` holding 28 bytes of `IMAGE_DEBUG_DIRECTORY`
+  and nothing else.
+
 The name and infocard spaces are numerically the same and semantically different — `ids_name`
 196,608 and `ids_info` 196,608 are different resources in the same DLL, and only the field that
 referred to one says which was meant. **Retail never uses an id for both**, measured across all
@@ -126,12 +144,20 @@ All 1,334 retail blocks carry exactly sixteen slots — none truncates its trail
 A hole and an empty string are indistinguishable in the file, so the reader reports a zero-length
 slot as absent rather than as `''`.
 
+**141 blocks are holes all the way through.** All of them are in `OfferBribeResources.dll`, 61% of
+its 232, from id 88 upward where the mission-offer tables go sparse. Such a block decodes to nothing
+and so leaves no trace in a string map — which means no writer driven from one can put it back, and
+is exactly why `writeLibrary` carries a vacant block through instead of letting a round trip quietly
+shrink that file by 11,280 bytes.
+
 The longest string is 2,133 code units, a personal-log infocard body sitting in a _name_ table.
 
 ## `RT_HTML` — every `ids_info`
 
 Not blocked: the resource id **is** the infocard's local number, one card per entry. The payload is
-UTF-16LE text.
+UTF-16LE text — **RDL markup**, which [RDL.md](RDL.md) documents and this module deliberately does
+not model: `readCard` hands the text back and `writeCard` takes it, and the round trip is exact
+because nothing in between interprets it.
 
 All 5,307 in retail open with a byte order mark followed by
 `<?xml version="1.0" encoding="UTF-16"?>`. None is empty and none has an odd byte length. The mark
@@ -157,6 +183,7 @@ French (`0x40c`).
 | resources → `.rsrc` section       | **Byte-identical to retail**, 5 of 7 exactly, 2 as a prefix |
 | strings → resources → strings     | Identity over all 13,121                                    |
 | infocards → resources → infocards | Identity over all 5,307                                     |
+| library → text → library          | **Byte-identical** for all seven, via `writeLibrary`         |
 
 The middle row is the sharp one. Rebuilding a retail `.rsrc` from its own resources, at the address
 retail loaded it at, reproduces the section **byte for byte** — layout, ordering, alignment,
@@ -191,7 +218,54 @@ and has the wrong one is worse than one that claims none.
 it back yields its resources in a new resource-only image, not the original with `.rsrc` replaced.
 For the six that are already resource-only the distinction does not arise. For `resources.dll` it
 means the `DllMain` stub is gone — safe on the evidence of the other six, and the one claim here
-that only the running game can settle.
+that only the running game can settle. What the stub does is worth knowing before worrying about it:
+
+```
+8b 44 24 08        mov  eax, [esp+8]              ; fdwReason
+48                 dec  eax                       ; DLL_PROCESS_ATTACH?
+75 0a              jnz  +10
+ff 74 24 04        push [esp+4]                   ; hinstDLL
+ff 15 00 20 c4 06  call [0x06c42000]              ; DisableThreadLibraryCalls
+6a 01 / 58         push 1 / pop eax               ; return TRUE
+c2 0c 00           ret  12
+```
+
+A thread-notification optimisation and nothing else. The image base and section layout are the other
+two things a rewrite changes, and Discovery settles both — see [the id space](#the-id-space).
+
+## Rewriting a library
+
+`writeStrings` and `writeInfocards` build a resource list from text and know nothing about what was
+there before, which is the right shape for minting a library and the wrong one for editing an
+existing one: everything they were not given simply is not in the output. `writeLibrary` is the
+editing half — original list in, new text in, complete list out — and the whole of it is one rule:
+
+> **Carry through exactly what the readers did not consume.**
+
+Not "keep what is not a string or a card". The readers skip more than that, and each thing they skip
+is a way for a rewrite to delete a resource silently, since what was never in the map is never
+missed:
+
+| Skipped by the readers                  | Because                                              |
+| --------------------------------------- | ---------------------------------------------------- |
+| A type that is not `RT_STRING`/`RT_HTML` | The version block every library carries               |
+| An entry id that is a **name**           | There is no local index to key it by — `PREPSTUBDATA` |
+| A resource at another language           | `readStrings`/`readInfocards` filter by LANGID        |
+| A string block that is all holes         | It decodes to nothing; 141 of them in retail          |
+
+The last one has a partner that is **not** carried: a block the caller emptied. The two are absent
+from the new map for opposite reasons, and telling them apart needs the original — all holes when it
+was read, or emptied since. Resurrecting the second would undo a deletion.
+
+`languageOf` decides which language a rewrite is *of*. It returns the one language every content
+resource shares, and `undefined` when they disagree — because `readLibrary` with no filter merges
+**per slot**, so a bilingual library comes back as a union taking the highest LANGID that filled
+each slot, and stamping that back onto one language is a quiet corruption. A consumer that cannot
+name a single language should treat the library as read-only rather than pick one.
+
+`inspect` reads the header fields a rewrite costs something in — image base, entry point, section
+names — so a consumer can carry the base across and warn about sections `write` will not reproduce,
+without parsing a PE header of its own.
 
 ## Quirks
 
@@ -216,14 +290,6 @@ documents skipping `DllMain` when there is none, so the stub is doing nothing th
 corpus cannot settle it because the stub's absence is only visible to `LoadLibrary`.
 _Experiment_: replace `resources.dll` with a rewritten one and start the game.
 
-**Whether an eighth library is honoured.**
-`[Resources]` lists six and the executable prepends one. Whether `freelancer.exe` reads the list or
-a fixed-size array is not visible in the data, and it decides whether a mod can add a library rather
-than having to fit inside `NameResources.dll`'s 349 free ids. Reading taken meanwhile: none — the
-module neither assumes nor prevents it, and `partition` will produce as many libraries as it is
-asked for.
-_Experiment_: add an eighth `DLL =` line and reference an id at `0x70000`.
-
 **Whether the language must be `0x409`.**
 All 6,646 content resources are US English, so the corpus cannot distinguish "the game asks for
 `0x409`" from "the game asks for whatever is there". `FindResource`'s documented fallback order
@@ -239,4 +305,4 @@ _Experiment_: change it and observe — expected to be invisible.
 
 ---
 
-[INI.md](INI.md) · [THN.md](THN.md) · [RETAIL.md](RETAIL.md)
+[RDL.md](RDL.md) · [INI.md](INI.md) · [THN.md](THN.md) · [RETAIL.md](RETAIL.md)

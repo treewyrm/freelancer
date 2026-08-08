@@ -31,6 +31,10 @@ Two directories outside `DATA` matter:
 - **`DLLS/`** — holds only `BIN/content.dll`, which carries a version block and nothing else. The
   resource numbers do **not** resolve here, a natural guess and a wrong one.
 
+`DATA/FONTS/rich_fonts.ini` is a third file outside any module's remit: its `[TrueType]` section is
+the eight-entry table an infocard's font index means, and its `[Style]` section is the named styles a
+card is rendered in. See [RDL.md](RDL.md).
+
 Retail is the authority every reader here is measured against, so a claim about a format is worth
 only the count behind it. Every number in these documents comes from a sweep of that install and the
 suites assert them back through the readers — **they are regression tests, so a number that stops
@@ -65,6 +69,8 @@ matching means the reader drifted, not that the number needs updating.**
 | Resources in those seven             | 6,653                  |
 | — `RT_STRING` blocks                 | 1,334                  |
 | — `RT_HTML` infocards                | 5,307                  |
+| — RDL element names in them          | 7, and no others       |
+| — `TRA` / `JUST` in them             | 3,123 / 1,756          |
 | — `RT_VERSION` blocks                | 7                      |
 | String slots (16 per block)          | 21,344                 |
 | — filled                             | 13,121                 |
@@ -114,6 +120,10 @@ Each of these decided a design position. The position is in the linked document;
 | Longest property name                                               | 49 characters                             |                                                                                                                             |
 | Resource DLLs / the one `[Resources]` omits                         | 7 / `resources.dll` at index 0            | Missing it shifts every `ids_name` by 0x10000 — [RESOURCE.md](RESOURCE.md)                                                   |
 | Names / infocards across the seven libraries                        | 13,121 / 5,307                            | Same                                                                                                                        |
+| All-hole `RT_STRING` blocks, all in `offerbriberesources.dll`       | 141 of 232                                | A rewrite carries a vacant block; nothing in a string map can reproduce one — [RESOURCE.md](RESOURCE.md#rt_string--every-ids_name) |
+| `JUST` elements preceding the text they align                       | 1,756 of 1,756                            | Alignment is state set *before* a paragraph, not a property of an open one — [RDL.md](RDL.md#just-precedes-the-text-it-aligns-and-persists) |
+| Largest `TRA` mask in retail                                        | never `0xFFFFFFFF`; commonest is `1`      | Unmasked bits keep their value, so the merge has three terms — [RDL.md](RDL.md#tra-merges-and-unmasked-bits-keep-their-current-value) |
+| Packed `TRA` triples written in decimal                             | 9,369 of 9,369                            | Signed decimal, so a high-bit mask reads as negative — [RDL.md](RDL.md#attribute-values-are-signed-decimal)                  |
 
 ## Round-trip fidelity
 
@@ -280,9 +290,11 @@ question is which reading is right.
 | What `event_flags` means; bits 1, 2 and 128 occur and 128 dominates | [THORN.md](THORN.md#todo) | Flip a bit on a `START_MOTION` in a scene that plays |
 | Which bit is `PATH_POSITION` and which is `USE_SCRIPT_DURATION` | [THORN.md](THORN.md#todo) | Bit 16 is unclaimed in the attach namespace; suggestive, not evidence |
 | Whether a rewritten `resources.dll` loads with no entry point | [RESOURCE.md](RESOURCE.md#todo) | Replace it with a rewritten one and start the game |
-| Whether an eighth resource library is honoured | [RESOURCE.md](RESOURCE.md#todo) | Add a `DLL =` line and reference an id at `0x70000` |
 | Whether the resource language must be `0x409` | [RESOURCE.md](RESOURCE.md#todo) | Write a library at `LANG_NEUTRAL` and see whether its strings resolve |
 | Whether the resource code page field is read at all | [RESOURCE.md](RESOURCE.md#todo) | Change it and observe; expected to be invisible |
+| Whether an infocard's alignment really persists across `PARA` | [RDL.md](RDL.md#todo) | Retail always restates `left`, so both readings render identically — write a card that does not |
+| What the `TRA` mask bits above the colour do | [RDL.md](RDL.md#todo) | Set one with a mask that reaches it and look |
+| Whether anything after `POP` is read | [RDL.md](RDL.md#todo) | No card has anything there, so nothing separates "stops" from "ends" |
 
 Some questions that look like they belong here do not.
 
@@ -303,7 +315,10 @@ the same class, not decompiled to text ([INI.md](INI.md#ini-and-bini)). Closed: 
 payload encodes truth — byte 0, nonzero is true, found by disassembly
 ([INI.md](INI.md#booleans-do-not-occur)). Closed: whether retail's BINI dictionary order is
 derivable — it is, and reproducing it round-trips all 1,251 files byte-exactly
-([INI.md](INI.md#round-trip)).
+([INI.md](INI.md#round-trip)). Closed: whether more than seven resource libraries are honoured —
+they are, measured against Discovery, which lists eight `DLL =` entries and runs nine bands up to
+`0x80000`; the same install also shows a shared image base is harmless
+([RESOURCE.md](RESOURCE.md#the-id-space)).
 
 ---
 
@@ -311,4 +326,4 @@ derivable — it is, and reproducing it round-trips all 1,251 files byte-exactly
 [ANIMATION.md](ANIMATION.md) · [SURFACE.md](SURFACE.md) · [ALCHEMY.md](ALCHEMY.md) ·
 [TEXTURE.md](TEXTURE.md) · [MATERIAL.md](MATERIAL.md) · [DEFORMABLE.md](DEFORMABLE.md) ·
 [INI.md](INI.md) · [THN.md](THN.md) · [THORN.md](THORN.md) · [RESOURCE.md](RESOURCE.md) ·
-[AUDIO.md](AUDIO.md) · [RENDERER.md](RENDERER.md)
+[RDL.md](RDL.md) · [AUDIO.md](AUDIO.md) · [RENDERER.md](RENDERER.md)

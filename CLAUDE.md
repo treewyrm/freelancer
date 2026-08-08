@@ -271,7 +271,11 @@ format tables do.
   binary-searches, so an unsorted directory fails for *some* ids), payloads are DWORD-aligned, and
   `IMAGE_RESOURCE_DATA_ENTRY.OffsetToData` is an image RVA while every other offset is
   directory-relative. **A string resource is not a string**: the table is blocked sixteen to an
-  entry, and a hole must be written as a zero-length run.
+  entry, and a hole must be written as a zero-length run. `writeLibrary` is the editing counterpart
+  of `readLibrary` and its whole content is one rule — **carry through exactly what the readers did
+  not consume**, which is more than "not a string or a card": a named entry id, another language,
+  and a block that is all holes are each skipped by the readers and each vanish from a rewrite that
+  restates the rule instead of complementing it.
 
 ## Documents that are not per-module
 
@@ -285,6 +289,15 @@ format tables do.
   carries a provenance mark** — `thorn.dll`'s string table, the corpus, or the author's scripting
   guide — because the three disagree and the disagreements are the content. **A value is recorded
   only where the corpus measures it.**
+- **[RDL.md](docs/RDL.md)** — the markup every `ids_info` resolves to, which has **no module and
+  will not get one**: `readCard` hands the text back and the round trip is exact precisely because
+  nothing interprets it, and any renderer for it is DOM-bound. It is here because the meaning is
+  still ours to record. **It is XML that is not a tree** — a flat sequence of state changes, so
+  there are no closing tags to pair. Two rules read backwards on first inspection and the corpus
+  catches both: `JUST` sets alignment *before* the paragraph it aligns (all 1,756 retail occurrences,
+  so a reader that applies it to an open paragraph drops every one), and `TRA` **merges** — bits
+  outside `mask` keep their current value, which matters because retail's masks are as small as `1`
+  and never `0xFFFFFFFF`. The font index is not RDL's: it indexes `DATA/FONTS/rich_fonts.ini`.
 - **[AUDIO.md](docs/AUDIO.md)** — `DATA/AUDIO` voice banks, which have no module: flat UTF
   directories of RIFF payloads named by `getObjectId` of the `voices_*.ini` nickname, handled with
   `Directory` directly.
