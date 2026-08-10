@@ -302,15 +302,33 @@ Six things follow that a reimplementation can get wrong:
 6. **`is_value_empty` is not "the value is an empty string" on the BINI path** — it is only ever
    true for an out-of-range index. A BINI value is never empty; the text path's version tests the
    substring's first character. This is the sharpest place where "one document model" leaks.
-7. **A flag is read by presence, so `separable` and `separable = true` are the same fact.** This
-   follows from 5 rather than being measured directly: reading index 0 of a zero-value property pops
-   the error box, and **456 bare `[CollisionGroup] separable` properties load without one**, so the
-   game cannot be reading them by value. The sweep agrees from the other side — `separable` is the
-   only `(section, property)` pair in retail written both bare and with a value, and every one of its
-   28 valued occurrences says `true`, **never `false`**. Three other pairs mix the two forms
-   (`[Zone] difficulty`, `[ObjList] breakformation`, `[Trigger] system`) and none of them is a flag:
-   their valued form carries a difficulty number, a placeholder token and a system name, and the bare
-   occurrences are one-off accidents. Status **inferred** — see the TODO.
+7. **A bare property is one whose value was left out — not a kind of property of its own.** There is
+   no "flag" here to model, and the three cases are distinct, **observed in game**:
+
+   | In the file | The object gets |
+   | --- | --- |
+   | no property at all | whatever the object was constructed with — `false` for `separable` |
+   | `separable` | `true` |
+   | `separable = true` / `separable = false` | that value, coerced by the table above |
+
+   So a written value _is_ honoured — `separable = false` disables separation exactly as omitting the
+   property does — and the bare form is a value left out rather than a signal in itself. The
+   behaviour is what a reader that **pre-seeds a property with a single `true` and then overwrites it
+   with whatever values the line carries** would produce: the seed survives when there are none. That
+   also explains why reading a bare property never pops consequence 5's missing-parameter box.
+
+   Both forms are live. `[CollisionGroup] separable` is written bare 456 times and `= true` 28 times,
+   and **`solararch.ini` writes it both ways** — 211 bare and 28 valued, in one file — so neither is
+   an accident and a consumer must accept either and convert neither. Retail never writes the
+   negative anywhere: 77 `[Solar] destructible = true` and no `false` at all, which fits `separable`
+   defaulting to `false` and `destructible` to `true` — each is written only to say the opposite of
+   what the object already is.
+
+   **Deleting a property is therefore not the same as writing `false`**, and nothing in the file
+   records the default, so an editor that means `false` should write it. Three other pairs mix the
+   two forms (`[Zone] difficulty`, `[ObjList] breakformation`, `[Trigger] system`) and none of them
+   is a boolean: their valued form carries a difficulty number, a placeholder token and a system
+   name, and the bare occurrences are one-off accidents.
 
 Two accessors are worth naming because they explain what BINI _looks_ like from inside the engine:
 
@@ -329,6 +347,30 @@ Section and property _names_ come back the same way in both paths: on BINI, `get
 the line buffer. `get_num_parameters` is the `valueCount` byte on BINI and a `strchr(',')` count on
 text — which is where "a property has 0..255 values" comes from on one side and "however many commas
 you typed" on the other.
+
+### The tag is the token's shape, not the field's type
+
+**Across 424,320 string-typed values in the 1,251 BINI files, not one parses as a number.** The tag
+is decided lexically, once, from what the token looked like in the source text — by the same
+classifier the text path uses, so the compiler only froze a decision `INI_Reader` would make again at
+load time. It records how a value was _written_, never how it is _read_.
+
+`[Zone] attack_ids` is the clean example. It names trade lanes by the `lane_id` declared on another
+zone in the same system file — 806 occurrences across 30 files, and **every one resolves, with no
+dangling id in either form.** Bretonia, Kusari, Rheinland and the Border Worlds write
+`attack_ids = br01_2, br01_4`; Liberty, the Independent Worlds and `intro.ini` write
+`attack_ids = 18, 22`, because a bare `18` is what a lane is called there. One field, one meaning,
+two tags. `[Object] nickname = 600` in `li04.ini` is the same artifact where a number is impossible
+outright — a nickname is hashed on its characters.
+
+So a tag difference at one position is **not** a shape difference, and the forms a property takes
+cannot be enumerated from tags. Read an id through `get_value_string` — `value.toText` here — and
+both halves of the universe agree.
+
+The caution runs the other way for numbers. **Assume a numeric position is consumed as a float**
+unless the field cannot hold a fraction, since `get_value_float` widens an int32 with `fild` and
+costs the game nothing. A position written int in some rows and float in others is evidence only that
+it is _likely_ read as a float; it is never evidence of two forms of the property.
 
 ## Case
 
@@ -404,7 +446,12 @@ rather than a byte. The reading taken meanwhile is the one that cannot go visibl
 | Question                                                                                                                                                          | Reading taken                                                | Experiment                                                                                       |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
 | Whether the shipped game honours `@include` (`EXE/dacom.ini` opens with `@include FL_Dev.ini`), or whether it was a build-tool directive stripped before shipping | Treat it as a property named `@include` and do not follow it | Add an `@include` to a text INI the game reads and see whether the included content takes effect |
-| Whether a zero-value property is read as **true by presence**, per consequence 7 | Presence is true. Derived from consequence 5 plus the sweep, not observed | Author `separable = false` on a collision group and see whether the group still detaches |
+
+**Closed:** whether a written value is honoured on a property usually written bare. It is —
+`separable = false` disables separation, and does it as thoroughly as omitting the property, while a
+bare `separable` turns it on. Observed in game, so a bare property is a value left out rather than a
+signal, and deleting a property is not a way of writing `false`. See
+[consequence 7](#how-the-game-reads-a-value).
 
 **Closed:** whether the game tolerates text where retail ships BINI. It does — a file without the
 `BINI` signature falls through to the text parser unconditionally. Note this is a fallback and not,

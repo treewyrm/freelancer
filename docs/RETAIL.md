@@ -104,7 +104,7 @@ Each of these decided a design position. The position is in the linked document;
 
 | Measurement                                                         | Value                                     | Pins                                                                                                                        |
 | ------------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Boolean-typed values in retail                                      | 0 of 876,034                              | Writer never emits type `0x0`; a flag is a zero-value property — [INI.md](INI.md#booleans-do-not-occur)                     |
+| Boolean-typed values in retail                                      | 0 of 876,034                              | Writer never emits type `0x0`; a boolean is the *string* `true` — [INI.md](INI.md#booleans-do-not-occur)                    |
 | Files re-emitted byte-exactly from the derived dictionary order     | 1,251 of 1,251                            | Dictionary order is derivable; nothing needs preserving out-of-band — [INI.md](INI.md#round-trip)                           |
 | Largest BINI dictionary                                             | 64,492 bytes (`AUDIO/story_sounds.ini`)   | The uint16 ceiling is ~1 KiB away, so names-first is load-bearing — [INI.md](INI.md#the-uint16uint32-hazard)                |
 | Largest name offset / largest string offset                         | 4,650 / 64,446                            | The pressure is entirely on the value region — same                                                                         |
@@ -112,7 +112,7 @@ Each of these decided a design position. The position is in the linked document;
 | Zero-value properties                                               | 1,063                                     | The document model must allow arity 0                                                                                       |
 | Files repeating a section name                                      | 156                                       | Sections are an ordered list, never a map — [INI.md](INI.md#the-document-model)                                             |
 | Most-repeated property                                              | `[Loadout] equip` ×16,074                 | Repeated properties are ordered lists                                                                                       |
-| Pairs written both bare and with a value                            | 4, of which **one is a flag**: `[CollisionGroup] separable`, bare ×456 and `= true` ×28, never `= false` | A zero-value property and `= true` are one fact; presence is the read — [INI.md](INI.md#how-the-game-reads-a-value)          |
+| Pairs written both bare and with a value                            | 4, one of them boolean: `[CollisionGroup] separable`, bare ×456 and `= true` ×28, never `= false`, and `solararch.ini` writes it both ways | A bare property is a value left out and reads as `true`; a written value is honoured — [INI.md](INI.md#how-the-game-reads-a-value) |
 | Section names spelled more than one way                             | 6                                         | Every lookup folds case — [INI.md](INI.md#case)                                                                             |
 | Property names spelled more than one way                            | 32                                        | Same                                                                                                                        |
 | Most values in one property                                         | 25 (format allows 255)                    |                                                                                                                             |
@@ -124,6 +124,12 @@ Each of these decided a design position. The position is in the linked document;
 | `JUST` elements preceding the text they align                       | 1,756 of 1,756                            | Alignment is state set *before* a paragraph, not a property of an open one — [RDL.md](RDL.md#just-precedes-the-text-it-aligns-and-persists) |
 | Largest `TRA` mask in retail                                        | never `0xFFFFFFFF`; commonest is `1`      | Unmasked bits keep their value, so the merge has three terms — [RDL.md](RDL.md#tra-merges-and-unmasked-bits-keep-their-current-value) |
 | Packed `TRA` triples written in decimal                             | 9,369 of 9,369                            | Signed decimal, so a high-bit mask reads as negative — [RDL.md](RDL.md#attribute-values-are-signed-decimal)                  |
+| THORN globals `thorn.dll` registers / retail scripts read           | 73 / 55, with **none read that is not registered** | The vocabulary is closed, so an unrecognized identifier reads `nil` — [THORN.md](THORN.md#the-registry-is-closed)      |
+| THORN globals registered twice                                      | 1 — `HARDPOINT`, as 8 then 1              | Last write wins, so `type = HARDPOINT` cannot reach the entity value — [THORN.md](THORN.md#entity-types)                     |
+| Object types named in `common.dll` / bits unclaimed                 | 28 flags plus `NONE` / 2                  | `[Solar] type` and `[Ship] type` share one bitfield — [ENGINE.md](ENGINE.md#object-types)   |
+| `[Solar] type` / `[Ship] type` values set                           | 321 over 14 spellings / 115 over 7        | One of the 14 is `waypoint` lowercase, which is how the fold is known — same                                                 |
+| `hp_type` values set / distinct names / registered                  | 1,350 / 61 / 63                           | Closed the same way THORN's is; nothing set is unregistered — [ENGINE.md](ENGINE.md#hardpoint-types) |
+| `[Zone] shape` values set                                           | 5,761 over 4 of the 6 registered          | `RING` and `MESH` are never used — [ENGINE.md](ENGINE.md#zone-shapes)                                  |
 
 ## Round-trip fidelity
 
@@ -194,6 +200,7 @@ covered here**, because nothing in this package opens a file; the consumer suppl
 | One extension, two encodings        | `EXE/newplayer.fl`, `EXE/mpnewcharacter.fl`                                            | Only the first is masked; the second is plain text INI full of `%%NAME%%` placeholders               |
 | U+00A0 padding again                | `EXE/newplayer.fl`                                                                     | 12 bytes of it, on four `locked_gate` lines — the same authoring habit as `initialworld.ini`         |
 | A property name that is punctuation | `FX/effects_explosion.ini`                                                             | `[Effect] :` = a row of `=` signs — a separator line written without a comment marker                |
+| An id compiled to an integer        | `UNIVERSE/SYSTEMS/LI0*`, `IW0*`, `INTRO`                                               | `[Zone] attack_ids = 18, 22`, where Bretonia writes `br01_2` — one `lane_id` reference, two tags     |
 
 The 1,506 `.thn` files are **not INI** — all of them are compiled Lua 3.2, and they are read by
 `./thn`. See [THN.md](THN.md) so a sweep does not try to parse one as INI, and does not write one
@@ -284,17 +291,20 @@ question is which reading is right.
 | Whether anything reads `Edge_angles` | [DEFORMABLE.md](DEFORMABLE.md#todo) | Delete them from one of the two files |
 | Whether the engine still decodes a `0x08` event channel | [ANIMATION.md](ANIMATION.md#todo) | Author one and load the model |
 | Whether the shipped game honours `@include` or whether it was a build-tool directive | [INI.md](INI.md#todo) | Add one to a text INI the game reads |
-| Whether a zero-value property is true by presence — derived from the missing-parameter error, not observed | [INI.md](INI.md#todo) | Author `separable = false` and see whether the group detaches |
 | What the 4-byte gap and header bytes 19–20 of a compiled `.thn` hold | [THN.md](THN.md#todo) | **Read Lua 3.2's `ldump.c`/`lundump.c` first** — probably not a game question at all |
-| What the five unplaced event values are — 0, 1, 12, 17, 19 | [THORN.md](THORN.md#todo) | Write a script using one of the names symbolically and see whether the event fires |
 | What `event_flags` means; bits 1, 2 and 128 occur and 128 dominates | [THORN.md](THORN.md#todo) | Flip a bit on a `START_MOTION` in a scene that plays |
-| Which bit is `PATH_POSITION` and which is `USE_SCRIPT_DURATION` | [THORN.md](THORN.md#todo) | Bit 16 is unclaimed in the attach namespace; suggestive, not evidence |
+| What `STOP` = 21, `STOP_IK` = 22 and `START` = 23 are for | [THORN.md](THORN.md#todo) | Registered, never used, fitting no table; issue one as an `action` |
+| Whether `PROPERTY_ANIM`, `ADD_PATH` and `LOOKAT_ENTITY` do anything | [THORN.md](THORN.md#todo) | Same shape; a `nil` result would say they are vestigial |
 | Whether a rewritten `resources.dll` loads with no entry point | [RESOURCE.md](RESOURCE.md#todo) | Replace it with a rewritten one and start the game |
 | Whether the resource language must be `0x409` | [RESOURCE.md](RESOURCE.md#todo) | Write a library at `LANG_NEUTRAL` and see whether its strings resolve |
 | Whether the resource code page field is read at all | [RESOURCE.md](RESOURCE.md#todo) | Change it and observe; expected to be invisible |
 | Whether an infocard's alignment really persists across `PARA` | [RDL.md](RDL.md#todo) | Retail always restates `left`, so both readings render identically — write a card that does not |
 | What the `TRA` mask bits above the colour do | [RDL.md](RDL.md#todo) | Set one with a mask that reaches it and look |
 | Whether anything after `POP` is read | [RDL.md](RDL.md#todo) | No card has anything there, so nothing separates "stops" from "ends" |
+| What object-type values 0–3 and `HpAttachmentType` 0–3 are | [ENGINE.md](ENGINE.md#todo) | Both enums start at 4; no string reaches the low values |
+| Whether `RING` and `MESH` zone shapes work | [ENGINE.md](ENGINE.md#todo) | Registered, never used by retail — author a zone with each |
+| Whether `MOON`, `BLACKHOLE` and `ASTEROID` do anything as a `[Solar] type` | [ENGINE.md](ENGINE.md#todo) | Named, never set; `ASTEROID`'s bit sits far from the other solar bits |
+| Which of `attack_subtarget_order` and `attack_preference` takes which values | [ENGINE.md](ENGINE.md#todo) | `content.dll` has no table; emission order puts one run beside both |
 
 Some questions that look like they belong here do not.
 
@@ -304,8 +314,11 @@ animated UV set is blocked, not pending** — validating a reader for it needs `
 stop crashing first ([RIGID.md](RIGID.md#todo)).
 
 Closed: what numeric values THORN's identifiers have — the numeric-form scripts resolve all 41,250
-retail entities and 50,785 events by structural correspondence, cross-checked against `thorn.dll`'s
-string-table order and against `D3DLIGHTTYPE` and `D3DFOGMODE` ([THORN.md](THORN.md)). Closed:
+retail entities and 50,785 events by structural correspondence, and **`thorn.dll`'s
+global-registration routine then gave all 73 registered globals outright**, agreeing with every one
+of the 25 corpus measurements ([THORN.md](THORN.md#the-registration-routine-binary)). That also
+closed the five unplaced event values and the `PATH_POSITION`/`USE_SCRIPT_DURATION` bits, both of
+which had been carried as needing an experiment and needed only a closer read. Closed:
 whether a plain-text `.thn` loads from the packed install — it does, observed in game
 ([THN.md](THN.md#the-engine)). Closed: whether the Lua 3.2 opcode numbering is right — the
 per-opcode counts over all 1,506 scripts reproduce the disassembly table exactly
@@ -326,4 +339,4 @@ they are, measured against Discovery, which lists eight `DLL =` entries and runs
 [ANIMATION.md](ANIMATION.md) · [SURFACE.md](SURFACE.md) · [ALCHEMY.md](ALCHEMY.md) ·
 [TEXTURE.md](TEXTURE.md) · [MATERIAL.md](MATERIAL.md) · [DEFORMABLE.md](DEFORMABLE.md) ·
 [INI.md](INI.md) · [THN.md](THN.md) · [THORN.md](THORN.md) · [RESOURCE.md](RESOURCE.md) ·
-[RDL.md](RDL.md) · [AUDIO.md](AUDIO.md) · [RENDERER.md](RENDERER.md)
+[RDL.md](RDL.md) · [AUDIO.md](AUDIO.md) · [ENGINE.md](ENGINE.md) · [RENDERER.md](RENDERER.md)

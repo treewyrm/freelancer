@@ -246,8 +246,8 @@ format tables do.
   integral value, and dropping the tag costs byte-exactness. **The coercions in `value.ts` follow
   `INI_Reader`, not JavaScript**: `toBoolean` on a string takes only `true`/`false` by name so `yes`
   is false; `toInteger` truncates toward zero; an unparseable string is `0`, never a throw.
-  **Booleans occur zero times in 876,034 retail values** — a flag is a property with no values, and
-  the writer must never emit a type-`0x0` value. In `binary/`, **the dictionary is one table for
+  **Booleans occur zero times in 876,034 retail values** — a boolean is the string `true`, a bare
+  property is a value left out and reads as true, and the writer must never emit a type-`0x0` value. In `binary/`, **the dictionary is one table for
   names and values**, filled names-first in two passes; that rule is what makes the round trip
   byte-exact, and splitting it produces a working, different file.
 - **[THN.md](docs/THN.md)** (`src/thn/`) — `.thn` is **not INI**: all 1,506 retail files are compiled
@@ -286,9 +286,13 @@ format tables do.
   implement them** — every reader already yields nothing on them without throwing, deliberately. It
   indexes every open question across the format modules.
 - **[THORN.md](docs/THORN.md)** — the scene vocabulary the typed THN layer is built from. **Every row
-  carries a provenance mark** — `thorn.dll`'s string table, the corpus, or the author's scripting
-  guide — because the three disagree and the disagreements are the content. **A value is recorded
-  only where the corpus measures it.**
+  carries a provenance mark** — `thorn.dll`'s string table, `thorn.dll`'s **global-registration
+  routine**, the corpus, or the author's scripting guide — because they disagree and the
+  disagreements are the content. The first two are the same file and not the same claim: the string
+  table proves a name was compiled in, the routine proves what the global holds, and **a name can be
+  registered twice** (`HARDPOINT` is set to 8 and then to 1, so scripts see 1). **All 73 registered
+  globals are read off that routine and agree with every one of the 25 corpus measurements** —
+  the name arrays are not in value order, so nothing here may be derived from position.
 - **[RDL.md](docs/RDL.md)** — the markup every `ids_info` resolves to, which has **no module and
   will not get one**: `readCard` hands the text back and the round trip is exact precisely because
   nothing interprets it, and any renderer for it is DOM-bound. It is here because the meaning is
@@ -298,6 +302,16 @@ format tables do.
   so a reader that applies it to an open paragraph drops every one), and `TRA` **merges** — bits
   outside `mask` keep their current value, which matters because retail's masks are as small as `1`
   and never `0xFFFFFFFF`. The font index is not RDL's: it indexes `DATA/FONTS/rich_fonts.ini`.
+- **[ENGINE.md](docs/ENGINE.md)** — the INI vocabularies the executables hardcode, which have **no
+  module and will not get one**: what `[Solar] type`, `hp_type`, `[Zone] shape` and the rest actually
+  accept. It is the counterpart to [THORN.md](docs/THORN.md) for INI, and it exists for the same
+  reason [RDL.md](docs/RDL.md) does — the meaning is measurable and the library deliberately does not
+  model it. **`EXE/common.dll` keeps `{ const char *name; int value }` tables and `DLLS/BIN/content.dll`
+  does not**, so the first half carries numbers and the second half carries names only; a name list
+  from `content.dll` is not evidence of a value. Two rules a reader gets wrong by reading position:
+  the tables are in **declaration order, not value order** (`ASTEROID` is the fifth entry and holds
+  bit 29), and five unrelated enums sit **contiguous and numerically overlapping** in one run, so
+  `weapon` and `TRADELANE_RING` are both `0x80` and nothing resolves across them.
 - **[AUDIO.md](docs/AUDIO.md)** — `DATA/AUDIO` voice banks, which have no module: flat UTF
   directories of RIFF payloads named by `getObjectId` of the `voices_*.ini` nickname, handled with
   `Directory` directly.
@@ -312,7 +326,7 @@ format tables do.
 A document's last section before its footer is **`## TODO`**, holding what is pending *observation in
 the running game* rather than pending code: the question, why the corpus cannot settle it, the
 reading taken meanwhile, and the experiment that would decide it. Present in ALCHEMY, ANIMATION,
-RIGID, MATERIAL, TEXTURE, DEFORMABLE, RENDERER, INI, THN, THORN and RESOURCE;
+RIGID, MATERIAL, TEXTURE, DEFORMABLE, RENDERER, INI, THN, THORN, ENGINE and RESOURCE;
 [RETAIL.md](docs/RETAIL.md#todo--what-is-pending-in-the-game) indexes all of them in one table.
 
 - **Everything listed round-trips already.** A `TODO` marks an unread meaning, never an unread byte

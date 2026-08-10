@@ -1,11 +1,12 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import * as corpus from '#/corpus.js'
-import { Document, formatOf, Property, read, Section } from './index.js'
+import { Document, formatOf, Property, read, Section, value } from './index.js'
 import * as binary from './binary/index.js'
 import * as save from './save/index.js'
 import * as text from './text/index.js'
 import { decode } from '#/utility/encoding.js'
+import { fold } from '#/utility/string.js'
 
 /**
  * The readers against the retail install.
@@ -94,6 +95,61 @@ describe('retail corpus', { skip: corpus.skip }, () => {
               if (value.type === 'float' && Number.isInteger(value.value)) integral++
 
       assert.equal(integral, 14209)
+    })
+
+    // The tag records the shape of the token, not the type of the field. If it carried meaning,
+    // some field somewhere would hold a string that looks like a number — none of the 424,320 does.
+    it('holds no string value that reads as a number', () => {
+      const numeric = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/
+      const found: string[] = []
+
+      for (const { path, document } of documents)
+        for (const section of document)
+          for (const property of section.properties)
+            for (const value of property.values)
+              if (value.type === 'string' && numeric.test(value.value))
+                found.push(`${path} [${section.name}] ${property.name} = ${value.value}`)
+
+      assert.deepEqual(found, [])
+    })
+
+    // What that costs a consumer who reads the tag instead of the field: `attack_ids` names a trade
+    // lane by the `lane_id` declared on another zone in the same file, and the two halves of the
+    // universe write the same id differently — `br01_2` compiles to a string, `18` to an int32.
+    // Reading both through `toText` is what makes them one field, and every one of them resolves.
+    it('resolves all 806 [Zone] attack_ids against a lane_id in their own file', () => {
+      const dangling: string[] = []
+      let occurrences = 0
+      let files = 0
+
+      for (const { path, document } of documents) {
+        const declared = new Set<string>()
+        const used: string[] = []
+
+        for (const section of document) {
+          if (section.label !== 'zone') continue
+
+          for (const property of section.properties) {
+            if (property.label === 'lane_id')
+              for (const held of property.values) declared.add(fold(value.toText(held)))
+
+            if (property.label === 'attack_ids') {
+              occurrences++
+              for (const held of property.values) used.push(value.toText(held))
+            }
+          }
+        }
+
+        if (!used.length) continue
+        files++
+
+        for (const id of used)
+          if (!declared.has(fold(id))) dangling.push(`${path} attack_ids = ${id}`)
+      }
+
+      assert.equal(occurrences, 806)
+      assert.equal(files, 30)
+      assert.deepEqual(dangling, [])
     })
 
     // Reproducing the compiler's dictionary order is the whole of byte-exactness. Names in
