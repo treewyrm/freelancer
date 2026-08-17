@@ -152,6 +152,48 @@ describe('retail corpus', { skip: corpus.skip }, () => {
       assert.deepEqual(dangling, [])
     })
 
+    // [Zone] property_flags is a bitfield with no table behind it — see ENGINE.md. The names are
+    // the community reading and nothing here can check them; what the corpus pins is the extent,
+    // and this is the assertion that would catch a twenty-fourth bit. Every bit named there is in
+    // range and nothing outside them is ever set.
+    it('sets 835 [Zone] property_flags, no bit above 0x400000', () => {
+      const bits = new Array<number>(32).fill(0)
+      const wrong: string[] = []
+      let occurrences = 0
+
+      for (const { path, document } of documents)
+        for (const section of document) {
+          if (section.label !== 'zone') continue
+
+          for (const property of section.properties) {
+            if (property.label !== 'property_flags') continue
+            occurrences++
+
+            const [held, ...rest] = property.values
+
+            if (!held || rest.length || held.type !== 'integer') {
+              wrong.push(`${path} ${section.getNickname()} = ${property.values.length} values`)
+              continue
+            }
+
+            const word = value.toInteger(held)
+
+            for (let bit = 0; bit < 32; bit++) if (word & (1 << bit)) bits[bit]!++
+          }
+        }
+
+      assert.equal(occurrences, 835)
+      assert.deepEqual(wrong, [])
+
+      // Positions 0 through 22, in the order ENGINE.md tabulates them.
+      assert.deepEqual(
+        bits.slice(0, 23),
+        [69, 99, 6, 6, 22, 8, 116, 27, 34, 6, 7, 1, 5, 4, 20, 59, 164, 434, 2, 0, 2, 0, 0],
+      )
+
+      assert.deepEqual(bits.slice(23), new Array<number>(9).fill(0))
+    })
+
     // Reproducing the compiler's dictionary order is the whole of byte-exactness. Names in
     // first-use order, then values in first-use order, one shared dedup table.
     it('rewrites all 1,251 files byte for byte', () => {

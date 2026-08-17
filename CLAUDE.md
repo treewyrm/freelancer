@@ -311,7 +311,38 @@ format tables do.
   from `content.dll` is not evidence of a value. Two rules a reader gets wrong by reading position:
   the tables are in **declaration order, not value order** (`ASTEROID` is the fifth entry and holds
   bit 29), and five unrelated enums sit **contiguous and numerically overlapping** in one run, so
-  `weapon` and `TRADELANE_RING` are both `0x80` and nothing resolves across them.
+  `weapon` and `TRADELANE_RING` are both `0x80` and nothing resolves across them. It also carries the
+  **property-name** vocabulary, recovered two ways whose disagreement is the content: string lookup
+  is an upper bound, disassembling `INI_Reader::is_value` call sites is a lower bound with
+  attribution, and **105 of the 1,375 keys retail sets are matched by nothing** — `faction_weight`
+  ×5,611 among them. **The retail `Freelancer.exe` is SecuROM-wrapped** (`.text` entropy 7.98, zero
+  standard prologues) so only its `.rdata` is readable; call-site figures come from an unprotected
+  build of the same executable.
+- **[SECTIONS.md](docs/SECTIONS.md)** — the enumeration [ENGINE.md](docs/ENGINE.md) points at: **283
+  sections, the 2,222 section/property pairs retail shows plus 522 recovered from the binaries** —
+  properties the engine reads in a section that no retail file sets there, which is the only way
+  `dispersion_angle` on `[Gun]` gets into a table at all. Three placement rules with their measured
+  worth: within-function address order (**94%**), exported block-reader names (**88%**), and the
+  archetype class chain, which is **exact** — `common.dll` has no RTTI but a virtual override calls
+  its base, so the call graph yields `Gun → Launcher → AttachedEquipment → Equipment → Root` outright,
+  and the document lists what each of the 28 classes contributes (154 readings; `hit_pts` is the only
+  key read twice in one chain, by `Root` and again by `Equipment`) and **which class each header
+  instantiates**, from the constructor the `Load*` dispatcher calls — `[Ship]` direct, `[Solar]` via
+  its `EqObj` base; that agrees with the data-fitted class in 30 of 34 and corrects two.
+  **Function boundaries come from call targets, not exports** — every address a direct `call` targets
+  is a function start, which lifts `content.dll` from 31% to 94%. **26 of the 35 matched-but-absent sections have no
+  properties by construction**: ten are **obsolete** (the header is matched only to emit
+  `*** WARNING: [Cloud] is obsolete` and skip), and fifteen are read *positionally* via the indexed
+  `get_value_*` accessors, so `[MsnShipSave]` accepts a sequence rather than named keys. The
+  consequence to keep in mind: **an unmarked property's read status is a fact about the name, not the
+  name in that section** — struck is the strong claim, plain is the weak one. It also carries
+  **declared value shapes for 542 names**, read off the accessor the engine calls after matching the
+  key (`push 2; call get_value_float` is "index 2 as a float"), with `is_value_empty` probes marking
+  optional positions — which is how `[Zone] size` takes one value for a sphere and three for a box.
+  **Declared is what the engine coerces to, recorded is what the file holds**, and they differ freely;
+  of 495 positions 315 match exactly, 176 are compatible under coercion, 4 are neither. **A shape is
+  per name and a name is occasionally per section** — 11 of the 542 genuinely differ between call
+  sites (`[CollisionConsts] damage` is a name and an amount, `[Zone] damage` a number).
 - **[AUDIO.md](docs/AUDIO.md)** — `DATA/AUDIO` voice banks, which have no module: flat UTF
   directories of RIFF payloads named by `getObjectId` of the `voices_*.ini` nickname, handled with
   `Directory` directly.

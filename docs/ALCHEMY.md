@@ -375,8 +375,8 @@ If 6 turns out to name a curve none of the six defined types produce, it belongs
 
 ```ts
 interface NodeInstance {
-  crc: number // CRC of the referenced node name, case-sensitive
-  flags: number // display flags
+  crc: number // CRC of the referenced node name, case-sensitive; meaningless when flags is set
+  flags: number // non-zero marks a container that references no node
   sort: number // serialization order
   id?: number // on-disk entry identifier
   children: NodeInstance[]
@@ -435,14 +435,18 @@ The flat `Entry` structure `{ flags, crc, parentId, childId }` is reassembled in
 
 ### Constants
 
-| Constant    | Value           | Description                                |
-| ----------- | --------------- | ------------------------------------------ |
-| `WorldId`   | `0x8000`        | Parent ID indicating a root-level instance |
-| `DefaultId` | `0xee223b51\|0` | CRC of the root container instance         |
+| Constant    | Value           | Description                                               |
+| ----------- | --------------- | --------------------------------------------------------- |
+| `WorldId`   | `0x8000`        | Parent ID indicating a root-level instance                |
+| `DefaultId` | `0xee223b51\|0` | The `crc` retail's authoring tool left in root containers |
 
-`DefaultId` is not a node reference — no name in any library hashes to it. It marks the single container every effect hangs its instances from, and the corpus pins its shape exactly: it occurs 1143 times, always at root, always with `flags` 1 (the only instance in the game that has them), never as either end of a link, and its direct children always have `flags` 0. 1143 of the 1213 effects have exactly one; the remaining 70 have none.
+**The `flags` field is what marks a container, not the CRC.** An instance whose `flags` is non-zero references no node, and its `crc` carries nothing — it may hold any value at all. Retail happens to write `0xee223b51` in every one of them, which is residue from Digital Anvil's in-house authoring tool rather than a value the format defines. `DefaultId` names that residue so it can be recognized; it is not the mechanism, and a reader that tests it instead of the flag is right about retail by coincidence.
 
-It is written `0xee223b51 | 0` because instance CRCs are read with `readInt32`. As an unsigned literal it never compared equal to anything, which made the exported constant useless.
+The corpus cannot separate the two rules, and that is worth stating rather than glossing: across the 6648 instances, `flags` takes only the values 0 (5505 times) and 1 (1143 times), every flagged instance carries `0xee223b51`, and no unflagged one does. The two conditions coincide perfectly, so **the flag is the mechanism on grounds outside the data.** Because retail never writes any other value, whether the field is a bitfield or an enum is untested — read non-zero as "no node reference" and infer nothing further.
+
+What the corpus does pin is that retail is uniform. The container occurs 1143 times, always at root, never as either end of a link, and its direct children always have `flags` 0; 1143 of the 1213 effects have exactly one and the remaining 70 have none. No name in any library hashes to `0xee223b51`, so nothing is shadowed by it either way.
+
+The constant is written `0xee223b51 | 0` because instance CRCs are read with `readInt32`. As an unsigned literal it never compared equal to anything, which made the exported constant useless.
 
 ### Functions
 

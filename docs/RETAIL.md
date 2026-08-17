@@ -130,6 +130,21 @@ Each of these decided a design position. The position is in the linked document;
 | `[Solar] type` / `[Ship] type` values set                           | 321 over 14 spellings / 115 over 7        | One of the 14 is `waypoint` lowercase, which is how the fold is known — same                                                 |
 | `hp_type` values set / distinct names / registered                  | 1,350 / 61 / 63                           | Closed the same way THORN's is; nothing set is unregistered — [ENGINE.md](ENGINE.md#hardpoint-types) |
 | `[Zone] shape` values set                                           | 5,761 over 4 of the 6 registered          | `RING` and `MESH` are never used — [ENGINE.md](ENGINE.md#zone-shapes)                                  |
+| `[Zone] property_flags` set / bits outside the 23 named             | 835 over 41 words / **0**                 | The one vocabulary with no table and no literal — [ENGINE.md](ENGINE.md#zone-property-flags)            |
+| Distinct property names in the data / matched by no binary          | 1,375 / **105**, 16,131 uses              | Keys the authoring pipeline emitted and the engine ignores — [ENGINE.md](ENGINE.md#the-105-keys-nothing-reads) |
+| Section names / section-property pairs in retail                    | 280 / 2,222, of which 110 unread          | The full enumeration — [SECTIONS.md](SECTIONS.md)                                                            |
+| Pairs added from the binaries that retail never writes              | 522 across 283 sections                   | `dispersion_angle` on `[Gun]` and the rest of the class chain — [SECTIONS.md](SECTIONS.md)                    |
+| Call-site segmentation corroborated, by boundary source             | 31% from exports / **94%** from call targets | Every address a direct `call` targets is a function start — [SECTIONS.md](SECTIONS.md#function-boundaries-come-from-call-targets-not-exports) |
+| Matched sections read positionally rather than by name              | 15 of 35, 11 sharing one handler          | `[MsnShipSave]` accepts a sequence; no key is ever compared — [SECTIONS.md](SECTIONS.md#sections-the-engine-matches-that-retail-never-contains) |
+| Matched sections that are **obsolete**                              | 10, nine from `RoomData.cpp`              | Header matched only to warn and skip; no property read by design — same                                       |
+| Property names with a declared value shape                          | 542 of 799                                | The accessor names the type and index — [SECTIONS.md](SECTIONS.md#declared-value-shapes)                       |
+| Names read differently in different sections                        | 11 genuine of 20 varying                  | The other 9 vary only by scan truncation — [SECTIONS.md](SECTIONS.md#the-same-name-is-not-always-read-the-same-way) |
+| Declared shape against recorded type                                | 315 exact / 176 coerced / **4 neither**   | Declared is what the engine wants, recorded is what the file holds — [ENGINE.md](ENGINE.md#value-shapes)       |
+| Archetype classes recovered from the call graph                     | 29 exports, 28 distinct bodies            | No RTTI, but a virtual override calls its base; `RepairKit`/`ShieldBattery` are folded to one address — [SECTIONS.md](SECTIONS.md#what-each-archetype-class-reads) |
+| Property readings across those classes                              | 154, one key read twice in a chain        | `hit_pts` in `Root` and again in `Equipment` — same                                                          |
+| Section-to-class binding confirmed by the dispatcher's constructor  | 30 of 34, 2 absent, **2 corrected**       | `[Ship]` direct, `[Solar]` via its `EqObj` base — [SECTIONS.md](SECTIONS.md#which-class-consumes-which-section) |
+| `INI_Reader` matcher call sites / argument resolved                 | 1,309 / 1,303 (99.5%)                     | Yields 799 keys and 208 sections, attributed where exports are dense — [ENGINE.md](ENGINE.md#method-2--disassemble-the-call-sites) |
+| `Freelancer.exe` `.text` entropy / standard prologues               | 7.98 / **0**, against 6.46 in the DLLs    | Retail's executable is SecuROM-wrapped; only `.rdata` is statically readable — same                     |
 
 ## Round-trip fidelity
 
@@ -305,6 +320,8 @@ question is which reading is right.
 | Whether `RING` and `MESH` zone shapes work | [ENGINE.md](ENGINE.md#todo) | Registered, never used by retail — author a zone with each |
 | Whether `MOON`, `BLACKHOLE` and `ASTEROID` do anything as a `[Solar] type` | [ENGINE.md](ENGINE.md#todo) | Named, never set; `ASTEROID`'s bit sits far from the other solar bits |
 | Which of `attack_subtarget_order` and `attack_preference` takes which values | [ENGINE.md](ENGINE.md#todo) | `content.dll` has no table; emission order puts one run beside both |
+| Whether the 105 unread keys are really inert | [ENGINE.md](ENGINE.md#todo) | Change `faction_weight` in a zone and watch population; 5,611 uses ride on it |
+| What matches the 651 keys that have literals but no `is_value` call site | [ENGINE.md](ENGINE.md#todo) | Probably `get_name_ptr` plus a local compare — a reading problem, not an in-game one |
 
 Some questions that look like they belong here do not.
 
@@ -339,4 +356,5 @@ they are, measured against Discovery, which lists eight `DLL =` entries and runs
 [ANIMATION.md](ANIMATION.md) · [SURFACE.md](SURFACE.md) · [ALCHEMY.md](ALCHEMY.md) ·
 [TEXTURE.md](TEXTURE.md) · [MATERIAL.md](MATERIAL.md) · [DEFORMABLE.md](DEFORMABLE.md) ·
 [INI.md](INI.md) · [THN.md](THN.md) · [THORN.md](THORN.md) · [RESOURCE.md](RESOURCE.md) ·
-[RDL.md](RDL.md) · [AUDIO.md](AUDIO.md) · [ENGINE.md](ENGINE.md) · [RENDERER.md](RENDERER.md)
+[RDL.md](RDL.md) · [AUDIO.md](AUDIO.md) · [ENGINE.md](ENGINE.md) · [SECTIONS.md](SECTIONS.md) ·
+[RENDERER.md](RENDERER.md)

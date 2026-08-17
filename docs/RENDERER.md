@@ -6,7 +6,8 @@ actually contains at each of them.
 
 Every count here is measured against the retail `DATA` tree the corpus tests read: **2,178 meshes,
 22,416 mesh groups, 8,792 mesh references, 14,412 joint records, 7,525 materials, 6,861 textures,
-204 deformable models**. Where a claim is inference rather than measurement it says so.
+204 deformable models, 1,213 particle effects**. Where a claim is inference rather than measurement
+it says so.
 
 The format targets **Direct3D 8.1**. Most of the work of a port is undoing three assumptions D3D8
 made that WebGL2 does not honour: a base vertex index on every draw call, a fixed-function vertex
@@ -528,7 +529,177 @@ the rigid one, so §5 applies unchanged — `getBoneModel` returns the same `Mod
 
 ---
 
-## 9. Checklist
+## 9. Particles
+
+An `.ale` is a **node library** and an **effect library** in one container, both unwrapped by
+`readAlchemy`. Corpus: **596 files, 1,213 effects, 5,575 nodes, 6,648 instances**, of which 5,505
+reference a node.
+
+Three resolution rules, each of which produces a working renderer that draws the wrong thing:
+
+- **Hashing is case-sensitive here and nowhere else** — `getResourceId(name, true)`. Folding the way
+  every other lookup in this library does strands **2,691 of the 5,505** references.
+- **The namespace is per file**, unlike VMesh's global one (§1). All 5,505 resolve against the library
+  in their own `.ale`, so resolve one file at a time — the opposite of the merge VMesh needs.
+- **`flags` decides whether an instance names a node at all — not the CRC.** An instance with `flags`
+  set is a container; its `crc` carries nothing and may hold any value. Retail writes `0xee223b51`
+  in all 1,143 of them, but that is **residue from Digital Anvil's authoring tool, not a constant the
+  format defines**. Matching the hash works on retail by coincidence.
+
+  The corpus cannot tell the two rules apart: `flags === 1` and `crc === 0xee223b51` coincide on every
+  one of the 1,143, and no flagged instance carries any other hash. The flag is the mechanism on
+  grounds outside the data. Retail holds only `flags` 0 and 1, so whether the field is a bitfield or
+  an enum is **untested** — read non-zero as "no node reference" and infer nothing further.
+
+An effect is a tree of `NodeInstance` with **two independent edge sets**: `children` for containment,
+and `targets` — resolved from the flat `Pair` table — for the emitter → appearance binding. Walking
+only `children` finds the nodes and none of the pairings.
+
+### 9.1 What varies per particle, and what does not
+
+The fact the rest of this section rests on: **no appearance parameter is randomized per particle.**
+Every visual property is a pure function of `(sparam, t)` — sparam being the engine-supplied blend
+control, `t` the normalized particle lifetime. Randomness enters only at spawn, through
+`CubeEmitter_Min/MaxSpread`, `SphereEmitter_Min/MaxRadius`, `ConeEmitter_Min/MaxSpread` and
+`Emitter_InitLifeSpan`, and lands in per-particle state rather than in the curves.
+
+| Scope | Values |
+| --- | --- |
+| Per appearance node — **the batch key** | `BasicApp_TexName`, `BasicApp_BlendInfo`, tri/quad, `FlipTexU`/`FlipTexV`, node type |
+| Per emitter instance | sparam |
+| Per particle | spawn position, velocity, spawn time, lifespan |
+| Derived, `f(sparam, t)` | colour, alpha, size, aspect, rotation, atlas frame |
+
+So a particle's entire visual history is fixed at spawn. One exception is worth knowing before
+designing a vertex format: with `BasicApp_UseCommonTexFrame` clear, each particle indexes the atlas
+from its own age, so the frame cannot be a draw-level uniform.
+
+### 9.2 What actually draws
+
+Instanced node types, by count — the 5,505 references, not the 5,575 nodes, since 143 nodes are
+referenced by nothing and a shared node is referenced more than once:
+
+| Category | Types and counts |
+| --- | --- |
+| Appearance (2,637) | `FxBasicAppearance` 1,797 · `FxRectAppearance` 431 · `FxPerpAppearance` 219 · `FLBeamAppearance` 164 · `FxParticleAppearance` 20 · `FxMeshAppearance` 4 · `FLDustAppearance` 2 |
+| Emitter (2,653) | `FxSphereEmitter` 1,497 · `FxConeEmitter` 787 · `FxCubeEmitter` 369 |
+| Field (215) | `FLDustField` 64 · `FxAirField` 53 · `FxTurbulenceField` 41 · `FxGravityField` 33 · `FxRadialField` 21 · `FxCollideField` 3 |
+
+Seventeen node types occur in the libraries but **sixteen ever draw**: `FLBeamField` exists as exactly
+one node in the whole corpus and no instance references it. `FxNode` and `FxOrientedAppearance` are
+declared by the format and appear nowhere.
+
+**Appearance nodes per effect: median 2, 95th percentile 5, maximum 11**; exactly one effect has none.
+Distinct `BasicApp_TexName` per effect: median 2, maximum 6. Those two numbers bound what any
+batching scheme can win — see §9.4.
+
+### 9.3 Four ways to get quads on screen
+
+Laid out the way §3.3 lays out the base-vertex options, because the trade is the same shape: what the
+CPU precomputes against what the GPU recomputes.
+
+**A. A CPU-expanded, world-space vertex stream.** Build six vertices per particle, already
+billboarded, and hand them over. No model matrix — the view-projection is the only bound matrix,
+which is what collapses a whole emitter into one `drawArrays`. Simple, and testable without a GL
+context, which matters more here than it looks (see D). Cost is a per-frame rewrite of every live
+particle, whether or not anything about it changed.
+
+**B. Instanced quads.** A static corner buffer plus per-instance attributes through
+`vertexAttribDivisor`, with the billboard basis built in the vertex shader. Cuts per-frame bandwidth
+roughly fourfold and moves the basis math off the CPU. It does **not** reduce draw calls — those are
+already one per appearance node under A. `BasicApp_TriTexture`/`QuadTexture` selects a 3- or 4-vertex
+sprite, so either carry two base geometries or always emit the quad.
+
+**C. Instanced, with the curves evaluated on the GPU.** The one the data model specifically invites.
+Because every appearance parameter is `f(sparam, t)` (§9.1), a node's whole curve set bakes into a
+`p × t` lookup texture or a small uniform block, sampled in the vertex shader. The per-instance record
+then becomes **write-once at spawn**: for a steady-state emitter the per-frame upload tends to zero
+instead of scaling with live particle count. This is the only option that changes the asymptotics
+rather than the constant.
+
+**D. Simulation on the GPU, via transform feedback.** Rejected, and on architectural rather than
+performance grounds. Emission is an integral of `Emitter_Frequency` rather than a sample, so the
+particle pool is the one stateful thing in an otherwise pure pipeline; keeping it on the CPU at a
+fixed step is what makes it a function of `(sparam, time)` again, which is what a timeline scrubber
+and a headless sweep both require. Moving it into the driver trades that for throughput nobody has
+yet shown is needed.
+
+**Recommendation: A, with C as the destination and B as the step between.** B alone optimizes the
+cheaper half of the problem; C is what exploits the data model, and B is its prerequisite. None of
+this is urgent — see §9.5, which is cheaper than all four and independent of the choice.
+
+### 9.4 Blend modes, and why sorting is mostly unnecessary
+
+`BasicApp_BlendInfo` is a `D3DBLEND` source/target pair. Only **nine distinct pairs** occur across
+2,658 retail properties, and **2,489 of them are `SourceAlpha`/`One` — plain additive**.
+`SourceAlpha`/`InverseSourceAlpha` accounts for 161 more; the remaining seven pairs are one or two
+instances each.
+
+Additive is order-independent, so **~94% of particle draws need no depth sort at all**: depth test on,
+depth write off, quads in any order. Only the ~6% remainder wants back-to-front, and sorting
+per-instance records is cheaper than sorting six-vertex spans — a second reason to reach for B before
+per-node blend modes land.
+
+Merging batches *across* appearance nodes means making the texture stop being per-batch state, via an
+array texture or an atlas. The measurements in §9.2 say what that is worth: at a median of 2
+appearance nodes and 2 distinct textures per effect, **nothing, for a single effect** — it only starts
+paying when many effects are on screen at once.
+
+Two things to tolerate rather than reject: `BlendingMode.None` is 0 and means the property is unset,
+not a D3D mode (the D3D enum starts at 1); and `gf_small_damage.ale` writes `BothSourceAlpha` as a
+*target*, a slot Direct3D would refuse. Both are real bytes that round-trip.
+
+### 9.5 Collapse the constant curves first
+
+The cheapest win here is independent of every option in §9.3. Of the **27,662 looped lists** behind
+the 26,617 `AnimatedCurve` properties, **14,127 are empty and 11,791 hold a single keyframe** — 25,918
+of 27,662 are constants wearing an animation's clothes. Only 1,744 hold more than one key, and 40 of
+those put every key on the same key value.
+
+Folding those to scalars at load removes most sampling work under any draw strategy, and shrinks a
+option-C lookup table to the handful of nodes that genuinely animate.
+
+One hazard if the evaluator is ported to GLSL: **Hermite tangents are stored per unit of key, not per
+unit of span.** `hermiteAt` scales by `delta = end.key - start.key`, and 9,322 of 9,324 retail
+intervals are not 1 wide, so dropping the scale overshoots by roughly the reciprocal of a typical
+0.03 interval. Only 562 of 25,081 keyframes carry a non-zero tangent, so the mistake stays invisible
+across most of the corpus — §10 material.
+
+### 9.6 Where the billboard model stops
+
+188 of the 2,637 appearance references — about 7% — do not fit an instanced quad:
+
+- **`FLBeamAppearance` (164)** chains particles into a strip, so it needs them in **emission order**.
+  A pool that recycles slots by swapping the last entry into the freed one does not keep that order,
+  and the resulting strip crosses itself.
+- **`FxParticleAppearance` (20)** spawns whole sub-effects per particle, named by
+  `ParticleApp_LifeName`/`ParticleApp_DeathName`. The draw walk recurses rather than being flat.
+- **`FxMeshAppearance` (4)** draws real geometry per particle via `MeshApp_MeshName`, routing through
+  §3 and §6 instead. This is the one place in the format where *classic* mesh instancing applies, and
+  it is also the least used. Note `FX/MISC/tlrtube.3db` is residue of this feature and crashes the
+  retail game when a particle spawns for it — see [RETAIL.md](RETAIL.md).
+
+A fourth fits the geometry but not the parameter model: **`FLDustAppearance` (2)** keys its alpha on
+**camera motion** rather than particle age — observed in game, the space dust that fades in as the
+camera turns. It declares no property `FxBasicAppearance` lacks, so nothing in the data marks it and
+the node type is the entire signal.
+
+`FxRectAppearance` (431) is a velocity-aligned stretched quad rather than a camera-facing one. It
+keeps the vertex count and the batch key, so it instances alongside the billboards under a different
+orientation rule.
+
+### 9.7 Culling
+
+Nothing in an effect states a bound. The four version-1.1 `Effect` floats are **plausibly a centre and
+radius** — `unknown4` is never negative and ranges to 56, the other three are unconstrained in sign —
+which is what the shape of a bounding sphere would look like, but this is inference and the reading is
+unconfirmed ([ALCHEMY.md § TODO](ALCHEMY.md#todo)). It is also the only per-effect volume the format
+offers, so a renderer that wants to cull effects has nothing else to reach for and must either test
+that reading or derive a bound from the emitters.
+
+---
+
+## 10. Checklist
 
 Things that produce a plausible-looking but wrong image, in rough order of how long they take to
 find:
@@ -548,12 +719,18 @@ find:
 9. UV `v` flipped in some paths and not others — textures upside down only on the Targa half of a
    model (§7).
 10. `Two` ignored — one-sided cockpit glass and foliage (§6).
+11. Alchemy node names hashed case-folded — 2,691 of 5,505 instance references resolve to nothing, so
+    roughly half of every effect is silently missing rather than visibly broken (§9).
+12. A particle container detected by its CRC instead of its `flags` — correct on all 1,213 retail
+    effects and wrong on the first asset another tool writes (§9).
+13. Hermite tangents applied without the `end.key - start.key` scale — only 562 of 25,081 keyframes
+    carry a non-zero tangent, so almost everything still looks right (§9.5).
 
 ---
 
 ## TODO
 
-Four open questions reach the renderer. None of them blocks a correct-looking image — each is a
+Six open questions reach the renderer. None of them blocks a correct-looking image — each is a
 place where this document picks the reading that cannot go visibly wrong, and the game would settle
 which reading is right.
 
@@ -563,9 +740,18 @@ which reading is right.
 | Targa origin bit on nine chains (§7) | reported through `flip`, rows untouched | [TEXTURE.md § TODO](TEXTURE.md#todo) |
 | `MAKeys` against `MADeltas` in material animation | both read, neither derived; the UV transform driver is unconfirmed | [RIGID.md § TODO](RIGID.md#todo) |
 | `Edge_angles` on two deformable models | ignored | [DEFORMABLE.md § TODO](DEFORMABLE.md#todo) |
+| `TransformFlags` low bits on an Alchemy node (§9) | ignored; `transformAt` applies the curves without them | [ALCHEMY.md § TODO](ALCHEMY.md#todo) |
+| The four version-1.1 `Effect` floats (§9.7) | unused; no effect culling | [ALCHEMY.md § TODO](ALCHEMY.md#todo) |
+
+The two particle rows differ in kind from the first four. `TransformFlags` is constant across all
+5,590 retail transforms, so the data cannot say what the bits select — and what is left for them to
+select is *how* the curves apply: node-local against emitter against world space, rotation order,
+whether the transform tracks the emitter after spawn. Those are decisions a renderer has to make
+regardless, so it will make them; the open question is whether the file was trying to say something
+about them.
 
 Bit 4 is the one with teeth: a detail map sampling the wrong coordinate set tiles at the wrong rate
-rather than vanishing, which is exactly the kind of error §9 is about — plausible-looking and slow
+rather than vanishing, which is exactly the kind of error §10 is about — plausible-looking and slow
 to find.
 
 ---
@@ -574,4 +760,4 @@ to find.
 
 [VMESH.md](VMESH.md) · [COMPOUND.md](COMPOUND.md) · [RIGID.md](RIGID.md) ·
 [ANIMATION.md](ANIMATION.md) · [MATERIAL.md](MATERIAL.md) · [TEXTURE.md](TEXTURE.md) ·
-[DEFORMABLE.md](DEFORMABLE.md) · [SURFACE.md](SURFACE.md)
+[DEFORMABLE.md](DEFORMABLE.md) · [SURFACE.md](SURFACE.md) · [ALCHEMY.md](ALCHEMY.md)
