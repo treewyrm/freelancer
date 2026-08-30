@@ -42,7 +42,7 @@ it, and what a `[Ship]` or a `[Nebula]` means is yours to define.
 | `@treewyrm/freelancer`             | `getResourceId`, `getObjectId`, and the lookups built on them                       | [UTF.md](docs/UTF.md#hashing)       |
 | `@treewyrm/freelancer/utf`         | `Directory`, `File` — the UTF container                                             | [UTF.md](docs/UTF.md)               |
 | `@treewyrm/freelancer/utility`     | `BufferView`, windows-1252, tree, timestamp, number and name helpers                | [UTF.md](docs/UTF.md#utilities)     |
-| `@treewyrm/freelancer/math`        | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Transform`, scalar and keyframe helpers   | —                                   |
+| `@treewyrm/freelancer/math`        | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Matrix4`, `Transform`, scalar helpers     | —                                   |
 | `@treewyrm/freelancer/vmesh`       | VMesh geometry parts and mesh library                                               | [VMESH.md](docs/VMESH.md)           |
 | `@treewyrm/freelancer/compound`    | The `Cmpnd` hierarchy shared by rigid and deformable models                         | [COMPOUND.md](docs/COMPOUND.md)     |
 | `@treewyrm/freelancer/rigid`       | `.3db` / `.cmp` / `.sph` models: parts, cameras, spheres, material animation        | [RIGID.md](docs/RIGID.md)           |

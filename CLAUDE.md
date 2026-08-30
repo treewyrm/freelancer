@@ -107,7 +107,7 @@ Every format is read in the same three steps, and each step is usable on its own
 | `.` (default) | `src/index.ts` | Hashing: `getResourceId`, `getObjectId`, and the lookups built on them |
 | `./utf` | `src/utf/index.ts` | The UTF container: `Directory`, `File` |
 | `./utility` | `src/utility/index.ts` | `BufferView`, windows-1252, `Tree`, timestamp, number and name helpers |
-| `./math` | `src/math/index.ts` | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Transform`, scalar math |
+| `./math` | `src/math/index.ts` | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Matrix4`, `Transform`, scalar math |
 | `./alchemy` | `src/alchemy/index.ts` | Alchemy particle effects (node library + effect library) |
 | `./vmesh` | `src/vmesh/index.ts` | VMesh geometry part/library serialization |
 | `./compound` | `src/compound/index.ts` | The `Cmpnd` hierarchy: parts, constraints, joints, hardpoints |

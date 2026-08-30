@@ -102,7 +102,10 @@ gl.uniformMatrix3fv(loc, true, new Float32Array([x.x, x.y, x.z, y.x, y.y, y.z, z
 gl.uniformMatrix3fv(loc, false, new Float32Array([x.x, y.x, z.x, x.y, y.y, z.y, x.z, y.z, z.z]))
 ```
 
-For a 4×4 with translation, those nine go in as rows and `position` in column 3.
+For a 4×4 with translation, those nine go in as rows and `position` in column 3. That is what
+`Matrix4.fromRotationTranslation` does, and it is the reason `Matrix4` exists: it holds its four
+`Vector4` **columns**, already transposed, so `Matrix4.toArray` is a straight concatenation and
+uploads with `transpose = false`. A hardpoint's `orientation` goes through the same call.
 
 > An earlier revision of this document said the opposite — "no transpose, no reordering" — on the
 > grounds that D3D's row-vector rows and GLSL's column-vector columns are the same nine floats. The
@@ -146,6 +149,12 @@ retraction:
   hierarchy wants — a joint chain can be accumulated with either. An earlier revision claimed
   `Matrix3.push` yields `child ∘ parent`; that followed from taking the triples for axes, and under
   the reading above it does not. Verified against `Quat.multiply` as an independent reference.
+
+- **`Matrix4` sidesteps all three**, because it holds columns rather than rows. `Matrix4.transform`
+  applies the matrix as written, `Matrix4.multiply(a, b)` applies `b` first, and
+  `Matrix4.push(stack, child)` yields `parent * child` — the ordinary conventions, at the cost of
+  being the transpose of the `Matrix3` it was built from. Convert once, at
+  `Matrix4.fromRotationTranslation`, and let only 4×4s reach the shader.
 
 ---
 

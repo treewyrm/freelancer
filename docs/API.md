@@ -14,7 +14,7 @@ this list is what changes with it.
 | ---------------- | ------- | ------------------------------------------------------------------------- |
 | `.`              | 12      | hashing and name resolution — the one thing every module shares           |
 | `./utility`      | 26      | `BufferView`, windows-1252, C-style number parsing, tree walks            |
-| `./math`         | 27      | vectors, quaternions, `Matrix3`, `Transform`, scalar and keyframe helpers |
+| `./math`         | 28      | vectors, quaternions, `Matrix3`/`Matrix4`, `Transform`, scalar and keyframe helpers |
 | `./utf`          | 4       | the UTF container: `Directory`, `File`                                    |
 | `./alchemy`      | 51      | `.ale` node and effect libraries, and the animation evaluators            |
 | `./animation`    | 36      | joint and object animation scripts                                        |
@@ -41,7 +41,7 @@ only route.
 
 ## How to read this
 
-`kind` is what the checker reports, which is not always what the source line says. Five names in
+`kind` is what the checker reports, which is not always what the source line says. Six names in
 `./math` are an interface and a `const` object under one identifier — `Vector3` is both the shape
 and the namespace of operations on it — and those carry their own member tables below. The third
 column is the first sentence of the doc comment, or the signature when there is no comment.
@@ -126,6 +126,7 @@ Cursor state — `offset`, `byteRemain`, `bytes`, `littleEndian`, `rewind()`, `s
 | `Keyframe`       | interface | `{ key: number }` — the base every keyframe list is ordered by.            |
 | `lerp`           | function  | `(p0, p1, t): number`                                                      |
 | `Matrix3`        | interface | 3x3 transformation matrix, and the namespace of operations on it.          |
+| `Matrix4`        | interface | 4x4 matrix as four **columns**, and the namespace of operations on it.     |
 | `mod`            | function  | `(a, b): number`                                                           |
 | `pingPong`       | function  | `(a): number`                                                              |
 | `quadIn`         | function  | `(t): number`                                                              |
@@ -144,7 +145,7 @@ Cursor state — `offset`, `byteRemain`, `bytes`, `littleEndian`, `rewind()`, `s
 | `Vector3`        | interface | 3D vector, and the namespace of operations on it.                          |
 | `Vector4`        | interface | 4D vector, and the namespace of operations on it.                          |
 
-The five namespaces carry the work, and none of it is reachable from the type name alone:
+The six namespaces carry the work, and none of it is reachable from the type name alone:
 
 | Namespace   | Members                                                                                                                                                                                                                                                                                              |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -152,9 +153,22 @@ The five namespaces carry the work, and none of it is reachable from the type na
 | `Vector4`   | `is`, `isNaN`, `isFinite`, `equal`, `copy`, `dot`, `magnitude`, `normalize`, `add`, `subtract`, `multipyScalar`, `divideScalar`                                                                                                                                                                      |
 | `Quat`      | `identity`, `conjugate`, `multiply`, `axisAngle`, `getAxisAngle`, `fromTo`, `fromEuler`, `fromMatrix`, `transform`, `nlerp`, `slerp`                                                                                                                                                                 |
 | `Matrix3`   | `identity`, `is`, `isNaN`, `isFinite`, `equal`, `transform`, `copy`, `determinant`, `transpose`, `invert`, `multiply`, `axisAngle`, `fromQuaternion`, `lookAt`, `push`, `read`, `write`                                                                                                              |
+| `Matrix4`   | `identity`, `is`, `isNaN`, `isFinite`, `equal`, `copy`, `fromRotationTranslation`, `fromTRS`, `fromTransform`, `translation`, `scaling`, `transform`, `transformPoint`, `transformDirection`, `multiply`, `transpose`, `determinant`, `invert`, `toMatrix3`, `toTransform`, `decompose`, `toArray`, `toArray3`, `fromArray`, `perspectiveLH`, `orthographicLH`, `lookAtLH`, `push` |
 | `Transform` | `identity`, `copy`, `transform`, `revert`, `multiply`, `interpolate`, `push`                                                                                                                                                                                                                         |
 
 `Vector4.multipyScalar` is spelled that way in the source.
+
+**`Matrix3` and `Matrix4` hold transposes of each other, deliberately.** A `Matrix3` on disk is nine
+floats whose triples are the *rows* of a column-vector rotation matrix ([RENDERER.md
+§2](RENDERER.md#matrices-upload-transposed-and-matrix3transform-is-the-odd-one-out)); a `Matrix4`
+here is four `Vector4` **columns**, `w` being the translation, so `Matrix4.toArray` is a straight
+concatenation and lands column-major — `uniformMatrix4fv` with `transpose = false`, or four
+consecutive `mat4` attribute locations. `Matrix4.fromRotationTranslation` transposes on the way in,
+which is what makes `Matrix4.multiply(a, b)` apply `b` first where `Matrix3.multiply(a, b)` read
+against the file applies `a` first, and `Matrix4.push(stack, child)` compose `parent * child` where
+`Matrix3.push` reads the other way. Nothing on disk is a 4x4 — joints, hardpoints and parts all
+carry a `Matrix3` and a `Vector3` — so `Matrix4` has no `read`/`write` pair, only
+`toArray`/`fromArray`.
 
 ## `./utf`
 
