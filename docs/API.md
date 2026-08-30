@@ -150,13 +150,30 @@ The six namespaces carry the work, and none of it is reachable from the type nam
 | Namespace   | Members                                                                                                                                                                                                                                                                                              |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Vector3`   | `identity`, `x`, `y`, `z`, `is`, `isNaN`, `isFinite`, `equal`, `dot`, `magnitude`, `normalize`, `angle`, `distance`, `copy`, `add`, `addScalar`, `subtract`, `subtractScalar`, `multiply`, `multiplyScalar`, `divide`, `divideScalar`, `cross`, `lerp`, `slerp`, `random`, `sphere`, `read`, `write` |
-| `Vector4`   | `is`, `isNaN`, `isFinite`, `equal`, `copy`, `dot`, `magnitude`, `normalize`, `add`, `subtract`, `multipyScalar`, `divideScalar`                                                                                                                                                                      |
+| `Vector4`   | `zero`, `x`, `y`, `z`, `w`, `is`, `isNaN`, `isFinite`, `equal`, `dot`, `magnitude`, `normalize`, `angle`, `distance`, `copy`, `add`, `addScalar`, `subtract`, `subtractScalar`, `multiply`, `multiplyScalar`, `divide`, `divideScalar`, `project`, `lerp`, `random`, `read`, `write` |
 | `Quat`      | `identity`, `conjugate`, `multiply`, `axisAngle`, `getAxisAngle`, `fromTo`, `fromEuler`, `fromMatrix`, `transform`, `nlerp`, `slerp`                                                                                                                                                                 |
 | `Matrix3`   | `identity`, `is`, `isNaN`, `isFinite`, `equal`, `transform`, `copy`, `determinant`, `transpose`, `invert`, `multiply`, `axisAngle`, `fromQuaternion`, `lookAt`, `push`, `read`, `write`                                                                                                              |
 | `Matrix4`   | `identity`, `is`, `isNaN`, `isFinite`, `equal`, `copy`, `fromRotationTranslation`, `fromTRS`, `fromTransform`, `translation`, `scaling`, `transform`, `transformPoint`, `transformDirection`, `multiply`, `transpose`, `determinant`, `invert`, `toMatrix3`, `toTransform`, `decompose`, `toArray`, `toArray3`, `fromArray`, `perspectiveLH`, `orthographicLH`, `lookAtLH`, `push` |
 | `Transform` | `identity`, `copy`, `transform`, `revert`, `multiply`, `interpolate`, `push`                                                                                                                                                                                                                         |
 
-`Vector4.multipyScalar` is spelled that way in the source.
+**`Vector4` mirrors `Vector3` except where four dimensions have no counterpart** — there is no
+`cross` (the binary cross product is a 3D fact) and no `sphere`. Four differences are deliberate and
+none of them are typos:
+
+- The zero vector is **`zero`, not `identity`**. `Quat` is an alias of `Vector4` and `Quat.identity`
+  is the identity *rotation* `(0, 0, 0, 1)`; two members named `identity` holding different values
+  would be picked wrong. `Vector4.w` is that same `(0, 0, 0, 1)` in its role as a basis vector.
+- **`Vector4.copy` defaults `w` to `1`, not `0`** — the identity rotation and a homogeneous *point*
+  are the same four numbers, and both are what this type is for. So `Vector4.copy(vector3)` is the
+  lift of a position into homogeneous coordinates, and `Vector4.copy({})` is `Quat.identity`.
+- **There is no `Vector4.slerp`.** `Quat.slerp` is the arc interpolation, and it is the one that
+  handles the double cover; a second, subtly different one would only ever be reached by mistake.
+- **`Vector4.random` is uniform on the unit 3-sphere** (Shoemake), which for a unit quaternion is a
+  uniformly distributed random rotation — not the same thing as four independent random components.
+
+`Vector4.project` is the perspective divide — `xyz / w`, dropping `w` — that `Matrix4.transform`
+leaves to the caller. It is the clip-space-to-NDC step; a direction (`w = 0`) has no projection, and
+the infinities that come back say so rather than being clamped.
 
 **`Matrix3` and `Matrix4` hold transposes of each other, deliberately.** A `Matrix3` on disk is nine
 floats whose triples are the *rows* of a column-vector rotation matrix ([RENDERER.md
