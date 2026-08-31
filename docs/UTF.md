@@ -122,8 +122,8 @@ import {
 
 Two hash algorithms match Freelancer's internal conventions:
 
-- **`getResourceId`** — Freelancer CRC32 (table extracted from `dacom.dll`). Used for material names, mesh library names, and most UTF resource references.
-- **`getObjectId`** — A byte-swapped CRC32 variant (`id32`). Used for object/archetype nicknames typically found in INI files.
+- **`getResourceId`** — Freelancer CRC32. Standard CRC-32 whose table `dacom.dll` generated with a *signed* right shift, so the high byte of every entry carries a borrowed sign bit and the low 24 do not. Generated rather than transcribed, and checked against the table at `0x6330`. Used for material names, mesh library names, and most UTF resource references.
+- **`getObjectId`** — `id32`, which is **not `getResourceId` with a byte swap**. Its table is a CRC table generated MSB-first over the polynomial `0x00500080` (x²² + x²⁰ + x⁷), where `getResourceId`'s is LSB-first over `0xEDB88320`; the byte loop consuming it is LSB-first in both, so here generation and consumption disagree about direction. Neither end is inverted. The result is byte-reversed, shifted right two, and has bit 31 forced on — so every object id read as int32 is negative, bit 30 is always clear, and the id space is 30 bits rather than 32. Used for object/archetype nicknames in INI files, and for `DATA/AUDIO` entry names.
 
 Both accept `number | string | ArrayBufferView | ArrayBufferLike` and default to case-insensitive matching.
 
