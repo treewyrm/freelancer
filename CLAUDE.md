@@ -10,9 +10,8 @@ format. Published as an ES module package with many subpath exports.
 
 It covers the binary **UTF** containers the assets ship in, **INI** (plain text and the compiled
 **BINI**), the **THN** Lua 3.2 scene scripts, and the **resource DLLs** every `ids_name` and
-`ids_info` resolves into. This repository is the merge of the former `utf2json` and `ini2json`;
-[PLAN.md](docs/PLAN.md) carries the goal, the invariants and the reasoning, and both histories are
-in the log.
+`ids_info` resolves into. This repository is the merge of the former `utf2json` and `ini2json`, and
+both histories are in the log.
 
 **Status.** Everything listed under _Modules_ below reads and writes. **This is the format layer,
 and it stops there.** For INI that means both encodings and the interim document, pinned by the
@@ -357,8 +356,16 @@ format tables do.
 - **[RENDERER.md](docs/RENDERER.md)** — consumer-facing rather than per-module: maps the structures
   onto a WebGL2 renderer (base offsets, VAO strategies, joint composition, winding and matrix
   conventions) and records the measurements behind each choice.
-- **[PLAN.md](docs/PLAN.md)** — the goal, the layer rules, the invariants, and what the merge of
-  `utf2json` and `ini2json` did and deferred.
+- **[API.md](docs/API.md)** — every name reachable from a subpath export, resolved from `src/` with
+  the TypeScript checker rather than transcribed. **The module documents do not repeat it**: they
+  carry binary layout and data structures, and point here for the surface.
+
+### Corpus statistics live in an ending chapter
+
+Each module document ends with **`## Corpus`** — the retail counts, the distributions, the round-trip
+results and the quirks — so the body above it is the format and the data structures alone. A number
+that *is* the argument for a design decision stays where the decision is stated; the tabulation of it
+goes in the chapter. [RETAIL.md](docs/RETAIL.md) indexes across all of them.
 
 ### Open questions live in a `TODO` section
 

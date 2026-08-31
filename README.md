@@ -42,7 +42,7 @@ it, and what a `[Ship]` or a `[Nebula]` means is yours to define.
 | `@treewyrm/freelancer`             | `getResourceId`, `getObjectId`, and the lookups built on them                       | [UTF.md](docs/UTF.md#hashing)       |
 | `@treewyrm/freelancer/utf`         | `Directory`, `File` — the UTF container                                             | [UTF.md](docs/UTF.md)               |
 | `@treewyrm/freelancer/utility`     | `BufferView`, windows-1252, tree, timestamp, number and name helpers                | [UTF.md](docs/UTF.md#utilities)     |
-| `@treewyrm/freelancer/math`        | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Matrix4`, `Transform`, scalar helpers     | —                                   |
+| `@treewyrm/freelancer/math`        | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Matrix4`, `Transform`, scalar helpers     | [API.md](docs/API.md#math)          |
 | `@treewyrm/freelancer/vmesh`       | VMesh geometry parts and mesh library                                               | [VMESH.md](docs/VMESH.md)           |
 | `@treewyrm/freelancer/compound`    | The `Cmpnd` hierarchy shared by rigid and deformable models                         | [COMPOUND.md](docs/COMPOUND.md)     |
 | `@treewyrm/freelancer/rigid`       | `.3db` / `.cmp` / `.sph` models: parts, cameras, spheres, material animation        | [RIGID.md](docs/RIGID.md)           |
@@ -315,10 +315,16 @@ decisions not worth re-litigating.
 | [THN.md](docs/THN.md)                | The scene script format, its value domain, and why it is not INI             |
 | [THORN.md](docs/THORN.md)            | The scene vocabulary: entities, events, properties, and where each came from |
 | [RESOURCE.md](docs/RESOURCE.md)      | The resource DLLs: the PE container, string tables, infocards, the id space  |
+| [RDL.md](docs/RDL.md)                | The markup every `ids_info` resolves to, which has no module                 |
 | [AUDIO.md](docs/AUDIO.md)            | `DATA/AUDIO` voice banks, which need no module of their own                  |
+| [ENGINE.md](docs/ENGINE.md)          | The INI vocabularies the executables hardcode, and how they were recovered   |
+| [SECTIONS.md](docs/SECTIONS.md)      | Every section and property the game reads, with its declared value shape     |
 | [RETAIL.md](docs/RETAIL.md)          | The corpus, the measurements, the quirks, the open questions                 |
 | [RENDERER.md](docs/RENDERER.md)      | Mapping these structures onto a WebGL2 renderer                              |
-| [PLAN.md](docs/PLAN.md)              | What this library is for, and the invariants it holds to                     |
+
+Each module document carries the format's binary layout and data structures, then a closing
+**Corpus** chapter with the retail counts and round-trip results behind them. Function and type names
+are not repeated per module — they are all in [API.md](docs/API.md).
 
 ## Development
 

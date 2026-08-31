@@ -4,14 +4,13 @@ Notes for building a **WebGL2** renderer on top of this library. Not an implemen
 places where the on-disk structures do not line up with what WebGL2 offers, and what the retail data
 actually contains at each of them.
 
-Every count here is measured against the retail `DATA` tree the corpus tests read: **2,178 meshes,
-22,416 mesh groups, 8,792 mesh references, 14,412 joint records, 7,525 materials, 6,861 textures,
-204 deformable models, 1,213 particle effects**. Where a claim is inference rather than measurement
-it says so.
-
 The format targets **Direct3D 8.1**. Most of the work of a port is undoing three assumptions D3D8
 made that WebGL2 does not honour: a base vertex index on every draw call, a fixed-function vertex
 format, and a row-vector matrix convention.
+
+Every count here is measured against the retail `DATA` tree the corpus tests read; the totals are
+gathered in [Corpus](#corpus) at the end, and each module document carries its own chapter of them.
+Where a claim is inference rather than measurement it says so.
 
 ---
 
@@ -51,11 +50,8 @@ holds 39 groups, and the busiest file (`SHIPS/LIBERTY/LI_DREADNOUGHT/li_dreadnou
 
 ### Winding is consistent and needs no repair
 
-Sampling 382,231 triangles across every rigid part that carries vertex normals: the cross product
-`(b-a) × (c-a)` agrees with the stored vertex normal in **381,539** of them and opposes it in 692,
-with one degenerate triangle. Not one part of 6,962 is majority-reversed.
-
-So the index order is counter-clockwise when read with a right-handed cross product. That does
+**The index order is counter-clockwise when read with a right-handed cross product**, measured against
+the stored vertex normals ([Corpus](#corpus)). That does
 **not** make `gl.frontFace(gl.CCW)` — the default — correct, and an earlier revision of this
 document said it did.
 
@@ -76,17 +72,12 @@ right-handed, so the projection reverses handedness exactly once, and that rever
 the `CCW` default right. Here view space is already left-handed, the reversal never happens, and a
 triangle whose right-handed normal faces the camera stays clockwise in window coordinates.
 
-Measured by projecting retail triangles through an actual left-handed `lookAt`/`perspective` pair
-with the camera placed out along each stored normal: **18,268 clockwise against 2**, and the mirror
-image of that with the camera on the far side.
-
 Getting it wrong renders the model inside-out, and turning culling off "fixes" it while leaving the
 lighting wrong. Mirroring positions without mirroring the axes and matrices with them fails the
 same way.
 
-**No part transform mirrors.** Every joint rotation (14,412 records) and every hardpoint orientation
-(12,053) has determinant **+1** to within 1e-2, and all are orthonormal. So winding never flips
-per-part, and a rotation's inverse is its transpose.
+**No part transform mirrors.** Every joint rotation and every hardpoint orientation has determinant
+**+1** and is orthonormal, so winding never flips per-part and a rotation's inverse is its transpose.
 
 ### Matrices upload transposed, and `Matrix3.transform` is the odd one out
 
@@ -734,6 +725,42 @@ find:
     effects and wrong on the first asset another tool writes (§9).
 13. Hermite tangents applied without the `end.key - start.key` scale — only 562 of 25,081 keyframes
     carry a non-zero tangent, so almost everything still looks right (§9.5).
+
+---
+
+## Corpus
+
+The totals this document is written against, all from the retail `DATA` tree:
+
+| | Count |
+| --- | --- |
+| Meshes | 2,178 |
+| Mesh groups | 22,416 |
+| Mesh references | 8,792, expanding to 22,090 group draws |
+| Joint records | 14,412 |
+| Hardpoints | 12,053 |
+| Materials | 7,525 |
+| Textures | 6,861 |
+| Deformable models | 204 |
+| Particle effects | 1,213, over 596 files |
+
+The distributions each section leans on are in that section: vertex formats in §3.1, the base offset
+measurement in §3.2, VAO counts in §3.3, joint kinds in §5.1, joint field constants in §5.2, texture
+storage and pixel formats in §7, and the particle node types in §9.2. Fuller versions live in the
+module documents' own **Corpus** chapters, indexed by [RETAIL.md](RETAIL.md).
+
+Three sweeps are this document's alone and appear nowhere else:
+
+- **Winding.** Sampling 382,231 triangles across every rigid part that carries vertex normals, the
+  cross product `(b-a) × (c-a)` agrees with the stored normal in **381,539** and opposes it in 692,
+  with one degenerate triangle. Not one part of 6,962 is majority-reversed. Projecting those through a
+  left-handed `lookAt`/`perspective` pair with the camera out along each stored normal gives **18,268
+  clockwise against 2** (§2).
+- **Determinants.** Every joint rotation (14,412) and every hardpoint orientation (12,053) has
+  determinant **+1** to within 1e-2, and all are orthonormal — so winding never flips per-part, an
+  attached model never mirrors, and a rotation's inverse is its transpose (§2).
+- **Sampled UV range.** Roughly −34..87 in U and −34..810 in V, which is why `REPEAT` is not optional
+  (§6).
 
 ---
 
