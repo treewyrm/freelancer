@@ -9,7 +9,7 @@ interface Vector3 {
 }
 
 const Vector3 = {
-  identity: { x: 0, y: 0, z: 0 } as const,
+  zero: { x: 0, y: 0, z: 0 } as const,
 
   x: { x: 1, y: 0, z: 0 } as const,
   y: { x: 0, y: 1, z: 0 } as const,

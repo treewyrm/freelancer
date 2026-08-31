@@ -133,7 +133,7 @@ describe('Matrix4.fromRotationTranslation', () => {
     const matrix = Matrix4.fromRotationTranslation(Matrix3.identity, position)
 
     assert.deepEqual(matrix.w, { ...position, w: 1 })
-    assert.ok(vecApprox(Matrix4.transformPoint(Vector3.identity, matrix), position))
+    assert.ok(vecApprox(Matrix4.transformPoint(Vector3.zero, matrix), position))
   })
 
   it('defaults position to the origin', () => {
@@ -170,7 +170,7 @@ describe('Matrix4.fromTRS', () => {
   })
 
   it('scales the columns, so each local axis keeps its own factor', () => {
-    const matrix = Matrix4.fromTRS(Vector3.identity, Quat.identity, scale)
+    const matrix = Matrix4.fromTRS(Vector3.zero, Quat.identity, scale)
 
     assert.ok(vecApprox(Matrix4.transformPoint(Vector3.x, matrix), { x: 2, y: 0, z: 0 }))
     assert.ok(vecApprox(Matrix4.transformPoint(Vector3.y, matrix), { x: 0, y: 3, z: 0 }))
@@ -294,13 +294,13 @@ describe('Matrix4.multiply', () => {
   it('applies the right operand first', () => {
     const translate = Matrix4.translation({ x: 10, y: 0, z: 0 })
     const spin = Matrix4.fromTRS(
-      Vector3.identity,
+      Vector3.zero,
       Quat.axisAngle({ axis: Vector3.z, angle: Math.PI / 2 }),
     )
 
     // spin * translate: translate first, then rotate the result.
     assert.ok(
-      vecApprox(Matrix4.transformPoint(Vector3.identity, Matrix4.multiply(spin, translate)), {
+      vecApprox(Matrix4.transformPoint(Vector3.zero, Matrix4.multiply(spin, translate)), {
         x: 0,
         y: 10,
         z: 0,
@@ -309,7 +309,7 @@ describe('Matrix4.multiply', () => {
 
     // translate * spin: rotate first, then translate.
     assert.ok(
-      vecApprox(Matrix4.transformPoint(Vector3.identity, Matrix4.multiply(translate, spin)), {
+      vecApprox(Matrix4.transformPoint(Vector3.zero, Matrix4.multiply(translate, spin)), {
         x: 10,
         y: 0,
         z: 0,
@@ -381,7 +381,7 @@ describe('Matrix4.transpose', () => {
   })
 
   it('inverts a rotation, since a rotation is orthonormal', () => {
-    const matrix = Matrix4.fromTRS(Vector3.identity, rotation)
+    const matrix = Matrix4.fromTRS(Vector3.zero, rotation)
 
     assert.ok(matApprox(Matrix4.transpose(matrix), Matrix4.invert(matrix)))
   })
@@ -426,7 +426,7 @@ describe('Matrix4.invert', () => {
   })
 
   it('round-trips a view matrix', () => {
-    const matrix = Matrix4.lookAtLH({ x: 3, y: 4, z: -12 }, Vector3.identity, Vector3.y)
+    const matrix = Matrix4.lookAtLH({ x: 3, y: 4, z: -12 }, Vector3.zero, Vector3.y)
 
     assert.ok(matApprox(Matrix4.multiply(matrix, Matrix4.invert(matrix)), Matrix4.identity, 1e-6))
   })
@@ -492,7 +492,7 @@ describe('Matrix4.decompose', () => {
   it('is exact for the identity', () => {
     const result = Matrix4.decompose(Matrix4.identity)
 
-    assert.deepEqual(result.position, Vector3.identity)
+    assert.deepEqual(result.position, Vector3.zero)
     assert.deepEqual(result.scale, { x: 1, y: 1, z: 1 })
     assert.ok(Vector4.equal(result.orientation, Quat.identity))
   })
@@ -684,14 +684,14 @@ describe('Matrix4.orthographicLH', () => {
 
 describe('Matrix4.lookAtLH', () => {
   const eye = { x: 0, y: 0, z: -10 }
-  const view = Matrix4.lookAtLH(eye, Vector3.identity, Vector3.y)
+  const view = Matrix4.lookAtLH(eye, Vector3.zero, Vector3.y)
 
   it('puts the eye at the view-space origin', () => {
-    assert.ok(vecApprox(Matrix4.transformPoint(eye, view), Vector3.identity))
+    assert.ok(vecApprox(Matrix4.transformPoint(eye, view), Vector3.zero))
   })
 
   it('puts the target down +Z', () => {
-    const target = Matrix4.transformPoint(Vector3.identity, view)
+    const target = Matrix4.transformPoint(Vector3.zero, view)
 
     assert.ok(Math.abs(target.x) < 1e-6)
     assert.ok(Math.abs(target.y) < 1e-6)
@@ -710,11 +710,11 @@ describe('Matrix4.lookAtLH', () => {
     const oblique = Matrix4.lookAtLH({ x: 5, y: 3, z: -2 }, { x: 1, y: 0, z: 4 }, Vector3.y)
     const placement = Matrix4.invert(oblique)
 
-    assert.ok(vecApprox(Matrix4.transformPoint(Vector3.identity, placement), { x: 5, y: 3, z: -2 }))
+    assert.ok(vecApprox(Matrix4.transformPoint(Vector3.zero, placement), { x: 5, y: 3, z: -2 }))
   })
 
   it('defaults up to +Y', () => {
-    assert.ok(matApprox(Matrix4.lookAtLH(eye, Vector3.identity), view))
+    assert.ok(matApprox(Matrix4.lookAtLH(eye, Vector3.zero), view))
   })
 })
 
@@ -736,7 +736,7 @@ describe('Matrix4.push', () => {
   it('composes parent then child, so a chain accumulates', () => {
     const parent = Matrix4.translation({ x: 10, y: 0, z: 0 })
     const child = Matrix4.fromTRS(
-      Vector3.identity,
+      Vector3.zero,
       Quat.axisAngle({ axis: Vector3.z, angle: Math.PI / 2 }),
     )
 

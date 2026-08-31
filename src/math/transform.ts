@@ -9,7 +9,7 @@ interface Transform {
 }
 
 const Transform = {
-  identity: { position: Vector3.identity, orientation: Quat.identity } as const,
+  identity: { position: Vector3.zero, orientation: Quat.identity } as const,
 
   /** Creates a copy of transform. */
   copy(transform: Transform): Transform {

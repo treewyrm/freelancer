@@ -272,7 +272,7 @@ export function readChannel(parent: Directory): Channel {
         keyframe.position = Vector3.read(data)
         break
       case ChannelType.ZeroPosition:
-        keyframe.position = { ...Vector3.identity }
+        keyframe.position = { ...Vector3.zero }
         break
     }
 
@@ -312,7 +312,7 @@ export function writeChannel(channel: Channel): Directory {
     if (interval < 0) data.writeFloat32(key)
 
     if (type & ChannelType.Angle) data.writeFloat32(value)
-    if (type & ChannelType.Position) writeVector(data, position ?? Vector3.identity)
+    if (type & ChannelType.Position) writeVector(data, position ?? Vector3.zero)
 
     switch (type & QUATERNION_MASK) {
       case ChannelType.Quaternion:

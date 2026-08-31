@@ -107,7 +107,7 @@ const Matrix4 = {
    * therefore apply the inverse. See RENDERER.md §2 for the measurement — reading the two matrices
    * of a chain each way cancels, which can make a wrong convention look right.
    */
-  fromRotationTranslation(rotation: Matrix3, position: Vector3 = Vector3.identity): Matrix4 {
+  fromRotationTranslation(rotation: Matrix3, position: Vector3 = Vector3.zero): Matrix4 {
     const { x, y, z } = rotation
 
     return {
@@ -126,7 +126,7 @@ const Matrix4 = {
    * cannot give.
    */
   fromTRS(
-    position: Vector3 = Vector3.identity,
+    position: Vector3 = Vector3.zero,
     orientation: Quat = Quat.identity,
     scale: Vector3 | number = 1,
   ): Matrix4 {
