@@ -25,7 +25,7 @@ Field names follow IVP's meaning in this repository's camelCase style rather tha
 | This module | IVP field |
 | --- | --- |
 | `Surface.massCenter` | `mass_center` |
-| `Surface.rotationInertia` | `rotation_inertia` |
+| `Surface.rotationInertia` | `rotation_inertia` (MAXLancer names the same slot `drag`) |
 | `Surface.radius` | `upper_limit_radius` |
 | `Surface.surfaceDeviation` | `max_factor_surface_deviation` |
 | `Surface.padding` | `dummy[3]` |
@@ -57,6 +57,10 @@ Surface library (.sur)
 ```
 
 A part is matched to a model part by `id`, the CRC32 of the part name (`getResourceId`).
+
+Everything the format records but does not let a writer omit — half-edge adjacency, pierce indices,
+the bounding spheres and their quantized boxes, the mass properties — is derivable from the
+triangles, and this module derives it. See [Building a hitbox](#building-a-hitbox).
 
 ---
 
@@ -118,6 +122,44 @@ Chunk payloads are not length-prefixed at the tag level, so an unrecognized tag 
 
 Chunks are written in Freelancer's order: `!fxd` (conditional), `exts`, `surf`, `hpid` (conditional).
 
+### `createPart`
+
+```ts
+createPart(id: number, hulls: HullGeometry[], options?: PartOptions): Part
+```
+
+`HullGeometry` is one convex hull as a caller has it — an `id`, its **own** points, and triangles
+indexing them. Whether two hulls share a point is not the caller's problem: `createPart` folds
+them into the one list a surface part holds and re-indexes the triangles, which is what IVP's
+builder does and what the corpus shows (every point a part holds is indexed by some face, in all
+1365 of them).
+
+| Option            | Default          | Effect                                                     |
+| ----------------- | ---------------- | ------------------------------------------------------------ |
+| `fixed`           | `true`           | `false` writes the `!fxd` chunk                            |
+| `hardpoints`      | `[]`             | Written as `hpid` only when non-empty                      |
+| `bounds`          | `'box'`          | What to hang on an inner node — see below                  |
+| mass properties   | derived          | Any of the four in `MassProperties` overrides what is derived |
+
+The extent is taken **before** any bounding box is added, so it covers the collision geometry and
+not the boxes wrapped around it.
+
+#### `bounds`
+
+Retail always puts a hull on the root: a terminal one when the part is a single convex shape,
+otherwise a `Skip` hull bounding everything below, and 415 such hulls carry real convex geometry
+averaging 69 faces. **Generating a convex hull of a subtree is an algorithm this library does not
+own**, so `bounds: 'box'` hangs the box the node already bounds on it instead — a valid convex
+bound, eight more points and twelve more faces per inner node, and the same shape retail has.
+
+The box used is the union of the children's boxes *before* it was quantized, which is exactly the
+box the node's sphere circumscribes. Taking the quantized box back would put its corners outside
+that sphere, and every retail file keeps what a node holds inside it.
+
+`bounds: 'none'` leaves inner nodes bare. IVP emits that too — `build_ledgetree` writes
+`offset_compact_ledge = 0` whenever no bounding ledge was built — and this reader descends through
+a hull-less node either way. It has not been observed in game.
+
 ---
 
 ## `extent.ts` — Bounding Box
@@ -137,6 +179,15 @@ Fixed size: **24 bytes**.
 
 The extent bounds the part, which for a compound part is not obliged to enclose every hull: across the 1365 retail parts, 1134 had all their points inside it.
 
+| Function              | Description                                                                    |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `getExtent(points)`   | Axis-aligned bounds of a point set; an empty set gives an inverted, union-safe extent |
+| `createBox(extent)`   | The eight corners and twelve outward-wound triangles of a box                  |
+
+`createBox` indexes its corners by axis bit — corner `n` takes the maximum on axis `a` when bit `a`
+of `n` is set — so corner 0 is the minimum and corner 7 the maximum. It is the shortest path to a
+hitbox: `createPart(id, [{ id, ...createBox(extent) }])`.
+
 ---
 
 ## `surface.ts` — Surface Block
@@ -146,7 +197,7 @@ The extent bounds the part, which for a compound part is not obliged to enclose 
 ```ts
 interface Surface {
   massCenter: Vector3 // also the bounding sphere centre; used for the aiming reticle
-  rotationInertia: Vector3 // not a drag coefficient
+  rotationInertia: Vector3 // not a drag coefficient — debris tumbles by it, observed in game
   radius: number // must encompass every hull in the part
   surfaceDeviation: number // quantized in steps of 1/250
   points: Point[] // shared hull vertices
@@ -158,6 +209,30 @@ interface Surface {
 `surfaceDeviation` is a **deviation**, not a scale factor: multiply it by `radius` to recover how far the surface departs from the bounding sphere. The builder computes it as `int(1 + deviation / (radius / 250))`.
 
 `padding` is `int dummy[3]` in IVP and is zero in every file surveyed.
+
+### Where the four derived values come from
+
+`getMassProperties` is IVP's `insert_radius_in_compact_surface`, and three of the four reproduce
+retail outright.
+
+- **`massCenter`** is the centroid of the volume the hulls enclose, by the divergence theorem: each
+  face spans a tetrahedron with the origin of signed volume `dot(normal, a) / 6` and centroid the
+  mean of its four points. A hull enclosing no volume — the flat two-face hulls the corpus is full
+  of — has nothing to integrate, and IVP falls back to the centre of the bounding box, tested as
+  the summed determinant against the summed area to the power of three halves. **All 1365 retail
+  parts, to within 1e-4 of the radius.**
+- **`radius`** is how far the farthest point sits from `massCenter`. **All 1365.**
+- **`surfaceDeviation`** comes off the same pass: the deviation is how far a point sits off the axis
+  through `massCenter` along its own face's normal, and the byte is
+  `int(1 + deviation / (radius / 250))`. **1349 of 1365 exactly**; the other 16 sit on a step and
+  the truncation falls the other side of it.
+- **`rotationInertia`** integrates each axis with the other two rotated into place and combines the
+  three second moments pairwise. Where the hull encloses no volume it takes the same fallback,
+  `0.5 × r²` uniform across the three axes, and **all 84 retail parts that reach that path carry
+  exactly what it produces** — so a uniform inertia is what Freelancer ships (92 parts have one)
+  and is not worth perturbing away from. On the volumetric path it agrees on **2067 of 4095
+  components** and is off by more than a quarter on roughly a quarter of them — see
+  [TODO](#todo).
 
 ### Binary layout
 
@@ -183,6 +258,21 @@ Descent stops at a node whose hull has type `Enabled`; nodes with no hull or wit
 | `getNodes(root)`  | Generator — depth-first walk over every node in the BVH |
 | `getHulls(root)`  | Generator — yields the hull of each node that has one   |
 
+### Construction
+
+| Function                                | Description                                                          |
+| --------------------------------------- | ---------------------------------------------------------------------- |
+| `createHierarchy(nodes)`                | Folds leaf nodes into the full binary tree the format wants          |
+| `getMassProperties(hulls, points)`      | `massCenter`, `rotationInertia`, `radius` and `surfaceDeviation`     |
+| `createSurface(root, points, overrides?)` | The block around a hierarchy, deriving what is not overridden      |
+
+`createHierarchy` merges whichever pair of nodes yields the tightest bounds until one is left,
+which is the rule IVP's sphere clustering minimizes — without the interval hash it uses to avoid
+comparing every pair. Inner nodes come back **without a hull**; `createPart` is what fills them.
+
+`getMassProperties` reads the **terminal** hulls only, skipping anything that merely bounds a
+subtree, exactly as IVP's `get_all_ledges` does.
+
 ---
 
 ## `node.ts` — BVH Node
@@ -204,6 +294,27 @@ Fixed size: **28 bytes** — right-child offset (int32), hull offset (int32), th
 Multiply `boxSizes` by `radius` to get the half-extents of the axis-aligned box around `center`. For `ge_cm_mark1.sur` the root yields `(0.505, 0.505, 0.379)` against an extent half-size of `(0.5, 0.5, 0.375)`.
 
 A well-formed tree is a full binary tree, so `nodeCount == 2 × terminalHulls − 1`. This holds for all 1365 retail parts.
+
+### Construction
+
+| Function                       | Description                                                   |
+| ------------------------------ | --------------------------------------------------------------- |
+| `createNode(hull, points)`     | Leaf node bounding one terminal hull                          |
+| `mergeNodes(left, right, hull?)` | Inner node bounding two children                            |
+| `getNodeExtent(node)`          | The box a node holds, back out of `radius` and `boxSizes`     |
+
+A leaf's sphere is centred on its hull's bounding box and reaches the corners of it, and each box
+size is `int(halfExtent / (radius / 250)) + 1` — **truncated and then stepped past**, so the
+quantized box always contains the one it came from. The half-extent never exceeds the radius, so
+the count never exceeds 251 and always fits its byte.
+
+`mergeNodes` unions the children's **quantized** boxes rather than their spheres, which is what
+lets a parent's bounds follow from what was written for its children without visiting anything
+below again.
+
+Both rules are IVP's `ledges_to_boxes_and_spheres` and `build_minimal_sphere`, and both reproduce
+retail exactly: over all 9111 leaf nodes in the corpus the centre and radius agree to within 1e-4
+relative, and 9110 of the 9111 reproduce all three box bytes.
 
 ---
 
@@ -248,6 +359,11 @@ That distinction is what gives `id` two meanings: it is IVP's `union { ledgetree
 | ------------------- | ----------------------------------------------------------------- |
 | `getIndices(faces)` | Unique point indices referenced by a face list                   |
 | `readHull(view)` / `writeHull(view, hull)` | Single hull, in place on the view        |
+| `createHull(id, points, triangles, type?)` | Builds one hull from triangles indexing the part's shared point list |
+
+`createHull` leaves a `Skip` hull's `id` at zero, since only `writeSurface` can know the offset it
+holds, and marks its faces and every edge of them virtual, which is what all 28644 retail type-5
+faces do.
 
 ---
 
@@ -272,6 +388,33 @@ Each of the three edges is a `uint16` point index followed by a `uint16` holding
 
 `opposite_index` is a delta in 4-byte slots, and a triangle occupies four slots — a header word plus three edges — so edge `v` of face `f` lives at slot `4f + v + 1`. `opposites` exposes this as the flat edge index `3f + v` instead. The two codecs convert through a matched pair of helpers in `hull.ts`, `toEdgeIndex` and `toSlot`, which are exact inverses.
 
+### Construction
+
+| Function                                     | Description                                              |
+| -------------------------------------------- | ---------------------------------------------------------- |
+| `getNormal(a, b, c)`                         | Outward normal, unnormalized — IVP's `hesse` vector      |
+| `createFaces(points, triangles, virtual?)`   | Face list of one hull, adjacency and pierce derived      |
+
+Triangles are three indices into the point list, **wound counter-clockwise seen from outside**, so
+`getNormal` is `(b - a) × (c - a)`. That winding is not a convention this module picked: shooting a
+ray the other way matches nothing in the corpus, and it is what [RENDERER.md](RENDERER.md) records
+for positions taken verbatim.
+
+`createFaces` refuses geometry the format cannot hold rather than writing something a reader will
+throw on: an open surface, where a half-edge has nothing running the other way; a half-edge two
+triangles both wind; a degenerate triangle; and a point count Euler's `V = 2 + F / 2` does not
+allow, which is what the ledge size the writer encodes assumes.
+
+**`opposites` is fully determined**, and the derivation reproduces all 177,824 retail faces.
+
+**`pierce` is not.** IVP's `insert_pierce_info` pairs each face with the one whose normal points
+most nearly the other way, walking its own triangle list in order and skipping a face that already
+has a partner — but *not* skipping one as a candidate, which is why the result is not an involution
+and neither is retail's. The order it walked is the builder's, not the order the compact ledge
+stores, so every tie it broke is lost. Following the rule anyway reproduces **151,761 of 177,824**;
+the rest are ties on symmetric hulls, where two faces are equally opposite and the file records the
+one this module cannot know it picked.
+
 ---
 
 ## `point.ts` — Hull Point
@@ -292,18 +435,77 @@ Points are shared across all the hulls of a part — the builder re-indexes each
 
 ```ts
 import {
-  type Extent,
-  type Point,
-  type Face,
-  type Hull,
-  type Node,
-  type Part,
-  readSurfaceLibrary,
-  writeSurfaceLibrary,
+  // Types
+  type Extent, type Point, type Face, type Hull, type Node, type Surface, type Part,
+  type HullGeometry, type MassProperties, type PartOptions,
+  type TriangleIndices, type TriangleFlags,
+  HullType,
+
+  // Geometry
+  getExtent, createBox,
+
+  // Structures
+  createFaces, createHull, createNode, mergeNodes, createHierarchy, createSurface, createPart,
+
+  // Inspection
+  getIndices, getNodes, getHulls, getNodeExtent, getNormal, getMassProperties,
+
+  // Serialization
+  readSurfaceLibrary, writeSurfaceLibrary,
 } from '@treewyrm/freelancer/surface'
 ```
 
-`HullType`, the per-structure `read*`/`write*` pairs, and the traversal helpers (`getNodes`, `getHulls`, `getIndices`) are available from their individual modules but are not re-exported by the entry point.
+The per-structure `read*`/`write*` pairs are available from their individual modules but are not
+re-exported by the entry point — a consumer reads or writes a whole library.
+
+---
+
+## Building a hitbox
+
+A box, from nothing:
+
+```ts
+import { createBox, createPart, writeSurfaceLibrary } from '@treewyrm/freelancer/surface'
+import { getResourceId } from '@treewyrm/freelancer'
+
+const id = getResourceId('Root')
+const extent = { minimum: { x: -2, y: -1, z: -6 }, maximum: { x: 2, y: 1, z: 6 } }
+
+const part = createPart(id, [{ id, ...createBox(extent) }])
+const bytes = writeSurfaceLibrary([part])
+```
+
+Several hulls, which is what a compound model wants — one per collision-enabled part, each keyed
+by the CRC32 of the model part name:
+
+```ts
+const part = createPart(getResourceId('Root'), [
+  { id: getResourceId('Root'), ...createBox(hull) },
+  { id: getResourceId('wing_lt'), points, triangles },
+], { hardpoints: [getResourceId('HpWeapon01')] })
+```
+
+What happens, in order:
+
+1. Every hull's points are merged into the part's shared list and its triangles re-indexed onto it.
+2. `createFaces` derives each face's half-edge adjacency and pierce index, and refuses geometry the
+   format cannot hold.
+3. `createNode` gives each hull its bounding sphere and quantized box.
+4. `createHierarchy` folds the leaves into a full binary tree, tightest pair first.
+5. Each inner node gets the box it bounds as a `Skip` hull, unless `bounds: 'none'`.
+6. `getMassProperties` derives `massCenter`, `radius`, `surfaceDeviation` and `rotationInertia`.
+7. The extent comes off the collision geometry, taken before step 5 added anything.
+
+**What the caller still owns**, because none of it is measurable from the bytes:
+
+- **Convexity.** Nothing here checks it, and IVP's whole layout assumes it — `V = 2 + F / 2` is
+  enforced, which a non-convex closed mesh will usually fail, but not always.
+- **Decimation.** How many faces a collision hull should have is a budget, not a fact.
+- **Splitting a concave shape into convex hulls.** Retail parts carry up to hundreds of them.
+- **`Point.clientData`.** Non-zero on 75% of retail points and unexplained; `createPart` carries
+  through whatever a caller puts on its input points and otherwise writes zero.
+
+A part built this way is a fixed point: write it, read it back, write it again, and the bytes match.
 
 ---
 
@@ -312,3 +514,51 @@ import {
 `writeSurfaceLibrary` reproduces the IVP layout but not Freelancer's exact ordering: IVP's builder emits terminal ledges before subtree-bounding ones, whereas this writer emits them in tree order. Re-encoding is therefore not byte-identical to the original file, but it **is** a fixed point — writing a decoded library and reading it back yields the same structure, and encoding that again gives identical bytes. Both properties hold across all 781 files the reader accepts; 574 of them re-encode byte for byte regardless.
 
 The one value that does not survive verbatim is a type-5 hull's `id`, which is a derived offset and is reassigned on write.
+
+---
+
+## TODO
+
+### How close `rotationInertia` has to be
+
+**The field is read.** A part blown off a model becomes debris and tumbles by it — observed in
+game, which settles what a static comparison could not and closes the older reading that IVP's
+`rotation_inertia` slot had been repurposed as a linear drag. MAXLancer carries it as `drag` for
+that reason and says the question is open; it is not.
+
+`getMassProperties` implements IVP's `IVP_Rot_Inertia_Solver` as written, and it is right where it
+can be checked. Every one of the 84 parts that take the degenerate fallback reproduces exactly. On
+the hulls that are still exact boxes — `crate_blue.sur` and the rest of the twelve-face crates —
+it reproduces the shipped figure to better than a part in a thousand. Over the whole corpus it does
+not: **2067 of 4095 components agree within 0.1%**, another ~700 are within a few percent, and
+roughly a quarter are off by more than 25%. `pod_drab.sur` computes 72.27 where the file says
+122.50.
+
+**The disagreement tracks decimation.** `crate_grey.sur`'s hull has **ten** faces where a box has
+twelve, and it misses by 0.5%; `pod_drab.sur`'s has 62 and misses by 41%. `massCenter` and `radius`
+agree on every one of those same parts, so the geometry is being read correctly. The reading is
+that Freelancer measured the inertia on the art mesh and then simplified the collision hull, and
+the file kept the earlier number. **Nothing in the file can recover it**, because the mesh it was
+measured from is not in the file.
+
+So the open question is not whether to derive it but how far off is too far. What is known:
+
+- The derived value is much the closer of the two candidates. Against retail it wins on **3590 of
+  4095 components**, and is within 0.1% on 2067 where MAXLancer's rule manages 4.
+- MAXLancer generates the field as `0.2 × radius²` on all three axes, jittered by ±0.1% so they
+  differ, and mods built with it work. That rule is within 25% of retail on barely a quarter of
+  components — retail's own mean ratio to `radius²` is 0.137, not 0.2 — so **the game tolerates a
+  figure that is wrong by tens of percent**, which bounds how much the residual gap here can
+  matter.
+- The jitter is not required by anything measurable: retail ships 92 parts whose three components
+  are identical, and this module reproduces 84 of them exactly. A builder here stays
+  deterministic.
+
+**The experiment that would sharpen it:** take a retail `.sur` whose stored inertia is far from the
+derived one — the `pod_*` debris are the clearest, being loose objects that tumble — rewrite it
+with the derived value and shoot the object, then again with `0.2 × radius²`. The difference
+between those two spins is the whole size of the question.
+
+Until then `createPart` derives it, because a number from the right algorithm on a simplified mesh
+beats a constant that is wrong by 46% at the median. Pass the art mesh's figure through
+`PartOptions` when it is at hand, which is why the override exists.

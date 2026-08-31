@@ -113,7 +113,7 @@ Every format is read in the same three steps, and each step is usable on its own
 | `./compound` | `src/compound/index.ts` | The `Cmpnd` hierarchy: parts, constraints, joints, hardpoints |
 | `./rigid` | `src/rigid/index.ts` | Rigid `.3db`/`.cmp`/`.sph` models: parts, cameras, spheres, material animation |
 | `./animation` | `src/animation/index.ts` | Keyframe animation scripts shared by `.cmp` and `.anm` |
-| `./surface` | `src/surface/index.ts` | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy |
+| `./surface` | `src/surface/index.ts` | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy, and `createPart` to build one |
 | `./texture` | `src/texture/index.ts` | `Texture library` entries: DDS surfaces, Targa mip chains, animations, cubemaps |
 | `./material` | `src/material/index.ts` | `Material library` entries: shader type, colours, texture slots |
 | `./deformable` | `src/deformable/index.ts` | `.dfm` character models: bone table, skinned meshes, detail levels |
@@ -216,6 +216,14 @@ format tables do.
   binary, **not a UTF tree**; readers take a `BufferView`. The `surf` chunk is a verbatim memory image
   of **`IVP_Compact_Surface`** from Ipion Virtual Physics (later Havok), so check layout changes
   against [ChimpsAtSea/Ipion-Virtual-Physics](https://github.com/ChimpsAtSea/Ipion-Virtual-Physics).
+  It is the one module with a **construction layer**: `createPart` builds a part from convex hulls,
+  deriving everything the format records but does not let a writer omit — half-edge adjacency
+  (all 177,824 retail faces), the bounding spheres and their quantized boxes (all 9,111 leaves),
+  and the mass properties (all 1,365 parts). Every rule is IVP's builder, ported and measured back;
+  `pierce` and `rotationInertia` are the two that retail does not fully reproduce, and both say why.
+  **`rotationInertia` is read** — debris tumbles by it — so it is derived rather than defaulted, and
+  retail's residual disagreement is decimation, not a wrong algorithm.
+  **Convexity, decimation and convex decomposition stay the consumer's** — they are budgets, not facts.
 - **[TEXTURE.md](docs/TEXTURE.md)** (`src/texture/`) — `Texture library` entries in four forms: a DDS
   in `MIPS`, a Targa chain in `MIP0..n`, an animation over sibling atlas entries, or a `CUBE` cubemap.
   All four read and write. `TextureStorage` says which form an entry uses, because the pixel format
@@ -357,7 +365,7 @@ format tables do.
 A document's last section before its footer is **`## TODO`**, holding what is pending *observation in
 the running game* rather than pending code: the question, why the corpus cannot settle it, the
 reading taken meanwhile, and the experiment that would decide it. Present in ALCHEMY, ANIMATION,
-RIGID, MATERIAL, TEXTURE, DEFORMABLE, RENDERER, INI, THN, THORN, ENGINE and RESOURCE;
+RIGID, MATERIAL, TEXTURE, SURFACE, DEFORMABLE, RENDERER, INI, THN, THORN, ENGINE and RESOURCE;
 [RETAIL.md](docs/RETAIL.md#todo--what-is-pending-in-the-game) indexes all of them in one table.
 
 - **Everything listed round-trips already.** A `TODO` marks an unread meaning, never an unread byte

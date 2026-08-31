@@ -145,6 +145,14 @@ Each of these decided a design position. The position is in the linked document;
 | Section-to-class binding confirmed by the dispatcher's constructor  | 30 of 34, 2 absent, **2 corrected**       | `[Ship]` direct, `[Solar]` via its `EqObj` base — [SECTIONS.md](SECTIONS.md#which-class-consumes-which-section) |
 | `INI_Reader` matcher call sites / argument resolved                 | 1,309 / 1,303 (99.5%)                     | Yields 799 keys and 208 sections, attributed where exports are dense — [ENGINE.md](ENGINE.md#method-2--disassemble-the-call-sites) |
 | `Freelancer.exe` `.text` entropy / standard prologues               | 7.98 / **0**, against 6.46 in the DLLs    | Retail's executable is SecuROM-wrapped; only `.rdata` is statically readable — same                     |
+| Collision face adjacency derived from the triangles alone           | 177,824 of 177,824                        | `opposites` is fully determined, and the winding with it — [SURFACE.md](SURFACE.md#construction-2)      |
+| Pierce indices derived the same way                                 | 151,761 of 177,824                        | The rest are ties broken in an order the compact ledge does not record — same                            |
+| Surface mass centre and radius derived from the hulls               | 1,365 of 1,365 parts                      | IVP's `insert_radius_in_compact_surface`, reproduced — [SURFACE.md](SURFACE.md#where-the-four-derived-values-come-from) |
+| Surface deviation byte derived exactly                              | 1,349 of 1,365                            | The other 16 sit on a step and the truncation falls the other side — same                               |
+| Rotation inertia derived exactly                                    | 2,067 of 4,095 components                 | Retail's figure predates the hull decimation, so the file is not what it was measured from — [SURFACE.md](SURFACE.md#todo) |
+| — the same, on parts whose hull encloses no volume                  | **84 of 84**, uniform across the axes     | The degenerate fallback is exactly right; 92 retail parts ship a uniform inertia and the game takes it — same |
+| — derived against MAXLancer's `0.2 × radius²`, per component        | 3,590 of 4,095 closer / retail's own mean ratio **0.137** | A constant wrong by 46% at the median ships in working mods, which bounds how much the residual gap matters — same |
+| Leaf node sphere and box derived from the hull                      | 9,111 of 9,111 / 9,110 box triples        | Truncate-then-step-past, and the union of children's *quantized* boxes — [SURFACE.md](SURFACE.md#construction-1) |
 
 ## Round-trip fidelity
 
@@ -304,6 +312,7 @@ question is which reading is right.
 | Whether Freelancer honours the Targa top-left origin bit | [TEXTURE.md](TEXTURE.md#todo) | Look at the nine chains that set it |
 | `DDSCAPS_ALPHA` on a cubemap — format-driven or always | [TEXTURE.md](TEXTURE.md#todo) | Write an opaque cubemap and load it |
 | Whether anything reads `Edge_angles` | [DEFORMABLE.md](DEFORMABLE.md#todo) | Delete them from one of the two files |
+| How close a `.sur`'s `rotationInertia` has to be — it *is* read, but retail's predates the hull decimation and nothing in the file can recover it | [SURFACE.md](SURFACE.md#todo) | Rewrite a `pod_*` debris file with the derived value, then with `0.2 × radius²`, and shoot it both ways |
 | Whether the engine still decodes a `0x08` event channel | [ANIMATION.md](ANIMATION.md#todo) | Author one and load the model |
 | Whether the shipped game honours `@include` or whether it was a build-tool directive | [INI.md](INI.md#todo) | Add one to a text INI the game reads |
 | What the 4-byte gap and header bytes 19–20 of a compiled `.thn` hold | [THN.md](THN.md#todo) | **Read Lua 3.2's `ldump.c`/`lundump.c` first** — probably not a game question at all |
@@ -348,7 +357,10 @@ derivable — it is, and reproducing it round-trips all 1,251 files byte-exactly
 ([INI.md](INI.md#round-trip)). Closed: whether more than seven resource libraries are honoured —
 they are, measured against Discovery, which lists eight `DLL =` entries and runs nine bands up to
 `0x80000`; the same install also shows a shared image base is harmless
-([RESOURCE.md](RESOURCE.md#the-id-space)).
+([RESOURCE.md](RESOURCE.md#the-id-space)). Closed: whether a `.sur`'s `rotation_inertia` slot is a
+moment of inertia or was repurposed as a linear drag — a part blown off a model tumbles by it,
+observed in game, and MAXLancer carries the same slot as `drag` on the reading that closes here
+([SURFACE.md](SURFACE.md#todo)). What remains open is only how close it has to be.
 
 ---
 

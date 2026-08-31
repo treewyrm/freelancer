@@ -1,5 +1,6 @@
 import BufferView from '#/utility/bufferview.js'
-import type { Face } from './face.js'
+import type Vector3 from '#/math/vector3.js'
+import { createFaces, type Face, type TriangleIndices } from './face.js'
 
 /**
  * Not an enum in IVP but two packed flags: `has_children` (bits 0-1) and `is_compact` (bits 2-3).
@@ -52,6 +53,25 @@ const toSlot = (edge: number): number => edge + Math.floor(edge / 3)
 export const getIndices = (faces: Face[]): number[] => [
   ...new Set(faces.flatMap((face) => face.points)),
 ]
+
+/**
+ * Builds one convex hull from triangles indexing the point list its surface part shares. See
+ * {@link createFaces} for what the triangles have to satisfy.
+ *
+ * A {@link HullType.Skip} hull's {@link Hull.id} is a byte offset back to the node that owns it,
+ * which only {@link writeSurface} can know, so it is left at zero and assigned on write.
+ */
+export const createHull = (
+  id: number,
+  points: readonly Vector3[],
+  triangles: Iterable<TriangleIndices>,
+  type: HullType = HullType.Enabled,
+): Hull => ({
+  id: type === HullType.Skip ? 0 : id,
+  type,
+  faces: createFaces(points, triangles, type === HullType.Skip),
+  reserved: 0,
+})
 
 export function readHull(view: BufferView): Hull {
   const id = view.readUint32()

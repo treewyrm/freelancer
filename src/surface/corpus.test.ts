@@ -7,11 +7,13 @@ import Directory from '#/utf/directory.js'
 import { getResourceId } from '#/hash.js'
 import { readHardpoints } from '#/compound/hardpoint.js'
 import BufferView from '#/utility/bufferview.js'
-import { getIndices, HullType } from './hull.js'
+import { createHull, getIndices, HullType } from './hull.js'
 import { readSurfaceLibrary, writeSurfaceLibrary } from './library.js'
 import type { Node } from './node.js'
 import type { Part } from './part.js'
-import { getHulls, getNodes } from './surface.js'
+import { getHulls, getMassProperties, getNodes } from './surface.js'
+import { createNode } from './node.js'
+import type { TriangleIndices } from './face.js'
 
 const SIGNATURE = 0x73726576 // 'vers'
 
@@ -36,6 +38,13 @@ function* parts(): Generator<{ path: string; part: Part }> {
 function* hulls(): Generator<{ path: string; hull: NonNullable<Node['hull']> }> {
   for (const { path, part } of parts()) for (const hull of getHulls(part.root)) yield { path, hull }
 }
+
+/** The same sweep, keeping the part each hull indexes its points into. */
+function* hullsInParts(): Generator<{ part: Part; hull: NonNullable<Node['hull']> }> {
+  for (const { part } of parts()) for (const hull of getHulls(part.root)) yield { part, hull }
+}
+
+const axes = ['x', 'y', 'z'] as const
 
 const terminal = (part: Part) =>
   [...getHulls(part.root)].filter(({ type }) => type === HullType.Enabled)
@@ -462,6 +471,167 @@ describe('retail asset corpus', { skip }, () => {
         }
 
       ok(filled > total / 2, `only ${filled} of ${total} points carry client data`)
+    })
+  })
+
+  describe('construction', () => {
+    // Derived from the triangles alone, so a reader that agrees here has the winding right too.
+    it('rebuilds the half-edge adjacency of every face in the corpus', () => {
+      let total = 0
+
+      for (const { part, hull } of hullsInParts()) {
+        const rebuilt = createHull(
+          hull.id,
+          part.points,
+          hull.faces.map(({ points }) => [...points] as TriangleIndices),
+          hull.type,
+        )
+
+        for (const [index, face] of hull.faces.entries()) {
+          deepStrictEqual(rebuilt.faces[index]?.opposites, face.opposites, `face ${index}`)
+          total++
+        }
+      }
+
+      strictEqual(total, 177824)
+    })
+
+    // IVP pairs each face with the one facing most nearly the other way, walking its own triangle
+    // list in order — an order the file does not record, so the ties it broke are not recoverable.
+    it('reproduces 151,761 of the 177,824 pierce indices, the rest being ties', () => {
+      let matched = 0
+
+      for (const { part, hull } of hullsInParts()) {
+        const rebuilt = createHull(
+          hull.id,
+          part.points,
+          hull.faces.map(({ points }) => [...points] as TriangleIndices),
+          hull.type,
+        )
+
+        for (const [index, face] of hull.faces.entries())
+          if (rebuilt.faces[index]?.pierce === face.pierce) matched++
+      }
+
+      strictEqual(matched, 151761)
+    })
+
+    it('derives the mass centre and radius of all 1,365 parts', () => {
+      let total = 0
+
+      for (const { path, part } of parts()) {
+        const { massCenter, radius } = getMassProperties(getHulls(part.root), part.points)
+
+        ok(
+          Math.hypot(
+            massCenter.x - part.massCenter.x,
+            massCenter.y - part.massCenter.y,
+            massCenter.z - part.massCenter.z,
+          ) <=
+            part.radius * 1e-4,
+          `${path}: mass centre`,
+        )
+
+        ok(Math.abs(radius - part.radius) <= part.radius * 1e-4, `${path}: radius ${radius}`)
+        total++
+      }
+
+      strictEqual(total, 1365)
+    })
+
+    // `int(1 + deviation / (radius / 250))` truncates, so a value sitting on a step comes out
+    // either side of it depending on how the sum was rounded.
+    it('derives the surface deviation byte of 1,349 of them exactly', () => {
+      let matched = 0
+
+      for (const { part } of parts()) {
+        const { surfaceDeviation } = getMassProperties(getHulls(part.root), part.points)
+
+        if (Math.round(surfaceDeviation * STEPS) === Math.round(part.surfaceDeviation * STEPS))
+          matched++
+      }
+
+      strictEqual(matched, 1349)
+    })
+
+    // Retail disagrees on rotation inertia far too often for the hulls in the file to be what it
+    // was measured from — see SURFACE.md.
+    it('derives a rotation inertia that agrees on 2,067 of 4,095 components', () => {
+      let matched = 0
+
+      for (const { part } of parts()) {
+        const { rotationInertia } = getMassProperties(getHulls(part.root), part.points)
+
+        for (const axis of ['x', 'y', 'z'] as const)
+          if (
+            Math.abs(rotationInertia[axis] - part.rotationInertia[axis]) <=
+            Math.abs(part.rotationInertia[axis]) * 1e-3
+          )
+            matched++
+      }
+
+      strictEqual(matched, 2067)
+    })
+
+    // A hull enclosing no volume has nothing to integrate, and IVP estimates from the bounding
+    // sphere instead — uniform across the three axes, which is what those parts ship.
+    it('derives the rotation inertia of all 84 parts whose hulls enclose no volume', () => {
+      let uniform = 0
+      let fallback = 0
+      let matched = 0
+
+      for (const { part } of parts()) {
+        const stored = axes.map((axis) => part.rotationInertia[axis])
+        const { rotationInertia } = getMassProperties(getHulls(part.root), part.points)
+        const derived = axes.map((axis) => rotationInertia[axis])
+
+        if (Math.max(...stored) <= Math.min(...stored) * 1.0001) uniform++
+        if (Math.max(...derived) > Math.min(...derived) * 1.0001) continue
+
+        fallback++
+        if (Math.abs(derived[0]! - stored[0]!) <= Math.abs(stored[0]!) * 1e-3) matched++
+      }
+
+      strictEqual(uniform, 92, 'retail parts shipping a uniform inertia')
+      strictEqual(fallback, 84)
+      strictEqual(matched, 84)
+    })
+
+    it('derives the sphere and box of all 9,111 leaf nodes, one box size aside', () => {
+      let total = 0
+      let boxes = 0
+
+      for (const { path, part } of parts())
+        for (const node of getNodes(part.root)) {
+          if (node.left || node.right || !node.hull) continue
+
+          const { center, radius, boxSizes } = createNode(node.hull, part.points)
+
+          ok(
+            Math.hypot(
+              center.x - node.center.x,
+              center.y - node.center.y,
+              center.z - node.center.z,
+            ) <=
+              node.radius * 1e-4,
+            `${path}: node centre`,
+          )
+
+          ok(Math.abs(radius - node.radius) <= node.radius * 1e-4, `${path}: node radius`)
+
+          if (
+            (['x', 'y', 'z'] as const).every(
+              (axis) =>
+                Math.round(boxSizes[axis] * STEPS) === Math.round(node.boxSizes[axis] * STEPS),
+            )
+          )
+            boxes++
+
+          total++
+        }
+
+      strictEqual(total, 9111)
+      strictEqual(boxes, 9110)
     })
   })
 

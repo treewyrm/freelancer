@@ -1,6 +1,19 @@
 import BufferView from '#/utility/bufferview.js'
-import { readExtent, writeExtent, type Extent } from './extent.js'
-import { readSurface, writeSurface, type Surface } from './surface.js'
+import type Vector3 from '#/math/vector3.js'
+import { createBox, getExtent, readExtent, writeExtent, type Extent } from './extent.js'
+import type { TriangleIndices } from './face.js'
+import { createHull, HullType } from './hull.js'
+import { createNode, getNodeExtent } from './node.js'
+import type { Point } from './point.js'
+import {
+  createHierarchy,
+  createSurface,
+  getNodes,
+  readSurface,
+  writeSurface,
+  type MassProperties,
+  type Surface,
+} from './surface.js'
 
 const NOT_FIXED = 0x64786621 // '!fxd'
 const EXTENTS = 0x73747865 // 'exts'
@@ -14,6 +27,108 @@ export interface Part extends Extent, Surface {
   fixed: boolean
 
   hardpoints: number[]
+}
+
+/**
+ * One convex hull as a caller has it: its own points, and triangles indexing them. Whether two
+ * hulls share a point is not the caller's problem — {@link createPart} folds them into the one
+ * list a surface part holds and re-indexes the triangles, the way IVP's builder does.
+ */
+export interface HullGeometry {
+  /** CRC32 of the model part name this hull collides for, by `getResourceId`. */
+  id: number
+
+  points: readonly (Vector3 & { clientData?: number })[]
+
+  /** Triangles indexing {@link points}, wound counter-clockwise seen from outside. */
+  triangles: Iterable<TriangleIndices>
+}
+
+export interface PartOptions extends Partial<MassProperties> {
+  /** Part is welded to the root. Defaults to true, which writes no `!fxd` chunk. */
+  fixed?: boolean
+
+  /** CRC32s of the hardpoints this part covers, by `getResourceId`. */
+  hardpoints?: number[]
+
+  /**
+   * What to hang on an inner node of the hierarchy. `box` gives it the box it already bounds,
+   * matching every retail file, at the cost of eight more points and twelve more faces per inner
+   * node; `none` leaves it bare, which IVP reads and this reader descends through either way.
+   */
+  bounds?: 'box' | 'none'
+}
+
+/**
+ * Builds a surface part from convex hulls — the whole path from geometry to something
+ * `writeSurfaceLibrary` accepts.
+ *
+ * Points are merged into the single list the part shares and triangles are re-indexed onto it,
+ * the hulls are folded into a bounding volume hierarchy by {@link createHierarchy}, and the mass
+ * properties are derived by `getMassProperties`. Pass any of them in `options` to override what
+ * is derived.
+ */
+export function createPart(id: number, hulls: HullGeometry[], options: PartOptions = {}): Part {
+  const { fixed = true, hardpoints = [], bounds = 'box', ...overrides } = options
+
+  const points: Point[] = []
+  const indices = new Map<string, number>()
+
+  /** Adds points to the shared list, returning where each landed. Identical points merge. */
+  const share = (source: HullGeometry['points']): number[] =>
+    [...source].map(({ x, y, z, clientData = 0 }) => {
+      const key = `${x},${y},${z},${clientData}`
+      const found = indices.get(key)
+
+      if (found !== undefined) return found
+
+      indices.set(key, points.length)
+      return points.push({ x, y, z, clientData }) - 1
+    })
+
+  /** Rewrites triangles indexing a hull's own points to index the shared list instead. */
+  const reindex = (triangles: HullGeometry['triangles'], remap: number[]): TriangleIndices[] =>
+    [...triangles].map(
+      (triangle) =>
+        triangle.map((index) => {
+          const value = remap[index]
+          if (value === undefined) throw new RangeError(`A triangle indexes point ${index}`)
+
+          return value
+        }) as TriangleIndices,
+    )
+
+  const leaves = hulls.map(({ id, points: source, triangles }) => {
+    const remap = share(source)
+
+    return createNode(createHull(id, points, reindex(triangles, remap)), points)
+  })
+
+  // The extent covers the collision geometry, so it is taken before any bounding box is added.
+  const extent = getExtent(points)
+  const root = createHierarchy(leaves)
+
+  if (bounds === 'box')
+    for (const node of getNodes(root)) {
+      const { left, right } = node
+      if (!left || !right) continue
+
+      // The box a node's sphere circumscribes, which is the union of its children's boxes
+      // before it was quantised. Taking the quantised box back would put its corners outside
+      // the sphere, and every retail file keeps what a node holds inside it.
+      const [a, b] = [getNodeExtent(left), getNodeExtent(right)]
+      const box = createBox(getExtent([a.minimum, a.maximum, b.minimum, b.maximum]))
+
+      node.hull = createHull(0, points, reindex(box.triangles, share(box.points)), HullType.Skip)
+    }
+
+  return {
+    id,
+    fixed,
+    hardpoints,
+    ...extent,
+    ...createSurface(root, points, overrides),
+  }
 }
 
 function* readHardpoints(view: BufferView) {
