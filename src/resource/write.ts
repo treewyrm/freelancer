@@ -58,16 +58,19 @@ interface Leaf extends Resource {
   dataOffset: number
 }
 
+/** What both levels of the directory tree share once their names and offsets are laid out. */
 interface Node {
   id: ResourceId
   offset: number
   nameOffset: number
 }
 
+/** Second level: one resource id, holding a leaf per language. */
 interface Entry extends Node {
   languages: Leaf[]
 }
 
+/** First level: one resource type, holding its entries. */
 interface TypeNode extends Node {
   entries: Entry[]
 }
@@ -277,6 +280,7 @@ const checksum = (bytes: Uint8Array, field: number): number => {
   return (sum + bytes.byteLength) >>> 0
 }
 
+/** PE header fields the resource data does not determine. Both default to a reproducible image. */
 export interface WriteOptions {
   /** Preferred load address. Defaults to {@link DEFAULT_IMAGE_BASE}. */
   imageBase?: number

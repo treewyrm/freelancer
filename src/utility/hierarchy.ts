@@ -1,9 +1,14 @@
+/**
+ * Turns one flat record into a node plus the two identifiers that place it: its own, and its
+ * parent's. A root is a record with no `parentId`.
+ */
 type TransformCallback<T, V> = (
   value: T,
   index: number,
   array: T[],
 ) => { childId: number; parentId?: number; child: V }
 
+/** One edge, handed to the pairing callback with both ends already resolved where possible. */
 interface PairValue<V> {
   childId: number
   child: V
@@ -12,6 +17,7 @@ interface PairValue<V> {
   array: ReturnType<TransformCallback<unknown, V>>[]
 }
 
+/** Links a node to its parent. Called once per record, root or not, so it also sees the orphans. */
 type PairCallback<V> = (value: PairValue<V>) => void
 
 /**
@@ -46,6 +52,7 @@ export const assemble = <T, V>(
   return roots
 }
 
+/** One node on the way back out to a flat list, with the depth and identifiers a writer needs. */
 interface FlattenResult<T> {
   /** Depth level. */
   depth: number

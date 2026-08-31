@@ -35,6 +35,7 @@ export interface Pair {
   targetId: number
 }
 
+/** Reads a link record: two entry identifiers, source then target. */
 export function readPair(view: BufferView): Pair {
   return {
     sourceId: view.readInt32(),
@@ -42,6 +43,7 @@ export function readPair(view: BufferView): Pair {
   }
 }
 
+/** Writes a link record. */
 export function writePair({ sourceId, targetId }: Pair): BufferView {
   return BufferView.allocate(Int32Array.BYTES_PER_ELEMENT * 2)
     .writeInt32(sourceId)
@@ -59,6 +61,14 @@ export const WorldId = 0x8000
  */
 export const DefaultId = 0xee223b51 | 0
 
+/**
+ * One use of a library node within an effect: which node, how it is placed in the instance tree,
+ * and what it links to.
+ *
+ * The node itself is referenced by CRC and never resolved here. `children` and `targets` are
+ * different relations — a child is contained, a target is merely pointed at — and the file records
+ * them in two separate lists.
+ */
 export interface NodeInstance {
   /** Node name CRC (case-sensitive). */
   crc: number
@@ -85,6 +95,11 @@ export interface NodeInstance {
   targets: NodeInstance[]
 }
 
+/**
+ * One named effect: a tree of node instances, hanging off the roots in `children`.
+ *
+ * The four unknowns are the version-2 floats, carried so a file that has them round-trips.
+ */
 export interface Effect {
   name: string
   unknown1?: number
@@ -94,6 +109,17 @@ export interface Effect {
   children: NodeInstance[]
 }
 
+/**
+ * Reads one effect: its name, its instance entries and the links between them.
+ *
+ * The file is flat. Hierarchy comes out of each entry's `parentId` — a value at or above
+ * {@link WorldId} makes the instance a root — and the links are a separate list resolved against
+ * the same identifiers, so an instance can be some other instance's target without being its child.
+ *
+ * A target naming an identifier no entry hands out is dropped rather than throwing, since a link is
+ * a reference and the format gives no way to tell a stale one from a damaged file.
+ * @param version Library version; only past 1 does an effect carry the four unknown floats.
+ */
 export function readEffect(view: BufferView, version = 1): Effect {
   const name = readString(view)
   let unknown1 = 0
@@ -143,6 +169,15 @@ export function readEffect(view: BufferView, version = 1): Effect {
   return { name, unknown1, unknown2, unknown3, unknown4, children }
 }
 
+/**
+ * Writes one effect, flattening the instance tree back into entries and links.
+ *
+ * Identifiers are not derived from the tree: an instance keeps whatever `id` it was read with, and
+ * the rest are numbered into the gaps left over — retail's handles are sparse and unordered, and
+ * renumbering them would still load but would no longer round-trip. Entries go out in each
+ * instance's recorded `sort` order, which is the order the file had them in.
+ * @param version Library version; only past 1 are the four unknown floats written.
+ */
 export const writeEffect = (effect: Effect, version = 1): BufferView => {
   const pairs: Pair[] = []
 

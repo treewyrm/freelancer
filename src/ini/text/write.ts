@@ -3,6 +3,7 @@ import { Property } from '#/ini/property.js'
 import { Section } from '#/ini/section.js'
 import { toText } from '#/ini/value.js'
 
+/** Formatting choices the text encoding leaves open. Neither affects what re-reads. */
 export interface WriteOptions {
   /** Line terminator. The game's own tools wrote CRLF. */
   newline?: string

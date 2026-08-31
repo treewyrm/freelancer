@@ -67,9 +67,19 @@ export const list = (...values: (Value | number | string)[]): TableValue => ({
 export const from = (value: Value | number | string): Value =>
   typeof value === 'object' ? value : typeof value === 'number' ? number(value) : string(value)
 
+/** Narrows to a number, whose literal {@link toNumber} reads as a quantity. */
 export const isNumber = (value: Value): value is NumberValue => value.type === 'number'
+
+/** Narrows to a quoted string — text the engine takes as text. */
 export const isString = (value: Value): value is StringValue => value.type === 'string'
+
+/**
+ * Narrows to an identifier — an unquoted name the engine resolves as a global *read*. `SCENE` and
+ * `Y` are identifiers; the same words quoted are strings, and the engine does not treat them alike.
+ */
 export const isIdentifier = (value: Value): value is IdentifierValue => value.type === 'identifier'
+
+/** Narrows to a table, which may carry an array part, keyed entries, or both. */
 export const isTable = (value: Value): value is TableValue => value.type === 'table'
 
 /**

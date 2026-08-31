@@ -90,6 +90,10 @@ export function mergeNodes(left: Node, right: Node, hull?: Hull): Node {
   return hull ? { ...node, hull } : node
 }
 
+/**
+ * Reads a node's own 20-byte record from a cursor — the bounding sphere and quantised box only.
+ * Child and hull offsets precede it and are the caller's to follow; see `readSurface`.
+ */
 export function readNode(view: BufferView): Node {
   return {
     center: {
@@ -107,6 +111,10 @@ export function readNode(view: BufferView): Node {
   }
 }
 
+/**
+ * Writes a node's own 20-byte record at the cursor, requantising the box sizes back to bytes.
+ * `padding` goes out as carried, which is zero in every file Freelancer ships.
+ */
 export function writeNode(view: BufferView, node: Node) {
   view.writeFloat32(node.center.x)
   view.writeFloat32(node.center.y)

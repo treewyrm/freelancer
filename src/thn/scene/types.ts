@@ -53,11 +53,13 @@ export interface Script {
   events: Event[]
 }
 
+/** Three numbers as a Lua array. A position, a colour or an axis, depending on the key. */
 export type Vector3 = readonly [number, number, number]
 
 /** A rotation matrix, as three rows. */
 export type Matrix3 = readonly [Vector3, Vector3, Vector3]
 
+/** Four numbers as a Lua array. The animation form of an orientation; `orient` places instead. */
 export type Quaternion = readonly [number, number, number, number]
 
 /** Degrees about an axis. The animation form, and never on an entity. */
@@ -106,6 +108,7 @@ export interface CameraAnimProps {
   far?: number
 }
 
+/** `lightprops` on a `LIGHT` entity, and on a `START_LIGHT_PROP_ANIM` — the same keys either way. */
 export interface LightProps {
   on?: TruthName
   color?: Vector3
@@ -120,6 +123,7 @@ export interface LightProps {
   atten?: Vector3
 }
 
+/** `audioprops` on a `SOUND` entity, and on a `START_AUDIO_PROP_ANIM`. Attenuation and 3D falloff. */
 export interface AudioProps {
   attenuation?: number
   pan?: number
@@ -131,6 +135,10 @@ export interface AudioProps {
   rmix?: number
 }
 
+/**
+ * `psysprops` on a `PSYS` entity, and on a `START_PSYS_PROP_ANIM`. One key: `sparam`, the external
+ * control value an Alchemy effect blends its animation states with.
+ */
 export interface PsysProps {
   sparam?: number
 }
@@ -178,6 +186,7 @@ export interface NullPath {
   path_type: 'NULL'
 }
 
+/** `compoundprops` on a `DEFORMABLE` entity. One key, animated by `START_FLR_HEIGHT_ANIM`. */
 export interface CompoundProps {
   floor_height?: number
 }
@@ -243,30 +252,36 @@ export interface Monitor extends EntityCommon {
   flags?: string[]
 }
 
+/** A viewpoint. Made current by a `SET_CAMERA` event, and animated by `START_CAMERA_PROP_ANIM`. */
 export interface Camera extends Placed {
   type: 'CAMERA'
   cameraprops?: CameraProps
 }
 
+/** A light source. `lightprops.type` says which of the three kinds it is. */
 export interface Light extends Placed {
   type: 'LIGHT'
   lightprops?: LightProps
 }
 
+/** A rigid model. Carries no block of its own — everything about it is spatial. */
 export interface Compound extends Placed {
   type: 'COMPOUND'
 }
 
+/** A `.dfm` character. `START_MOTION` animates it; `compoundprops` is what it adds over a compound. */
 export interface Deformable extends Placed {
   type: 'DEFORMABLE'
   compoundprops?: CompoundProps
 }
 
+/** An Alchemy particle effect. Started by `START_PSYS`. */
 export interface Psys extends Placed {
   type: 'PSYS'
   psysprops?: PsysProps
 }
 
+/** A sound emitter, positioned in the scene. Started by `START_SOUND`. */
 export interface Sound extends Placed {
   type: 'SOUND'
   audioprops?: AudioProps
@@ -277,6 +292,7 @@ export interface Marker extends Placed {
   type: 'MARKER'
 }
 
+/** A path other entities are moved along by `START_PATH_ANIMATION`. */
 export interface MotionPath extends Placed {
   type: 'MOTION_PATH'
   pathprops?: PathProps
@@ -327,26 +343,31 @@ export interface Oriented {
   front?: AxisName
 }
 
+/** Makes a camera the one the scene renders through. */
 export interface SetCamera extends EventCommon {
   action: 'SET_CAMERA'
 }
 
+/** Plays a `SOUND` entity, optionally from part-way in. */
 export interface StartSound extends EventCommon {
   action: 'START_SOUND'
   flags?: string[]
   start_time?: number
 }
 
+/** Animates a `LIGHT` towards the given properties over the event's duration. */
 export interface StartLightPropAnim extends EventCommon {
   action: 'START_LIGHT_PROP_ANIM'
   lightprops?: LightProps
 }
 
+/** Animates a `CAMERA`'s frustum. **The key names differ from the entity's** — see {@link CameraAnimProps}. */
 export interface StartCameraPropAnim extends EventCommon {
   action: 'START_CAMERA_PROP_ANIM'
   cameraprops?: CameraAnimProps
 }
 
+/** Moves an entity along a `MOTION_PATH`, between two points on it given as percentages. */
 export interface StartPathAnimation extends EventCommon, Oriented {
   action: 'START_PATH_ANIMATION'
   start_percent?: number
@@ -354,22 +375,26 @@ export interface StartPathAnimation extends EventCommon, Oriented {
   flags?: string[]
 }
 
+/** Animates an entity's position or orientation. `q_orient` and `axisrot` are the forms that animate. */
 export interface StartSpatialPropAnim extends EventCommon, Targeted {
   action: 'START_SPATIAL_PROP_ANIM'
   spatialprops?: SpatialProps
 }
 
+/** Parents one entity to another, or to a part of it, for the event's duration. */
 export interface AttachEntity extends EventCommon, Targeted, Oriented {
   action: 'ATTACH_ENTITY'
   flags?: string[]
 }
 
+/** Joins two entities by name at a hardpoint on each. */
 export interface ConnectHardpoints extends EventCommon {
   action: 'CONNECT_HARDPOINTS'
   hardpoint?: string
   parent_hardpoint?: string
 }
 
+/** Plays a named animation script on a `DEFORMABLE`, blending it against whatever is already running. */
 export interface StartMotion extends EventCommon {
   action: 'START_MOTION'
   animation?: string
@@ -397,25 +422,30 @@ export interface StartIk extends EventCommon, Targeted, Oriented {
   event_flags?: number
 }
 
+/** Starts a `PSYS` entity's effect. Carries nothing beyond what every event does. */
 export interface StartPsys extends EventCommon {
   action: 'START_PSYS'
 }
 
+/** Animates a `PSYS`'s `sparam`, driving the effect between its authored states. */
 export interface StartPsysPropAnim extends EventCommon {
   action: 'START_PSYS_PROP_ANIM'
   psysprops?: PsysProps
 }
 
+/** Animates a `SOUND`'s attenuation and falloff. */
 export interface StartAudioPropAnim extends EventCommon {
   action: 'START_AUDIO_PROP_ANIM'
   audioprops?: AudioProps
 }
 
+/** Animates the scene's fog. The same keys a `SCENE` entity writes inline — see {@link FogProps}. */
 export interface StartFogPropAnim extends EventCommon {
   action: 'START_FOG_PROP_ANIM'
   fogprops?: FogProps
 }
 
+/** Animates a `DEFORMABLE`'s `floor_height`. */
 export interface StartFlrHeightAnim extends EventCommon, Targeted {
   action: 'START_FLR_HEIGHT_ANIM'
   floor_height?: number

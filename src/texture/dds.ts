@@ -32,6 +32,7 @@ const DDS_CAPS2_CUBEMAP_ALL_FACES = DDS_CAPS2_CUBEMAP_FACES.reduce((bits, bit) =
 /** How many faces a cubemap holds. */
 export const CUBEMAP_FACES = DDS_CAPS2_CUBEMAP_FACES.length
 
+/** `DDPF_FOURCC` code of a surface's pixel format, or `NONE` for an uncompressed one. */
 export enum Compression {
   NONE = 0,
   DXT1 = 0x31545844,
@@ -39,6 +40,7 @@ export enum Compression {
   DXT5 = 0x35545844,
 }
 
+/** Per-channel bit masks of an uncompressed pixel format, as `DDPIXELFORMAT` records them. */
 interface ColorMask {
   r: number
   g: number
@@ -46,6 +48,12 @@ interface ColorMask {
   a: number
 }
 
+/**
+ * A DDS image: one header, and one mip chain per surface it stores.
+ *
+ * Everything but {@link surfaces} describes the single header the whole file shares, so a cubemap's
+ * six faces cannot differ in size or format.
+ */
 export interface DirectDrawSurface {
   width: number
   height: number
@@ -95,6 +103,16 @@ const levelByteLength = (
   }
 }
 
+/**
+ * Reads a DDS image and its mip chain out of a `MIPS` payload.
+ *
+ * Nothing in the file says where one mip level ends, so each level's byte length is derived from the
+ * compression, its own dimensions and the bit count; an absent `DDSD_MIPMAPCOUNT` means one level.
+ * `dwCaps2` is sought out rather than read in sequence — it is the only field saying whether six
+ * faces follow the header instead of one, and it sits past where the header stops being read.
+ * @throws RangeError on a bad signature, a compression with no size rule, or a partial cubemap.
+ * @throws Error when the pixel format header is missing, without which nothing else can be read.
+ */
 export const readDirectDrawSurface = (view: BufferView): DirectDrawSurface => {
   // Read main header.
   const signature = view.readInt32()

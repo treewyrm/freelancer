@@ -10,14 +10,17 @@ export default class File implements ArrayBufferView {
     public data: ArrayBufferView = new Uint8Array(),
   ) {}
 
+  /** Underlying buffer of the payload, which a file shares with the tree it was read from. */
   get buffer() {
     return this.data.buffer
   }
 
+  /** Where the payload starts in that buffer, which for a file read from a tree is its data offset. */
   get byteOffset(): number {
     return this.data.byteOffset
   }
 
+  /** Payload size in bytes. */
   get byteLength(): number {
     return this.data.byteLength
   }

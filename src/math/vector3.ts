@@ -15,6 +15,7 @@ const Vector3 = {
   y: { x: 0, y: 1, z: 0 } as const,
   z: { x: 0, y: 0, z: 1 } as const,
 
+  /** Narrows unknown data to a vector, checking that all three components are numbers. */
   is(value: unknown): value is Vector3 {
     return (
       value !== null &&
@@ -28,26 +29,32 @@ const Vector3 = {
     )
   },
 
+  /** Whether any component is NaN. */
   isNaN(vector: Vector3): boolean {
     return Number.isNaN(vector.x) || Number.isNaN(vector.y) || Number.isNaN(vector.z)
   },
 
+  /** Whether every component is finite. */
   isFinite(vector: Vector3): boolean {
     return Number.isFinite(vector.x) && Number.isFinite(vector.y) && Number.isFinite(vector.z)
   },
 
+  /** Compares componentwise with a tolerance, as scalar `equal`. */
   equal(a: Vector3, b: Vector3, e?: number): boolean {
     return equal(a.x, b.x, e) && equal(a.y, b.y, e) && equal(a.z, b.z, e)
   },
 
+  /** Dot product. */
   dot(a: Vector3, b: Vector3): number {
     return a.x * b.x + a.y * b.y + a.z * b.z
   },
 
+  /** Vector length. */
   magnitude(vector: Vector3): number {
     return Math.sqrt(Vector3.dot(vector, vector))
   },
 
+  /** Vector scaled to unit length. A zero vector yields NaN components rather than throwing. */
   normalize(vector: Vector3): Vector3 {
     return Vector3.divideScalar(vector, Vector3.magnitude(vector))
   },
@@ -199,6 +206,7 @@ const Vector3 = {
     }
   },
 
+  /** Reads three `float32` components from a cursor. */
   read(view: BufferView): Vector3 {
     return {
       x: view.readFloat32(),
@@ -207,6 +215,7 @@ const Vector3 = {
     }
   },
 
+  /** Writes three `float32` components into a view of its own. */
   write(vector: Vector3) {
     return BufferView.allocate(Float32Array.BYTES_PER_ELEMENT * 3)
       .writeFloat32(vector.x)

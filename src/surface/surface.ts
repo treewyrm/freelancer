@@ -241,6 +241,7 @@ export function getMassProperties(
   }
 }
 
+/** Walks a bounding volume hierarchy depth-first, left before right, yielding every node. */
 export function* getNodes(root: Node) {
   const queue = [root]
   let node
@@ -253,6 +254,7 @@ export function* getNodes(root: Node) {
   }
 }
 
+/** Every hull in a hierarchy, in {@link getNodes} order. Nodes carrying none are skipped. */
 export function* getHulls(root: Node) {
   for (const node of getNodes(root)) if (node.hull) yield node.hull
 }
@@ -308,6 +310,17 @@ const subView = (view: BufferView, length: number): BufferView => {
   return value
 }
 
+/**
+ * Reads a `surf` chunk into a part, in place — the mass properties, the node hierarchy, the hulls
+ * and the shared point list.
+ *
+ * The chunk is a verbatim memory image, so it is navigated by offset rather than read straight
+ * through: nodes carry relative offsets to their right child and their hull, and the point list is
+ * found through whichever hull was read last. Every offset is bounds-checked against the block, so
+ * a truncated or hand-edited file throws rather than reading past itself.
+ * @param surface Part to fill; every field is overwritten.
+ * @throws RangeError when a node offset falls outside the block, or no hull pointed at the points.
+ */
 export function readSurface(view: BufferView, surface: Surface): void {
   view = subView(view, view.readUint32())
 

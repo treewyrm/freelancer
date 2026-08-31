@@ -21,6 +21,7 @@ export class Document implements Iterable<Section> {
   /** Unparsed lines and parsed sections, in read/write order. */
   entries: (Section | Line)[]
 
+  /** @param entries Sections and unparsed lines, in the order they should be written. */
   constructor(...entries: (Section | Line)[]) {
     this.entries = entries
   }

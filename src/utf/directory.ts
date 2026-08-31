@@ -6,6 +6,7 @@ import { fromDOSTimestamp, fromFileTime, toDOSTimestamp, toFileTime } from '#/ut
 import { toHex } from '#/utility/string.js'
 import { type Entry } from './types.js'
 
+/** One pending entry in the breadth-first read, and the directory it belongs under. */
 interface ReadQueueItem {
   /** Entry offset. */
   offset: number
@@ -14,6 +15,10 @@ interface ReadQueueItem {
   parent?: Directory
 }
 
+/**
+ * One pending node in the breadth-first write. Sibling and child offsets are backfilled through
+ * `parent` and `previous` once the entry's own position is known.
+ */
 interface WriteQueueItem {
   /** Queue iteration value. */
   target: Directory | File

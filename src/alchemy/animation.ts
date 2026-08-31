@@ -3,14 +3,20 @@ import type Vector3 from '#/math/vector3.js'
 import { readArray, writeArray, readFloat, writeFloat, readInteger, writeInteger } from './misc.js'
 import type { Keyframe } from '#/math/animation.js'
 
+/** A scalar keyframe. */
 export interface FloatKeyframe extends Keyframe {
   value: number
 }
 
+/**
+ * A three-component keyframe. On a colour list the value is RGB; on a Hermite curve it is
+ * `x` = value, `y` = in-tangent, `z` = out-tangent, which is not a point in space.
+ */
 export interface VectorKeyframe extends Keyframe {
   value: Vector3
 }
 
+/** What every keyframe list has, whatever governs its ends. */
 export interface Animation<T extends Keyframe> {
   keyframes: T[]
 }
@@ -37,6 +43,7 @@ export enum EaseType {
   Auto,
 }
 
+/** A keyframe list interpolated by one named easing curve, with no behaviour outside its range. */
 export interface EaseAnimation<T extends Keyframe> extends Animation<T> {
   easing: EaseType
 }
@@ -54,15 +61,21 @@ export enum WrapFlags {
   AfterContinue = 1 << 7,
 }
 
+/**
+ * A keyframe list that says what happens outside its own range, and what an empty list evaluates to.
+ */
 export interface LoopAnimation<T extends Keyframe> extends Animation<T> {
   default: number
   flags: WrapFlags
 }
 
+/** A scalar animated on both axes: outer list keyed on sparam, inner lists on particle lifetime. */
 export type AnimatedFloat = EaseAnimation<Keyframe & EaseAnimation<FloatKeyframe>>
 
+/** A colour animated on both axes, as {@link AnimatedFloat} with RGB inner keyframes. */
 export type AnimatedColor = EaseAnimation<Keyframe & EaseAnimation<VectorKeyframe>>
 
+/** A Hermite curve animated on both axes; the inner lists are looped rather than eased. */
 export type AnimatedCurve = EaseAnimation<Keyframe & LoopAnimation<VectorKeyframe>>
 
 /** Animated transform point. */
@@ -76,6 +89,7 @@ export interface TransformPoint {
 // only the enable bit is ever varied and the rest cannot be read off the data. They select neither
 // which channels are present (the payload is always nine curves) nor which are used (the same word
 // covers every combination of populated channels). See the TODO section in docs/ALCHEMY.md.
+/** Which of a node transform's channels are present, and whatever else the low bits mean. */
 export enum TransformFlags {
   None = 0,
   Unknown1 = 1 << 2,
@@ -99,6 +113,7 @@ export interface Transform {
   scale?: TransformPoint
 }
 
+/** Reads a scalar keyframe: key then value, two floats. */
 export function readFloatKeyframe(view: BufferView): FloatKeyframe {
   return {
     key: view.readFloat32(),
@@ -106,6 +121,7 @@ export function readFloatKeyframe(view: BufferView): FloatKeyframe {
   }
 }
 
+/** Writes a scalar keyframe. */
 export function writeFloatKeyframe(keyframe: FloatKeyframe): BufferView {
   const { key, value } = keyframe
 
@@ -114,6 +130,10 @@ export function writeFloatKeyframe(keyframe: FloatKeyframe): BufferView {
     .writeFloat32(value)
 }
 
+/**
+ * Reads a vector keyframe: key then three floats. On a colour curve those are RGB; on a Hermite
+ * curve they are value, in-tangent and out-tangent, not a point.
+ */
 export function readVectorKeyframe(view: BufferView): VectorKeyframe {
   return {
     key: view.readFloat32(),
@@ -125,6 +145,7 @@ export function readVectorKeyframe(view: BufferView): VectorKeyframe {
   }
 }
 
+/** Writes a vector keyframe. */
 export function writeVectorKeyframe(keyframe: VectorKeyframe): BufferView {
   const {
     key,
@@ -138,6 +159,13 @@ export function writeVectorKeyframe(keyframe: VectorKeyframe): BufferView {
     .writeFloat32(z)
 }
 
+/**
+ * Reads an eased keyframe list: an easing byte, a count byte, then that many keyframes.
+ *
+ * The easing byte is stored as read even when it falls outside {@link EaseType}, so a file carrying
+ * one round-trips; only evaluation has to commit to a meaning.
+ * @param read Reader for one keyframe, which fixes the element type.
+ */
 export function readEaseAnimation<T extends Keyframe>(
   view: BufferView,
   read: (view: BufferView) => T,
@@ -148,6 +176,10 @@ export function readEaseAnimation<T extends Keyframe>(
   }
 }
 
+/**
+ * Writes an eased keyframe list. The count is derived, and the easing byte goes out as carried.
+ * @param write Writer for one keyframe, matching the reader that produced the list.
+ */
 export function writeEaseAnimation<T extends Keyframe>(
   animation: EaseAnimation<T>,
   write: (value: T) => BufferView,
@@ -159,6 +191,12 @@ export function writeEaseAnimation<T extends Keyframe>(
   return BufferView.join(view, writeArray(animation.keyframes, write))
 }
 
+/**
+ * Reads a looped keyframe list: a fallback value, the {@link WrapFlags} governing keys outside the
+ * list's own range, a count, then that many keyframes. The counts here are 16-bit, unlike an eased
+ * list's.
+ * @param read Reader for one keyframe, which fixes the element type.
+ */
 export function readLoopAnimation<T extends Keyframe>(
   view: BufferView,
   read: (view: BufferView) => T,
@@ -170,6 +208,10 @@ export function readLoopAnimation<T extends Keyframe>(
   }
 }
 
+/**
+ * Writes a looped keyframe list. Only the count is derived.
+ * @param write Writer for one keyframe, matching the reader that produced the list.
+ */
 export function writeLoopAnimation<T extends Keyframe>(
   animation: LoopAnimation<T>,
   write: (value: T) => BufferView,
@@ -184,6 +226,10 @@ export function writeLoopAnimation<T extends Keyframe>(
   return BufferView.join(view, writeArray(animation.keyframes, write))
 }
 
+/**
+ * Reads a two-level scalar animation: an outer eased list keyed on sparam, over inner eased lists
+ * keyed on particle lifetime.
+ */
 export function readAnimatedFloat(view: BufferView): AnimatedFloat {
   return readEaseAnimation(view, (view) => ({
     key: readFloat(view),
@@ -191,12 +237,14 @@ export function readAnimatedFloat(view: BufferView): AnimatedFloat {
   }))
 }
 
+/** Writes a two-level scalar animation. */
 export function writeAnimatedFloat(animation: AnimatedFloat): BufferView {
   return writeEaseAnimation(animation, ({ key, ...keyframe }) =>
     BufferView.join(writeFloat(key), writeEaseAnimation(keyframe, writeFloatKeyframe)),
   )
 }
 
+/** Reads a two-level colour animation, as {@link readAnimatedFloat} with RGB inner keyframes. */
 export function readAnimatedColor(view: BufferView): AnimatedColor {
   return readEaseAnimation(view, (view) => ({
     key: readFloat(view),
@@ -204,12 +252,17 @@ export function readAnimatedColor(view: BufferView): AnimatedColor {
   }))
 }
 
+/** Writes a two-level colour animation. */
 export function writeAnimatedColor(animation: AnimatedColor): BufferView {
   return writeEaseAnimation(animation, ({ key, ...keyframe }) =>
     BufferView.join(writeFloat(key), writeEaseAnimation(keyframe, writeVectorKeyframe)),
   )
 }
 
+/**
+ * Reads a two-level curve animation: an outer eased list keyed on sparam, over inner *looped*
+ * lists whose vector keyframes are Hermite control points rather than plain values.
+ */
 export function readAnimatedCurve(view: BufferView): AnimatedCurve {
   return readEaseAnimation(view, (view) => ({
     key: readFloat(view),
@@ -217,12 +270,14 @@ export function readAnimatedCurve(view: BufferView): AnimatedCurve {
   }))
 }
 
+/** Writes a two-level curve animation. */
 export function writeAnimatedCurve(animation: AnimatedCurve): BufferView {
   return writeEaseAnimation(animation, ({ key, ...keyframe }) =>
     BufferView.join(writeFloat(key), writeLoopAnimation(keyframe, writeVectorKeyframe)),
   )
 }
 
+/** Reads three curves as one animated vector, X then Y then Z. */
 export function readTransformPoint(view: BufferView): TransformPoint {
   return {
     x: readAnimatedCurve(view),
@@ -231,6 +286,7 @@ export function readTransformPoint(view: BufferView): TransformPoint {
   }
 }
 
+/** Writes three curves as one animated vector. */
 export function writeTransformPoint(point: TransformPoint): BufferView {
   const { x, y, z } = point
   return BufferView.join(writeAnimatedCurve(x), writeAnimatedCurve(y), writeAnimatedCurve(z))

@@ -20,6 +20,13 @@ const EXTENTS = 0x73747865 // 'exts'
 const SURFACES = 0x66727573 // 'surf'
 const HARDPOINTS = 0x64697068 // 'hpid'
 
+/**
+ * One collidable part of a `.sur` file, identified by the CRC of the model part it collides for.
+ *
+ * A file holds one per moving piece, so a ship's hull and each of its animated flaps are separate
+ * parts. What it carries beyond its own extent — the hierarchy, the hulls, the shared points, the
+ * mass properties — comes from {@link Surface}.
+ */
 export interface Part extends Extent, Surface {
   id: number
 
@@ -44,6 +51,10 @@ export interface HullGeometry {
   triangles: Iterable<TriangleIndices>
 }
 
+/**
+ * What {@link createPart} cannot derive, plus overrides for what it can. Every mass property is
+ * optional and derived when left out.
+ */
 export interface PartOptions extends Partial<MassProperties> {
   /** Part is welded to the root. Defaults to true, which writes no `!fxd` chunk. */
   fixed?: boolean
@@ -144,6 +155,14 @@ function writeHardpoints(hardpoints: number[]) {
   return view
 }
 
+/**
+ * Reads one part: its id, its chunk count, and then that many tagged chunks.
+ *
+ * Only `!fxd` is an absence rather than a payload — a part with no such chunk is fixed. The others
+ * fill the part in place, so the defaults here are what a part missing one of them keeps.
+ * @throws RangeError on an unrecognized chunk tag, which cannot be skipped: payloads are not
+ * length-prefixed, so carrying on would desynchronize the rest of the file.
+ */
 export function readPart(view: BufferView): Part {
   const part: Part = {
     id: view.readInt32(),

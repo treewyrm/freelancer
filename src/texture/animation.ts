@@ -2,6 +2,7 @@ import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
 
+/** One frame: which sibling atlas to sample, and the rectangle within it. */
 export interface AnimatedTextureFrame {
   /** Texture image index. */
   index: number
@@ -19,6 +20,10 @@ export interface AnimatedTextureFrame {
   v2: number
 }
 
+/**
+ * An animation entry. It holds no pixels — every frame indexes a sibling entry named
+ * `<name>_<index>`, and resolving those is the consumer's, as every reference here is.
+ */
 export interface AnimatedTexture {
   /** Actual texture atlases will match name with _N suffix where N is atlas index referenced in frame. */
   name: string
@@ -34,6 +39,16 @@ export interface AnimatedTexture {
 
 const frameByteLength = Int32Array.BYTES_PER_ELEMENT + Float32Array.BYTES_PER_ELEMENT * 4
 
+/**
+ * Reads an animation entry: the frame rects, and the rate they play at.
+ *
+ * `undefined` when the entry is not an animation, which is how the library probes for one — every
+ * check here is an absence rather than damage. An absent `FPS` defaults to 15.
+ *
+ * Frames are not pixels: each indexes a sibling atlas entry named `<name>_<index>` and names a
+ * rectangle within it. Resolving that sibling is the caller's, as every reference in this library
+ * is.
+ */
 export const readAnimatedTexture = (parent: Directory): AnimatedTexture | undefined => {
   const fps = parent.getFile('FPS')
   const rate = fps ? BufferView.from(fps.data).readFloat32() : 15
@@ -76,6 +91,10 @@ export const readAnimatedTexture = (parent: Directory): AnimatedTexture | undefi
 export const getTextureCount = ({ frames }: AnimatedTexture): number =>
   frames.reduce((highest, { index }) => Math.max(highest, index + 1), 0)
 
+/**
+ * Writes an animation entry. Both counts are derived — `Frame count` from the list, `Texture count`
+ * from the highest frame index — so neither can disagree with the frames beside it.
+ */
 export function writeAnimatedTexture(texture: AnimatedTexture): Directory {
   const textures = new File('Texture count').writeIntegers(getTextureCount(texture))
   const count = new File('Frame count').writeIntegers(texture.frames.length)

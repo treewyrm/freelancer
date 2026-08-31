@@ -57,6 +57,10 @@ const TABLE = `
   SETLINE:b        LONGARGW:w       LONGARG:b        CHECKSTACK:b
 `
 
+/**
+ * One entry of the Lua 3.2 opcode table: how many operand bytes follow, which is all a reader that
+ * only walks the stream needs to know.
+ */
 export interface Opcode {
   readonly name: string
 
@@ -97,4 +101,5 @@ export const ConstantTag = {
   String: 0x02,
 } as const
 
+/** The tag byte preceding a constant pool entry. */
 export type ConstantTag = (typeof ConstantTag)[keyof typeof ConstantTag]

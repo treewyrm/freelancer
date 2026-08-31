@@ -21,13 +21,22 @@ const WHITESPACE = '[\\s\\u00a0]'
 
 const TRIM = new RegExp(`^${WHITESPACE}+|${WHITESPACE}+$`, 'g')
 
+/** Strips leading and trailing {@link WHITESPACE}, U+00A0 included. */
 export const trim = (value: string): string => value.replace(TRIM, '')
 
+/** Whether text is a `0x`-prefixed hexadecimal literal of at most eight digits, i.e. a `uint32`. */
 export const isHex = (value: string): boolean => /^0x[A-Fa-f0-9]{1,8}$/.test(value)
 
+/** Parses a `0x`-prefixed hexadecimal literal, `NaN` when it is not one. */
 export const parseHex = (value: string): number =>
   isHex(value) ? parseInt(value.substring(2), 16) : NaN
 
+/**
+ * Formats a number as zero-padded uppercase hexadecimal, the way ids and CRCs are written in the
+ * game's own files and in this library's diagnostics. The value is taken unsigned.
+ * @param byteLength Width to pad to, in bytes — two hexadecimal digits each.
+ * @param prefix Literal prefix, `0x` by default; pass an empty string to omit it.
+ */
 export const toHex = (value: number, byteLength = 4, prefix = '0x'): string =>
   prefix +
   (value >>> 0)

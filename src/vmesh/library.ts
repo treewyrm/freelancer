@@ -3,8 +3,18 @@ import { getResource, type Hashable } from '#/hash.js'
 import { readVMeshData, writeVMeshData, type VMeshData } from './data.js'
 import type { VMeshRef } from './ref.js'
 
+/**
+ * The meshes one file carries. A flat list rather than a map: resolution is global across whatever
+ * libraries the consumer has loaded, not per file — see {@link getMesh}.
+ */
 export type VMeshLibrary = VMeshData[]
 
+/**
+ * Reads a `VMeshLibrary` directory, one mesh per subdirectory. An empty library comes back when
+ * there is no such directory — a file holding only references is normal, since a `VMeshRef` may
+ * name a mesh that lives in another file entirely.
+ * @param parent Parent directory (typically root)
+ */
 export function readVMeshLibrary(parent: Directory): VMeshLibrary {
   const library: VMeshLibrary = []
 
@@ -21,6 +31,10 @@ export function readVMeshLibrary(parent: Directory): VMeshLibrary {
   return library
 }
 
+/**
+ * Writes a `VMeshLibrary` directory. Meshes are named by their own `name`, and nothing here checks
+ * that a reference elsewhere in the file resolves to one of them.
+ */
 export function writeVMeshLibrary(values: Iterable<VMeshData>): Directory {
   const directory = new Directory('VMeshLibrary')
 

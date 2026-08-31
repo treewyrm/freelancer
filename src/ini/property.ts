@@ -2,12 +2,17 @@ import { fold } from '#/utility/string.js'
 import type { Value, ValueType } from './types.js'
 import { toBoolean, toFloat, toInteger, toText } from './value.js'
 
+/** The JavaScript type a {@link ValueType} coerces to. */
 type TypeOf<T extends ValueType> = T extends 'boolean'
   ? boolean
   : T extends 'integer' | 'float'
     ? number
     : string
 
+/**
+ * A tuple of coerced values matching a tuple of requested types, each `undefined` where the property
+ * has no value in that position.
+ */
 type TypeValues<T extends ValueType[]> = { [K in keyof T]: TypeOf<T[K]> | undefined }
 
 /**

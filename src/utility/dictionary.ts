@@ -19,18 +19,25 @@ export default class Dictionary implements ArrayBufferView {
     protected encoder: TextEncoder = new TextEncoder(),
   ) {}
 
+  /** Always zero — the block starts at the first name written. */
   get byteOffset(): number {
     return this.words.byteOffset
   }
 
+  /** Bytes the block occupies so far, terminators included. */
   get byteLength(): number {
     return this.words.byteLength
   }
 
+  /** The names block as one buffer, ready to be written into a file. */
   get buffer(): ArrayBuffer {
     return this.words.buffer
   }
 
+  /**
+   * Stores a name and returns the offset an entry should point at. A name already stored comes back
+   * at the offset it was given the first time, which is what deduplicates the block.
+   */
   push(value: string): number {
     let offset = this.offsets.get(value)
     if (offset !== undefined) return offset

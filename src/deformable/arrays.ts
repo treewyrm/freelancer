@@ -15,6 +15,10 @@ const count = (file: File, size: number): number => {
   return file.byteLength / size
 }
 
+/**
+ * Reads a `uint16` array. Element count comes from the byte length.
+ * @throws RangeError when the payload is not a whole number of elements.
+ */
 export function readUint16Array(file: File): Uint16Array {
   const view = BufferView.from(file)
   const values = new Uint16Array(count(file, Uint16Array.BYTES_PER_ELEMENT))
@@ -24,6 +28,10 @@ export function readUint16Array(file: File): Uint16Array {
   return values
 }
 
+/**
+ * Reads a `uint32` array. Element count comes from the byte length.
+ * @throws RangeError when the payload is not a whole number of elements.
+ */
 export function readUint32Array(file: File): Uint32Array {
   const view = BufferView.from(file)
   const values = new Uint32Array(count(file, Uint32Array.BYTES_PER_ELEMENT))
@@ -33,6 +41,10 @@ export function readUint32Array(file: File): Uint32Array {
   return values
 }
 
+/**
+ * Reads a `float32` array. Element count comes from the byte length.
+ * @throws RangeError when the payload is not a whole number of elements.
+ */
 export function readFloat32Array(file: File): Float32Array {
   const view = BufferView.from(file)
   const values = new Float32Array(count(file, Float32Array.BYTES_PER_ELEMENT))
@@ -42,6 +54,7 @@ export function readFloat32Array(file: File): Float32Array {
   return values
 }
 
+/** Writes a `uint16` array into a file. The name is the only thing that records the element type. */
 export function writeUint16Array(name: string, values: ArrayLike<number>): File {
   const view = BufferView.allocate(values.length * Uint16Array.BYTES_PER_ELEMENT)
 
@@ -50,6 +63,7 @@ export function writeUint16Array(name: string, values: ArrayLike<number>): File 
   return new File(name, view.rewind())
 }
 
+/** Writes a `uint32` array into a file. The name is the only thing that records the element type. */
 export function writeUint32Array(name: string, values: ArrayLike<number>): File {
   const view = BufferView.allocate(values.length * Uint32Array.BYTES_PER_ELEMENT)
 
@@ -58,6 +72,7 @@ export function writeUint32Array(name: string, values: ArrayLike<number>): File 
   return new File(name, view.rewind())
 }
 
+/** Writes a `float32` array into a file. The name is the only thing that records the element type. */
 export function writeFloat32Array(name: string, values: ArrayLike<number>): File {
   const view = BufferView.allocate(values.length * Float32Array.BYTES_PER_ELEMENT)
 

@@ -41,10 +41,25 @@ export const from = (value: boolean | number | string): Value => {
 /** Infers a list of values from primitives. */
 export const list = (...values: (boolean | number | string)[]): Value[] => values.map(from)
 
+/**
+ * Whether a value carries the boolean type tag. Retail carries none, so this is a test for
+ * hand-built data — a flag in a file is the *string* `true`, which {@link isString} matches.
+ */
 export const isBoolean = (value: Value): boolean => value.type === 'boolean'
+
+/** Whether a value carries the integer type tag, which `100` was compiled to and `100.0` was not. */
 export const isInteger = (value: Value): boolean => value.type === 'integer'
+
+/**
+ * Whether a value carries the float type tag. **14,209 retail floats hold an integral value**, so
+ * this is a fact about the tag and not about the number.
+ */
 export const isFloat = (value: Value): boolean => value.type === 'float'
+
+/** Whether a value carries either numeric type tag. */
 export const isNumber = (value: Value): boolean => isInteger(value) || isFloat(value)
+
+/** Whether a value carries the string type tag. */
 export const isString = (value: Value): boolean => value.type === 'string'
 
 /**

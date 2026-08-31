@@ -1,6 +1,12 @@
 import BufferView from '#/utility/bufferview.js'
 import { expandRGB } from './misc.js'
 
+/**
+ * Decoded Targa pixel data.
+ *
+ * `depth` is never 16 by the time it leaves the reader: 16-bit images are expanded to 24-bit RGB,
+ * and 24- and 32-bit images are channel-swapped out of Targa's BGR order.
+ */
 export interface TargaPixels {
   /** Image width. */
   width: number
@@ -15,6 +21,7 @@ export interface TargaPixels {
   bitmap: Uint8Array
 }
 
+/** {@link TargaPixels} plus the vertical origin the image descriptor declared. */
 export interface TargaBitmap extends TargaPixels {
   /**
    * First row of the bitmap is the top of the image rather than the bottom, per bit 5 of the
@@ -24,10 +31,21 @@ export interface TargaBitmap extends TargaPixels {
   flip: boolean
 }
 
+/** Decoding options, threaded through every Targa reader. */
 export interface TargaOptions {
+  /**
+   * Leave the bitmap in Targa's own BGR order instead of swapping it to RGB.
+   *
+   * **Currently inert** — the option is accepted and passed down but no reader consults it, so
+   * every image comes back channel-swapped regardless.
+   */
   reverseChannels?: boolean
 }
 
+/**
+ * Targa image type, from the header's second byte. Only `COLORMAP` and `RGB` occur in retail; the
+ * run-length forms are listed for completeness and are rejected by the reader.
+ */
 export enum ImageType {
   NONE = 0,
   COLORMAP = 1,

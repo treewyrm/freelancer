@@ -18,12 +18,16 @@ import crc32 from './crc32.js'
 import id32 from './id32.js'
 import { encode } from '#/utility/encoding.js'
 
+/** Anything a lookup accepts as a key: a name to hash, or a hash already taken. */
 export type Hashable = number | string | ArrayBufferView | ArrayBufferLike
 
+/** Pulls the name to hash out of an item, for the lookups that scan a list. */
 export type Hasher<T> = (value: T) => Hashable
 
+/** One of the two hash functions, either of which may be asked to preserve case. */
 export type Hash = (value: Hashable, caseSensitive?: boolean) => number
 
+/** Signature of the two by-key finders. */
 type FindByHash = <T>(
   items: Array<T>,
   predicate: Hasher<T>,
@@ -31,6 +35,7 @@ type FindByHash = <T>(
   caseSensitive?: boolean,
 ) => T | undefined
 
+/** Signature of the two by-key filters. */
 type FilterByHash = <T>(
   items: Array<T>,
   predicate: Hasher<T>,
@@ -38,6 +43,7 @@ type FilterByHash = <T>(
   caseSensitive?: boolean,
 ) => Array<T>
 
+/** Signature of the two by-key setters, which replace in place or append. */
 type SetByHash = <T>(items: T[], predicate: Hasher<T>, value: T, caseSensitive?: boolean) => void
 
 /**
@@ -155,6 +161,7 @@ const set = <T>(
 /** Finds resource matching key value. */
 export const getResource: FindByHash = (...args) => find(getResourceId, ...args)
 
+/** Every resource matching key value, for the containers where a name is not unique. */
 export const filterResources: FilterByHash = (...args) => filter(getResourceId, ...args)
 
 /** Sets resource in array (replaces existing resource matching key). */
@@ -163,6 +170,7 @@ export const setResource: SetByHash = (...args) => set(getResourceId, ...args)
 /** Finds object matching key value. */
 export const getObject: FindByHash = (...args) => find(getObjectId, ...args)
 
+/** Every object matching key value, for the containers where a nickname is not unique. */
 export const filterObjects: FilterByHash = (...args) => filter(getObjectId, ...args)
 
 /** Sets object in array (replaces existing object matching key). */

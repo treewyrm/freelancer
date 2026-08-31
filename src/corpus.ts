@@ -13,6 +13,7 @@ interface Entry {
   directory: boolean
 }
 
+/** The little of Node's filesystem the sweep needs, so the corpus helpers stay testable. */
 interface FileSystem {
   read(path: string): Promise<Uint8Array>
   list(path: string): Promise<Iterable<Entry>>
@@ -59,6 +60,7 @@ export function list(...extensions: string[]): string[] {
   return globSync('**/*', { cwd: root }).filter((path) => pattern.test(path))
 }
 
+/** One retail file swept off disk, unparsed. */
 export interface Asset {
   /** Path relative to the root it was swept from. */
   path: string
@@ -139,6 +141,7 @@ export const filesystem = (from: string = install): FileSystem => ({
   },
 })
 
+/** One retail file swept off disk and parsed as a UTF tree. */
 export interface TreeAsset {
   /** Path relative to the data root. */
   path: string

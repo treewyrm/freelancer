@@ -37,6 +37,10 @@ export interface JointMap {
   channel: Channel
 }
 
+/**
+ * One animated target within a script: either a part moving freely in its own frame, or a joint
+ * driven within the limits its constraint set.
+ */
 export type AnimationMap = ObjectMap | JointMap
 
 /** Map duration in seconds. */

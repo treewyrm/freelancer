@@ -63,6 +63,10 @@ export interface MaterialAnim {
   keys: MaterialKey[]
 }
 
+/**
+ * The material animations one file carries. A root-level sibling of `Cmpnd` rather than part of the
+ * model, since it animates materials by name and not parts.
+ */
 export type MaterialAnimLibrary = MaterialAnim[]
 
 /** Floats per `MADeltas` and `MAKeys` entry. */

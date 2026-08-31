@@ -41,6 +41,7 @@ const quote = (value: string): string => {
   return result + '"'
 }
 
+/** Layout choices the Lua source form leaves open. Neither affects what re-reads. */
 export interface WriteOptions {
   /** Width past which a table breaks across lines instead of staying on one. */
   width?: number

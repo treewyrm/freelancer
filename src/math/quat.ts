@@ -9,6 +9,7 @@ type Quat = Vector4
 const Quat = {
   identity: { x: 0, y: 0, z: 0, w: 1 } as const,
 
+  /** Negates the vector part, which inverts the rotation of a unit quaternion. */
   conjugate(quat: Vector4): Vector4 {
     return {
       x: -quat.x,

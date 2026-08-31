@@ -2,6 +2,7 @@
 export const INT32_MIN = -0x80000000
 export const INT32_MAX = 0x7fffffff
 
+/** Whether a number is a whole number the `int32` a BINI integer value holds can carry. */
 export const isInt32 = (value: number): boolean =>
   Number.isInteger(value) && value >= INT32_MIN && value <= INT32_MAX
 

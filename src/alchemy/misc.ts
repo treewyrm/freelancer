@@ -80,6 +80,7 @@ export enum BlendingMode {
   BothInverseSourceAlpha,
 }
 
+/** A Direct3D blend equation as a pair of {@link BlendingMode} factors. */
 export interface Blending {
   source: BlendingMode
   target: BlendingMode

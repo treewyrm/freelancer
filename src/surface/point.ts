@@ -12,6 +12,7 @@ export interface Point extends Vector3 {
   clientData: number
 }
 
+/** Reads one point from a cursor. Sixteen bytes: three coordinates and the trailing data word. */
 export function readPoint(view: BufferView): Point {
   return {
     x: view.readFloat32(),
@@ -21,6 +22,7 @@ export function readPoint(view: BufferView): Point {
   }
 }
 
+/** Writes one point at the cursor. `clientData` goes out as carried, never zeroed. */
 export function writePoint(view: BufferView, point: Point): void {
   view.writeFloat32(point.x)
   view.writeFloat32(point.y)

@@ -7,6 +7,10 @@ const decoder = new TextDecoder()
 export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> extends DataView<T> {
   #offset
 
+  /**
+   * Little-endian suits every binary format here except THN bytecode, which is the only reason the
+   * byte order is a parameter rather than a constant.
+   */
   constructor(
     buffer: T,
     byteOffset?: number,
@@ -22,10 +26,12 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
     this.#offset = offset
   }
 
+  /** Current position of the internal cursor. */
   get offset(): number {
     return this.#offset
   }
 
+  /** Moves the cursor. A negative value counts back from the end of the view. */
   set offset(value: number) {
     if (value < 0) value += this.byteLength
     this.#offset = value
@@ -116,11 +122,13 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
     return end
   }
 
+  /** Returns the cursor to the start. Chainable — a view left at its end reads back empty. */
   rewind(): this {
     this.offset = 0
     return this
   }
 
+  /** Copies a range into a new view of its own. {@link subarray} is the non-copying counterpart. */
   slice(begin?: number, end?: number) {
     const view = new Uint8Array(this.buffer, this.byteOffset, this.byteLength).slice(begin, end)
     return new BufferView(view.buffer)
@@ -416,22 +424,33 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
     return this
   }
 
+  /**
+   * Decodes a fixed-length run of bytes as UTF-8. Does not affect the cursor. Text the game stores
+   * as windows-1252 goes through `utility/encoding` instead.
+   */
   getString(offset: number, length: number): string {
     const view = new Uint8Array(this.buffer, this.byteOffset, this.byteLength)
     return decoder.decode(view.subarray(offset, offset + length))
   }
 
+  /**
+   * Encodes text as UTF-8 at a byte offset, truncating at the end of the view. Does not affect the
+   * cursor.
+   * @returns Bytes written, which is not the string length for anything but ASCII.
+   */
   setString(offset: number, value: string): number {
     const view = new Uint8Array(this.buffer, this.byteOffset, this.byteLength)
     return encoder.encodeInto(value, view.subarray(offset)).written
   }
 
+  /** Reads a fixed-length string from the cursor, advancing by `length` whatever it decoded to. */
   readString(length: number): string {
     const value = this.getString(this.offset, length)
     this.offset += length
     return value
   }
 
+  /** Writes text at the cursor, advancing by the bytes it took. */
   writeString(value: string): this {
     this.offset += this.setString(this.offset, value)
     return this
@@ -458,6 +477,7 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
     return this.writeString(value).writeUint8(0)
   }
 
+  /** Reads bytes from the cursor as lowercase hexadecimal, two digits each and no separator. */
   readHex(length: number): string {
     const view = new Uint8Array(length)
     this.readBuffer(view)
@@ -467,6 +487,7 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
       .join('')
   }
 
+  /** Writes hexadecimal digit pairs at the cursor as bytes. The counterpart of {@link readHex}. */
   writeHex(value: string): this {
     const view = new Uint8Array(value.length / 2)
 

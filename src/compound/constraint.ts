@@ -16,6 +16,13 @@ import {
   type Joint,
 } from './joint.js'
 
+/**
+ * One edge of a compound hierarchy: which part hangs off which, and by what joint.
+ *
+ * Parts are named, not indexed, and matching goes through `getResourceId`, so a constraint is
+ * resolved the same case-insensitive way the game resolves it. **The hierarchy is rebuilt from these
+ * records, not from directory nesting.**
+ */
 export interface Constraint {
   /** Parent object name. */
   parent: string

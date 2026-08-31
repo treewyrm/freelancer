@@ -98,6 +98,7 @@ interface Loose {
 /** Compound object child to parent connection joint. */
 export type Joint = Fixed | Revolute | Prismatic | Cylinder | Sphere | Loose
 
+/** Reads a `Fix` payload from a cursor already past the record's two name fields. */
 export function readFixed(view: BufferView): Fixed {
   return {
     type: 'fixed',
@@ -106,12 +107,14 @@ export function readFixed(view: BufferView): Fixed {
   }
 }
 
+/** Writes a `Fix` payload, for a caller to prepend the two name fields to. */
 export function writeFixed(fixed: Fixed): BufferView {
   const { position, rotation } = fixed
 
   return BufferView.join(Vector3.write(position), Matrix3.write(rotation))
 }
 
+/** Reads a `Rev` payload from a cursor already past the record's two name fields. */
 export function readRevolute(view: BufferView): Revolute {
   return {
     type: 'revolute',
@@ -124,6 +127,7 @@ export function readRevolute(view: BufferView): Revolute {
   }
 }
 
+/** Writes a `Rev` payload, for a caller to prepend the two name fields to. */
 export function writeRevolute(revolute: Revolute): BufferView {
   const { position, offset, rotation, axis, min, max } = revolute
 
@@ -140,6 +144,7 @@ export function writeRevolute(revolute: Revolute): BufferView {
   )
 }
 
+/** Reads a `Pris` payload from a cursor already past the record's two name fields. */
 export function readPrismatic(view: BufferView): Prismatic {
   return {
     type: 'prismatic',
@@ -152,6 +157,7 @@ export function readPrismatic(view: BufferView): Prismatic {
   }
 }
 
+/** Writes a `Pris` payload, for a caller to prepend the two name fields to. */
 export function writePrismatic(prismatic: Prismatic): BufferView {
   const { position, offset, rotation, axis, min, max } = prismatic
 
@@ -183,6 +189,10 @@ export function readCylinder(view: BufferView): Cylinder {
   }
 }
 
+/**
+ * Writes a `Cyl` payload, for a caller to prepend the two name fields to. Translation limits
+ * precede rotation limits, following CFW's `struct Cyl` rather than the comment in its header.
+ */
 export function writeCylinder(cylinder: Cylinder): BufferView {
   const { position, offset, rotation, axis, minPris, maxPris, minRev, maxRev } = cylinder
 
@@ -201,6 +211,10 @@ export function writeCylinder(cylinder: Cylinder): BufferView {
   )
 }
 
+/**
+ * Reads a `Sphere` payload from a cursor already past the record's two name fields. The six limits
+ * are per axis and interleaved min-then-max, not two vectors.
+ */
 export function readSphere(view: BufferView): Sphere {
   return {
     type: 'sphere',
@@ -216,6 +230,7 @@ export function readSphere(view: BufferView): Sphere {
   }
 }
 
+/** Writes a `Sphere` payload, for a caller to prepend the two name fields to. */
 export function writeSphere(sphere: Sphere): BufferView {
   const { position, offset, rotation, minX, maxX, minY, maxY, minZ, maxZ } = sphere
 
@@ -235,6 +250,7 @@ export function writeSphere(sphere: Sphere): BufferView {
   )
 }
 
+/** Reads a `Loose` payload from a cursor already past the record's two name fields. */
 export function readLoose(view: BufferView): Loose {
   return {
     type: 'loose',
@@ -243,6 +259,7 @@ export function readLoose(view: BufferView): Loose {
   }
 }
 
+/** Writes a `Loose` payload, for a caller to prepend the two name fields to. */
 export function writeLoose(loose: Loose): BufferView {
   const { position, rotation } = loose
 

@@ -230,6 +230,7 @@ const Vector4 = {
     }
   },
 
+  /** Reads four `float32` components from a cursor. */
   read(view: BufferView): Vector4 {
     return {
       x: view.readFloat32(),
@@ -239,6 +240,7 @@ const Vector4 = {
     }
   },
 
+  /** Writes four `float32` components into a view of its own. */
   write(vector: Vector4) {
     return BufferView.allocate(Float32Array.BYTES_PER_ELEMENT * 4)
       .writeFloat32(vector.x)

@@ -248,6 +248,7 @@ const Matrix3 = {
     return matrix
   },
 
+  /** Reads nine `float32` components from a cursor, one basis vector at a time. */
   read(view: BufferView): Matrix3 {
     return {
       x: Vector3.read(view),
@@ -256,6 +257,7 @@ const Matrix3 = {
     }
   },
 
+  /** Writes nine `float32` components into a view of its own, one basis vector at a time. */
   write(matrix: Matrix3) {
     return BufferView.join(
       Vector3.write(matrix.x),

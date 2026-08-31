@@ -34,6 +34,7 @@ export const ENTITY_TYPES = {
   PSYS: 13,
 } as const
 
+/** An entity `type` name, and the discriminant of {@link Entity}. */
 export type EntityTypeName = keyof typeof ENTITY_TYPES
 
 /**
@@ -72,6 +73,7 @@ export const EVENT_TYPES = {
   START_FLR_HEIGHT_ANIM: 18,
 } as const
 
+/** An event `action` name, and the discriminant of {@link Event}. */
 export type EventTypeName = keyof typeof EVENT_TYPES
 
 /** Event names in `thorn.dll` with no measured value. The free slots are 0, 1, 12, 17 and 19. */
@@ -110,6 +112,7 @@ export const AXES = {
   NEG_Z_AXIS: 5,
 } as const
 
+/** An axis name, as `up`, `front` and the axis half of an `axisrot` take it. */
 export type AxisName = keyof typeof AXES
 
 /**
@@ -120,16 +123,19 @@ export type AxisName = keyof typeof AXES
  */
 export const TARGET_TYPES = { ROOT: 0, HARDPOINT: 1, PART: 2 } as const
 
+/** What an event's `target_part` names — see {@link TARGET_TYPES}. */
 export type TargetTypeName = keyof typeof TARGET_TYPES
 
 /** `lightprops.type`. Measured 1/2/3, which is `D3DLIGHTTYPE` — THORN passes it straight through. */
 export const LIGHT_TYPES = { L_POINT: 1, L_SPOT: 2, L_DIRECT: 3 } as const
 
+/** A `lightprops.type` name. */
 export type LightTypeName = keyof typeof LIGHT_TYPES
 
 /** `fogprops.fogmode`. Measured 0/1/2/3, which is `D3DFOGMODE`, likewise passed through. */
 export const FOG_MODES = { F_NONE: 0, F_EXP: 1, F_EXP2: 2, F_LINEAR: 3 } as const
 
+/** A `fogprops.fogmode` name. */
 export type FogModeName = keyof typeof FOG_MODES
 
 /**
@@ -141,6 +147,7 @@ export type FogModeName = keyof typeof FOG_MODES
  */
 export const TRUTH = { N: 0, Y: 1 } as const
 
+/** `Y` or `N` — the identifiers THORN uses where a boolean would go. Never quoted, never `true`. */
 export type TruthName = keyof typeof TRUTH
 
 /**
@@ -222,6 +229,7 @@ export const CURVE_TYPES = [
  */
 export const PATH_TYPES = ['CV_CROrientationSplinePath', 'CV_CRSplinePath'] as const
 
+/** A spline class name. It decides how `path_data` reads, which is why {@link PathProps} is a union. */
 export type PathTypeName = (typeof PATH_TYPES)[number]
 
 /**
@@ -230,6 +238,7 @@ export type PathTypeName = (typeof PATH_TYPES)[number]
  */
 export const PATH_FLAGS = ['OPEN', 'CLOSED'] as const
 
+/** Whether a path's spline runs end to end or closes into a loop. */
 export type PathFlagName = (typeof PATH_FLAGS)[number]
 
 /**

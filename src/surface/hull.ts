@@ -14,6 +14,12 @@ export enum HullType {
   Skip = 5,
 }
 
+/**
+ * One convex hull. Corresponds to IVP's `IVP_Compact_Ledge`.
+ *
+ * Faces carry the half-edge adjacency, and its points index the shared list of the part the hull
+ * belongs to — a hull has no point list of its own.
+ */
 export interface Hull {
   /**
    * IVP's `union { ledgetree_node_offset; client_data; }`.
@@ -50,6 +56,10 @@ const toEdgeIndex = (slot: number): number => Math.ceil(slot - slot / 4)
 
 const toSlot = (edge: number): number => edge + Math.floor(edge / 3)
 
+/**
+ * The distinct point indices a hull's faces reference, in first-use order. A part shares one point
+ * list across all its hulls, so this is what says which of them a given hull actually touches.
+ */
 export const getIndices = (faces: Face[]): number[] => [
   ...new Set(faces.flatMap((face) => face.points)),
 ]
@@ -73,6 +83,15 @@ export const createHull = (
   reserved: 0,
 })
 
+/**
+ * Reads one hull from a cursor, rebuilding the half-edge adjacency as it goes.
+ *
+ * Faces are stored by their own index rather than in order, so the list is filled by position, not
+ * appended to. `opposites` is stored as a signed slot delta and is converted to the flat edge index
+ * `3f + v` this library uses.
+ * @throws RangeError when the header's index count disagrees with the face count that follows,
+ * which is the only self-check the record carries.
+ */
 export function readHull(view: BufferView): Hull {
   const id = view.readUint32()
   const hull = view.readUint32() // Hull header.
@@ -127,6 +146,10 @@ export function readHull(view: BufferView): Hull {
   return { id, type, faces, reserved }
 }
 
+/**
+ * Writes one hull at the cursor, converting the flat edge indices back to the signed slot deltas
+ * IVP stores, and deriving the header's index count from the face count.
+ */
 export function writeHull(view: BufferView, hull: Hull): void {
   view.writeUint32(hull.id)
   view.writeUint32((getIndexCount(hull.faces.length) << 8) | (hull.type & 0xff))

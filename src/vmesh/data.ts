@@ -3,6 +3,14 @@ import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
 import { readVMeshGroup, writeVMeshGroup, type VMeshGroup } from './group.js'
 
+/**
+ * One mesh in a library: the vertex and index buffers, and the groups that draw from them.
+ *
+ * Neither buffer is typed beyond its element size. `indices` are raw `uint16` values relative to the
+ * offsets a {@link VMeshRef} and a {@link VMeshGroup} supply, and `vertices` is bytes, because the
+ * FVF word decides the attribute layout and stride at runtime. Interpreting them is
+ * {@link vertexByteLength}'s and the consumer's.
+ */
 export interface VMeshData {
   name: string
 
@@ -123,6 +131,16 @@ export function vertexByteLength(format: Format): number {
   return size
 }
 
+/**
+ * Reads one mesh from its own directory in a `VMeshLibrary`. The directory name is the mesh name
+ * the CRC in a {@link VMeshRef} resolves against, so it is carried onto the result.
+ *
+ * Neither buffer is self-describing. The index count is a field, and the vertex buffer's length is
+ * the vertex count times whatever {@link vertexByteLength} makes of the FVF word — so a format bit
+ * misread desynchronizes the buffer rather than producing a wrong attribute.
+ * @throws Error when the directory holds no `VMeshData` file.
+ * @throws RangeError when the version field is not 1, the only value retail writes.
+ */
 export function readVMeshData(parent: Directory): VMeshData {
   const name = parent.name
   const file = parent.getFile('VMeshData')
@@ -151,6 +169,13 @@ export function readVMeshData(parent: Directory): VMeshData {
   return { name, type: 1, primitive, format, groups, indices, vertices }
 }
 
+/**
+ * Writes one mesh as a directory named after it, holding a single `VMeshData` file.
+ *
+ * The index and vertex counts are derived from the buffers rather than carried, so they cannot
+ * disagree with what follows them; the vertex count comes out of the buffer length divided by the
+ * stride the format implies.
+ */
 export function writeVMeshData(data: VMeshData): Directory {
   const view = BufferView.join(
     BufferView.allocate(Uint32Array.BYTES_PER_ELEMENT * 4)

@@ -23,6 +23,7 @@ export interface Sphere {
 /** Six cube faces plus the optional atmosphere shell. */
 const maximumSides = 7
 
+/** Whether a part fragment is a procedural sphere rather than geometry. */
 export const isSphere = (directory: Directory) => !!directory.getDirectory('Sphere')
 
 /**
@@ -36,6 +37,11 @@ function readName(file: File): string {
   return BufferView.from(file).getString(0, end < 0 ? bytes.length : end)
 }
 
+/**
+ * Reads a `Sphere` fragment: the radius and one material name per side, `Sides` saying how many.
+ * @throws Error when the directory, `Sides`, `Radius` or any named side file is absent.
+ * @throws RangeError when the side count is outside 1..7.
+ */
 export function readSphere(parent: Directory): Sphere {
   const directory = parent.getDirectory('Sphere')
   if (!directory) throw new Error('Missing Sphere')
@@ -59,6 +65,11 @@ export function readSphere(parent: Directory): Sphere {
   return { type: 'sphere', sides, radius }
 }
 
+/**
+ * Writes a `Sphere` directory. `Sides` is derived from the list rather than carried, so it cannot
+ * disagree with the `M<n>` files beside it.
+ * @throws RangeError when the side count is outside 1..7.
+ */
 export function writeSphere({ sides, radius }: Sphere): Directory {
   if (sides.length < 1 || sides.length > maximumSides)
     throw new RangeError(`Invalid sphere side count: ${sides.length}`)

@@ -15,8 +15,10 @@ import { CODE_PAGE_WINDOWS_1252, LANGUAGE_ENGLISH_US, STRING_BLOCK_LENGTH, Type 
  * reason, and a lone surrogate survives the round trip.
  */
 
-/** Resource id of the block holding a string, and the slot within it. */
+/** Resource id of the block holding a string. */
 export const blockOf = (index: number): number => (index >> 4) + 1
+
+/** Slot a string occupies within its block, counted from the start of the block's payload. */
 export const slotOf = (index: number): number => index & (STRING_BLOCK_LENGTH - 1)
 
 /** Lowest string index a block covers. */

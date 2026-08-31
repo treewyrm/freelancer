@@ -3,16 +3,25 @@ import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
 import type Vector3 from '#/math/vector3.js'
 
+/** Axis-aligned box between two opposite corners. */
 export interface BoundingBox {
   a: Vector3
   b: Vector3
 }
 
+/** Bounding sphere in the same frame as the geometry it encloses. */
 export interface BoundingSphere {
   center: Vector3
   radius: number
 }
 
+/**
+ * A window into a mesh library: which mesh, and which slice of its groups, indices and vertices to
+ * draw. The bounds are the part's own, not the whole mesh's.
+ *
+ * `meshId` is a CRC and stays one — a reference does not say which library holds its mesh, so
+ * resolution is the caller's step.
+ */
 export interface VMeshRef {
   meshId: number
   vertexStart: number
@@ -27,6 +36,14 @@ export interface VMeshRef {
 
 const byteLength = 60
 
+/**
+ * Reads a `VMeshRef` — the window into a mesh library a part draws through, plus its bounds.
+ *
+ * Nothing is resolved here: `meshId` is a CRC and stays one, because a reference does not say which
+ * library holds its mesh. See `getMesh` for why that lookup is the caller's.
+ * @throws Error when the directory holds no `VMeshRef` file.
+ * @throws RangeError when the leading size field is not the fixed 60 bytes.
+ */
 export function readVMeshRef(parent: Directory) {
   const file = parent.getFile('VMeshRef')
   if (!file) throw new Error('Missing VMeshRef')
@@ -75,6 +92,7 @@ export function readVMeshRef(parent: Directory) {
   } satisfies VMeshRef
 }
 
+/** Writes a `VMeshRef` file. The record is fixed-size, so nothing here is derived. */
 export function writeVMeshRef(ref: VMeshRef): File {
   const view = BufferView.allocate(byteLength)
 

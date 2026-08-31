@@ -1,7 +1,9 @@
 import Vector3 from '#/math/vector3.js'
 
+/** Three point indices, one per triangle corner, in winding order. */
 export type TriangleIndices = [x: number, y: number, z: number]
 
+/** A per-edge flag triple, indexed the same way {@link TriangleIndices} is. */
 export type TriangleFlags = [x: boolean, y: boolean, z: boolean]
 
 /** Hull triangle face. Corresponds to IVP's `IVP_Compact_Triangle`. */

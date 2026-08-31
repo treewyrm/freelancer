@@ -341,6 +341,10 @@ export function* readTextures(parent: Directory): Generator<TextureEntry> {
   if (errors.length) throw new AggregateError(errors, 'Error reading one or more textures')
 }
 
+/**
+ * Writes a `Texture library` directory, one entry per texture. Each entry writes itself in whichever
+ * of the four storage forms it carries, so nothing here decides how the pixels are laid out.
+ */
 export function writeTextures(textures: Iterable<TextureEntry>): Directory {
   return new Directory(
     'Texture library',

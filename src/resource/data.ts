@@ -111,6 +111,7 @@ export const Type = {
   Html: 23,
 } as const
 
+/** One of the three resource types these DLLs carry. */
 export type Type = (typeof Type)[keyof typeof Type]
 
 /**

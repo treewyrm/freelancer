@@ -29,10 +29,20 @@ export interface VWireData {
   indices: Uint16Array
 }
 
+/** A part's wireframe overlay. A sibling of {@link VMeshPart}, not a property of it. */
 export interface VMeshWire {
   data: VWireData
 }
 
+/**
+ * Reads the `VMeshWire` overlay — the edge-only line list drawn over a ship in the scanner and
+ * dealer views. `undefined` when the part carries none, which most do not.
+ *
+ * It is a sibling of `VMeshPart`, not a child: it addresses a library mesh by its own `meshId` and
+ * brings its own indices, so it is read from the same parent directory.
+ * @throws Error when the directory exists without its `VWireData` file.
+ * @throws RangeError when the leading size field is not `0x10`.
+ */
 export function readVMeshWire(parent: Directory): VMeshWire | undefined {
   const directory = parent.getDirectory('VMeshWire')
   if (!directory) return
@@ -63,6 +73,11 @@ export function readVMeshWire(parent: Directory): VMeshWire | undefined {
   }
 }
 
+/**
+ * Writes a `VMeshWire` directory. Only the index count is derived; `vertexStart`, `vertexCount` and
+ * `vertexRange` go out as carried, since exporters disagree on them and retail files round-trip
+ * byte-exactly whichever one produced them.
+ */
 export function writeVMeshWire(data: VMeshWire): Directory {
   const {
     data: { meshId, vertexStart, vertexCount, indices, vertexRange },

@@ -39,4 +39,5 @@ export const ValueTag = {
   String: 0x3,
 } as const
 
+/** The type tag a BINI value carries, which is what makes {@link Value} a discriminated union. */
 export type ValueTag = (typeof ValueTag)[keyof typeof ValueTag]

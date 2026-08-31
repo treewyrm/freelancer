@@ -18,8 +18,13 @@ export const fromDOSTimestamp = (value: number): Date =>
     (value & 0x1f) * 2,
   )
 
+/**
+ * Convert Date object to a Windows 64-bit FILETIME: 100-nanosecond intervals since 1601-01-01 UTC.
+ * `Date` has millisecond resolution, so the low four digits are always zero.
+ */
 export const toFileTime = (date: Date): bigint =>
   (BigInt(date.getTime()) + 11644473600000n) * 10000n
 
+/** Convert a Windows 64-bit FILETIME to a Date object, truncating to milliseconds. */
 export const fromFileTime = (value: bigint): Date =>
   new Date(Number(value / 10000n - 11644473600000n))

@@ -5,6 +5,13 @@ import { readConstraints, writeConstraints, type Constraint } from './constraint
 import { getHardpoint, type Hardpoint } from './hardpoint.js'
 import type { Joint } from './joint.js'
 
+/**
+ * One node of a compound hierarchy, generic over what a part actually holds — `rigid/` supplies
+ * mesh parts, `deformable/` supplies bones, and nothing here knows which.
+ *
+ * `filename` names the fragment the part was read from, and `joint` is the connection to the parent,
+ * absent on the root. Both come from the `Cons` constraint list rather than from directory nesting.
+ */
 export interface Model<T> extends Tree<Model<T>> {
   type: 'compound'
 
@@ -24,6 +31,10 @@ export interface Model<T> extends Tree<Model<T>> {
   joint?: Joint
 }
 
+/**
+ * Whether a file root holds a `Cmpnd` hierarchy — a multi-part `.cmp` or `.dfm` — rather than the
+ * single part a `.3db` carries directly.
+ */
 export const isCompoundModel = (directory: Directory) => !!directory.getDirectory('Cmpnd')
 
 /**

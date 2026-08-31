@@ -78,6 +78,7 @@ export function readExtent(view: BufferView, extent: Extent): BufferView {
   return view
 }
 
+/** Writes an `exts` payload: minimum xyz then maximum xyz, two contiguous vectors. */
 export function writeExtent(extent: Extent): BufferView {
   const { minimum, maximum } = extent
 
