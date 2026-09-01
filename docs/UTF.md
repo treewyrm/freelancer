@@ -69,6 +69,14 @@ case-insensitive the way the game's own lookups are — which is what a format s
 typed iterators over its payload for the three shapes a UTF leaf takes: 32-bit integers, 32-bit
 floats, and NUL-separated strings.
 
+> **The NUL separates strings; it is not required after the last one.** `readStrings` ends a run at
+> the end of the payload as readily as at a terminator. Retail always writes it — present in all
+> 30,252 `Object name`/`File name` files — but exporters exist that size the payload to the text
+> exactly, and the game reads those, so a reader that insists on it rejects working models. There is
+> no help from the container here: `dataSizeAllocated` equals `dataSizeUsed` in every such payload
+> measured, so nothing pads the text with a zero byte the way it might appear to. `writeStrings`
+> always emits the terminator, so a rewrite normalizes the payload and grows it by a byte.
+
 ## Hashing
 
 Hashing is the package root rather than part of `./utf`: an `.ale` names a node the way a `.cmp`

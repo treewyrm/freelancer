@@ -136,7 +136,13 @@ device->DrawIndexedPrimitive(primitive,
 ## Mesh reference
 
 A `VMeshRef` selects a sub-range of groups, indices and vertices from a named `VMeshData`. Fixed
-size: **60 bytes**, the first uint32 being a self-describing size field that must equal 60.
+size: **60 bytes**, the first uint32 being a self-describing size field holding 60.
+
+> **The size field is read and discarded, not validated.** It is 60 in all 9,322 retail references,
+> but the record is fixed-size, so the field carries nothing the layout does not already give — and
+> the engine does not enforce it. A hand-authored model leaving it zero loads and renders. The
+> writer always emits 60, so this is the one field a round trip normalizes rather than reproduces;
+> that is safe precisely because nothing reads it. See [Empty references](#empty-references).
 
 ```ts
 interface VMeshRef {
@@ -168,6 +174,25 @@ carries the measurement and §3.3 the four ways to apply a base vertex in an API
 returns `undefined` when the directory is absent, so a caller can probe
 (`readMultiLevel(parent) ?? readVMeshPart(parent)`); a directory that exists without its `VMeshRef`
 still throws.
+
+### Empty references
+
+**A `groupCount` of zero is a reference that draws nothing, and is legal.** Every retail reference
+selects at least one group, so the case does not occur there, but it is the natural way to express a
+compound part that exists only to carry a joint — an animation pivot, with children hanging off it
+and no geometry of its own.
+
+The alternative is to omit `VMeshPart` from the part entirely, which reads back as `undefined` and
+is equally valid. Retail never does that either: all 5,811 of its `.cmp` parts carry geometry —
+4,852 through `VMeshPart` and 959 through `MultiLevel`, none through neither. So both spellings of "this part draws nothing" are conventions the
+engine accepts rather than anything the format prefers, and a consumer has to handle both — treating
+an absent `VMeshPart` as the only empty case will still be handed a zero-group reference.
+
+> **A reader must not take `groupCount === 0` as a signal to skip the record.** Such a reference
+> still names a mesh: `meshId` is typically the sibling parts' library, left in place by the
+> exporter rather than zeroed, and it resolves. Nothing follows from it, because the group range is
+> empty — but it means a dangling-reference check keyed on `meshId` alone will report a mesh that is
+> never drawn, and an eager one will upload buffers for it.
 
 ---
 

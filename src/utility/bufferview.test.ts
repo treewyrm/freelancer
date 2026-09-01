@@ -382,9 +382,30 @@ describe('readStringZ / writeStringZ', () => {
     assert.equal(view.offset, 6)
   })
 
-  it('readStringZ throws when NUL terminator is absent', () => {
+  // The terminator delimits runs rather than being required on the last one. Exporters exist that
+  // size a payload to the text exactly, and the game reads them.
+  it('readStringZ treats the end of the view as a terminator', () => {
     const view = BufferView.from(new Uint8Array([0x41, 0x42, 0x43])) // "ABC", no NUL
-    assert.throws(() => view.readStringZ(), RangeError)
+
+    assert.equal(view.readStringZ(), 'ABC')
+    assert.equal(view.offset, 3)
+    assert.equal(view.byteRemain, 0)
+  })
+
+  it('readStringZ reads a terminated run before an unterminated one', () => {
+    const view = BufferView.from(new Uint8Array([0x41, 0x00, 0x42, 0x43])) // "A\0BC"
+
+    assert.equal(view.readStringZ(), 'A')
+    assert.equal(view.readStringZ(), 'BC')
+    assert.equal(view.byteRemain, 0)
+  })
+
+  it('readStringZ yields an empty string at the end of the view', () => {
+    const view = BufferView.from(new Uint8Array([0x41])) // "A"
+    view.readStringZ()
+
+    assert.equal(view.readStringZ(), '')
+    assert.equal(view.offset, 1)
   })
 
   it('handles empty string (just NUL byte)', () => {

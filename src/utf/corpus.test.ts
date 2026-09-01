@@ -125,4 +125,23 @@ describe('retail asset corpus', { skip }, () => {
       ok(equalBytes(undated(second), undated(first)), `${path}: output`)
     }
   })
+
+  // `readStrings` ends a run at the end of the payload as readily as at a NUL, because exporters
+  // exist that size the payload to the text exactly and the game reads them. Retail is unanimous
+  // the other way, and that unanimity is what makes the terminator safe to re-emit on write: no
+  // retail payload changes length through a round trip.
+  it('terminates all 30,252 compound name payloads with a NUL', () => {
+    let names = 0
+
+    for (const { path, root } of assets())
+      for (const entry of entries(root)) {
+        if (!/\\(Object|File) name$/i.test(entry.path)) continue
+
+        const payload = entry.data
+        ok(payload?.at(-1) === 0, `${path}${entry.path}: unterminated`)
+        names++
+      }
+
+    strictEqual(names, 30252)
+  })
 })

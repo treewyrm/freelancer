@@ -41,15 +41,20 @@ const byteLength = 60
  *
  * Nothing is resolved here: `meshId` is a CRC and stays one, because a reference does not say which
  * library holds its mesh. See `getMesh` for why that lookup is the caller's.
+ *
+ * The leading size field is read and discarded. It is 60 in all 9,322 retail references, but the
+ * record is fixed-size so the field carries nothing the layout does not already give, and the
+ * engine does not enforce it — hand-authored models that leave it zero load and render. Validating
+ * it would reject those for a byte the game ignores.
  * @throws Error when the directory holds no `VMeshRef` file.
- * @throws RangeError when the leading size field is not the fixed 60 bytes.
+ * @throws RangeError when the file is shorter than the fixed 60 bytes.
  */
 export function readVMeshRef(parent: Directory) {
   const file = parent.getFile('VMeshRef')
   if (!file) throw new Error('Missing VMeshRef')
 
   const view = BufferView.from(file)
-  if (view.readUint32() !== byteLength) throw new RangeError('Invalid mesh reference size')
+  view.readUint32()
 
   const meshId = view.readInt32()
   const vertexStart = view.readUint16()
@@ -92,7 +97,13 @@ export function readVMeshRef(parent: Directory) {
   } satisfies VMeshRef
 }
 
-/** Writes a `VMeshRef` file. The record is fixed-size, so nothing here is derived. */
+/**
+ * Writes a `VMeshRef` file. The record is fixed-size, so nothing here is derived.
+ *
+ * The size field is always the canonical 60, which normalizes a reference that arrived holding
+ * something else. That is the one field a round trip does not reproduce verbatim, and it is safe
+ * because the engine does not read it.
+ */
 export function writeVMeshRef(ref: VMeshRef): File {
   const view = BufferView.allocate(byteLength)
 

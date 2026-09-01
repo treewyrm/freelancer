@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { list, load, skip } from '#/corpus.js'
 import type Directory from '#/utf/directory.js'
 import type File from '#/utf/file.js'
+import BufferView from '#/utility/bufferview.js'
 import { getResourceId } from '#/hash.js'
 import { VertexFormat, Primitive, readVMeshData, vertexByteLength } from './data.js'
 import { getMesh, getMeshDraw, readVMeshLibrary, writeVMeshLibrary } from './library.js'
@@ -84,7 +85,10 @@ describe('retail asset corpus', { skip }, () => {
       for (const { path, root } of assets())
         for (const { name, format } of readVMeshLibrary(root)) {
           ok(format & VertexFormat.Position, `${path}/${name}: format 0x${format.toString(16)}`)
-          ok(!(format & (VertexFormat.PointSize | VertexFormat.Specular)), `${path}/${name}: unexpected flag`)
+          ok(
+            !(format & (VertexFormat.PointSize | VertexFormat.Specular)),
+            `${path}/${name}: unexpected flag`,
+          )
           seen.add(format)
         }
 
@@ -164,6 +168,53 @@ describe('retail asset corpus', { skip }, () => {
         }
 
       ok(refs > 9000, `expected the full reference corpus, read ${refs}`)
+    })
+
+    // The size field is read and discarded because the engine does not enforce it — hand-authored
+    // models leaving it zero load and render. Retail is nonetheless unanimous, and that unanimity
+    // is what makes normalizing the field on write a no-op for every retail file.
+    it('writes 60 into the size field of all 9,322 references', () => {
+      let refs = 0
+
+      for (const { path, root } of assets())
+        for (const directory of walk(root)) {
+          const file = directory.getDirectory('VMeshPart')?.getFile('VMeshRef')
+          if (!file) continue
+
+          strictEqual(BufferView.from(file).readUint32(), 60, `${path}/${directory.name}`)
+          strictEqual(file.byteLength, 60, `${path}/${directory.name}`)
+          refs++
+        }
+
+      strictEqual(refs, 9322)
+    })
+
+    // VMESH.md 'Empty references': both ways of spelling "this part draws nothing" — a zero-group
+    // reference, and no VMeshPart at all — are legal, and retail uses neither. It is the reason a
+    // consumer cannot treat an absent VMeshPart as the only empty case.
+    it('gives every compound part geometry, and every reference at least one group', () => {
+      let viaPart = 0
+      let viaLevels = 0
+
+      for (const { path, root } of load('cmp'))
+        for (const directory of root.directories) {
+          if (!/\.(3db|sph)$/i.test(directory.name)) continue
+
+          if (readMultiLevel(directory)) viaLevels++
+          else if (readVMeshPart(directory)) viaPart++
+          else ok(false, `${path}/${directory.name}: no geometry`)
+        }
+
+      strictEqual(viaPart, 4852)
+      strictEqual(viaLevels, 959)
+
+      for (const { path, root } of assets())
+        for (const directory of walk(root)) {
+          const part = readVMeshPart(directory)
+          if (!part) continue
+
+          ok(part.reference.groupCount > 0, `${path}/${directory.name}: empty reference`)
+        }
     })
 
     it('reads bounding boxes with the minimum on or below the maximum', () => {

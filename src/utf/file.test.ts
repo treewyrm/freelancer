@@ -101,6 +101,29 @@ describe('File.writeStrings / readStrings', () => {
     f.writeStrings('')
     assert.deepEqual([...f.readStrings()], [''])
   })
+
+  // Six Discovery models size the payload to the text exactly. Retail never does, but the game
+  // reads them, so the terminator delimits rather than being required on the last run.
+  it('reads a payload with no trailing NUL', () => {
+    const f = new File('s', new Uint8Array([0x41, 0x42, 0x43])) // "ABC"
+
+    assert.deepEqual([...f.readStrings()], ['ABC'])
+  })
+
+  it('reads a payload whose last run is unterminated', () => {
+    const f = new File('s', new Uint8Array([0x41, 0x00, 0x42, 0x43])) // "A\0BC"
+
+    assert.deepEqual([...f.readStrings()], ['A', 'BC'])
+  })
+
+  // The consequence: a rewrite normalizes the payload rather than reproducing it.
+  it('appends the terminator a rewrite was missing', () => {
+    const f = new File('s', new Uint8Array([0x41, 0x42, 0x43]))
+    const result = new File('s').writeStrings(...f.readStrings())
+
+    assert.equal(result.byteLength, 4)
+    assert.deepEqual([...f.readStrings()], [...result.readStrings()])
+  })
 })
 
 describe('File.append', () => {

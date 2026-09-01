@@ -457,13 +457,23 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
   }
 
   /**
-   * Reads ASCIIZ string from the current byte offset.
-   * @returns
+   * Reads an ASCIIZ string from the current byte offset.
+   *
+   * **The end of the view terminates a string as well as a NUL does.** The terminator is a
+   * delimiter between runs, not a requirement on the last one: a view holding a single unterminated
+   * run yields that run rather than throwing. Retail always writes the NUL — it is present in all
+   * 30,252 compound name files — but exporters exist that size the payload to the text exactly, and
+   * the game reads those, so refusing them would be stricter than the format.
+   *
+   * The cursor lands past the NUL, or at the end of the view when there was none, so a caller
+   * looping on `byteRemain` terminates either way.
    */
   readStringZ(): string {
     const view = new Uint8Array(this.buffer, this.byteOffset, this.byteLength)
     const end = view.indexOf(0, this.offset)
-    if (end < 0) throw new RangeError(`String NUL terminator not found from offset ${this.offset}`)
+
+    if (end < 0) return this.readString(this.byteLength - this.offset)
+
     const value = this.readString(end - this.offset)
     this.#offset++
     return value

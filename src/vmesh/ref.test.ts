@@ -1,6 +1,7 @@
 import { deepStrictEqual, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import Directory from '#/utf/directory.js'
+import File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
 import { readVMeshRef, writeVMeshRef, type VMeshRef } from './ref.js'
 import { readVMeshPart, writeVMeshPart, type VMeshPart } from './part.js'
@@ -76,9 +77,33 @@ describe('readVMeshRef', () => {
     throws(() => readVMeshRef(new Directory('VMeshPart')), /Missing VMeshRef/)
   })
 
-  it('throws RangeError when the size field is not 60', () => {
+  // Retail writes 60 in all 9,322 references, but the record is fixed-size and the engine does not
+  // enforce the field: hand-authored models leaving it zero load and render in game. Animation
+  // pivots are the case that produces one — a part carrying a joint and no geometry, given an empty
+  // reference rather than no VMeshPart at all.
+  it('ignores the size field', () => {
+    const ref = sample()
+
+    for (const size of [0, 0x40]) {
+      const file = writeVMeshRef(ref)
+      BufferView.from(file).writeUint32(size)
+
+      deepStrictEqual(readVMeshRef(new Directory('VMeshPart', [file])), ref)
+    }
+  })
+
+  // The consequence of ignoring it: the field is normalized rather than carried.
+  it('normalizes the size field back to 60 on write', () => {
     const file = writeVMeshRef(sample())
-    BufferView.from(file).writeUint32(0x40)
+    BufferView.from(file).writeUint32(0)
+
+    const result = writeVMeshRef(readVMeshRef(new Directory('VMeshPart', [file])))
+
+    strictEqual(BufferView.from(result).readUint32(), 60)
+  })
+
+  it('throws RangeError when the file is shorter than the record', () => {
+    const file = new File('VMeshRef', BufferView.allocate(40))
 
     throws(() => readVMeshRef(new Directory('VMeshPart', [file])), RangeError)
   })
