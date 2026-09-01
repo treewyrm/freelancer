@@ -20,11 +20,17 @@ import * as text from '#/ini/text/index.js'
 import BufferView from '#/utility/bufferview.js'
 import { decode, encode } from '#/utility/encoding.js'
 
-/** `FLS1`, read as a little-endian `uint32`. */
-export const SIGNATURE = 0x31534c46
+/**
+ * `FLS1`, read as a little-endian `uint32`.
+ *
+ * Module-private, along with the header length below: {@link isSave} is what a caller wants from
+ * the signature, and the header is nothing but the signature, so neither is a number anyone outside
+ * has a use for.
+ */
+const SIGNATURE = 0x31534c46
 
 /** The signature, and the whole of the header — there is no version field and no length. */
-export const HEADER_BYTE_LENGTH = 4
+const HEADER_BYTE_LENGTH = 4
 
 /**
  * `Gene`, the four bytes the pad is built from.

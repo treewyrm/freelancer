@@ -2,6 +2,7 @@ import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import * as corpus from '#/corpus.js'
 import * as bytecode from './bytecode/index.js'
+import { ConstantTag, GAP_BYTE_LENGTH, HEADER_BYTE_LENGTH } from './bytecode/data.js'
 import * as text from './text/index.js'
 import { formatOf, read } from './index.js'
 import type { Document, Value } from './types.js'
@@ -122,7 +123,7 @@ describe('retail scene scripts', { skip: corpus.skip }, () => {
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
 
       // Find the pool the way the reader does, by walking the code to `ENDCODE`.
-      let offset = bytecode.HEADER_BYTE_LENGTH
+      let offset = HEADER_BYTE_LENGTH
 
       for (;;) {
         const opcode = bytecode.OPCODES[bytes[offset++]!]!
@@ -132,14 +133,14 @@ describe('retail scene scripts', { skip: corpus.skip }, () => {
         if (opcode.name === 'ENDCODE') break
       }
 
-      offset += bytecode.GAP_BYTE_LENGTH
+      offset += GAP_BYTE_LENGTH
       const total = view.getUint32(offset, false)
       offset += 4
 
       for (let index = 0; index < total; index++) {
         const tag = bytes[offset++]!
 
-        if (tag === bytecode.ConstantTag.Number) {
+        if (tag === ConstantTag.Number) {
           numbers++
           offset += bytes[offset]! + 1
         } else {

@@ -1,4 +1,4 @@
-export { BONE_TO_ROOT_LENGTH, getBone, readBone, writeBone, type Bone } from './bone.js'
+export { getBone, readBone, writeBone, type Bone } from './bone.js'
 export { readFaceGroup, writeFaceGroup, type Edge, type FaceGroup } from './facegroup.js'
 export {
   readGeometry,

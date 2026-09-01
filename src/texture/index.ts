@@ -16,7 +16,6 @@ export {
 export {
   type DirectDrawSurface,
   Compression,
-  CUBEMAP_FACES,
   readDirectDrawSurface,
   writeDirectDrawSurface,
 } from './dds.js'

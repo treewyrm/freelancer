@@ -1,6 +1,12 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
-import { HEADER_BYTE_LENGTH, isSave, mask, read, write } from './index.js'
+import { isSave, mask, read, write } from './index.js'
+
+/**
+ * Stated here rather than imported, because the module keeps it private and a test that borrows the
+ * implementation's own constant cannot catch the implementation changing it.
+ */
+const HEADER_BYTE_LENGTH = 4
 import { Document } from '#/ini/document.js'
 import { formatOf } from '#/ini/index.js'
 import { Property } from '#/ini/property.js'

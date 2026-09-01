@@ -1,7 +1,7 @@
 # API
 
 Every name reachable from a subpath export, listed once, so nothing useful stays hidden behind a
-barrel that never re-exported it. **505 exports across 22 entry points.** The format documents say
+barrel that never re-exported it. **489 exports across 22 entry points.** The format documents say
 what the bytes mean; this one says what you can import.
 
 Resolved from `src/` with the TypeScript checker rather than transcribed from the barrels, because
@@ -23,16 +23,16 @@ fails when this document and the barrels disagree in either direction, so it can
 | `./compound`     | 14      | `Cmpnd` hierarchy, constraints, hardpoints                                |
 | `./rigid`        | 24      | `.3db`/`.cmp` parts, cameras, spheres, material animations                |
 | `./surface`      | 30      | `.sur` collision hulls, and the layer that builds one                     |
-| `./texture`      | 41      | `.txm` libraries, DDS, Targa, DXT and 16-bit expansion                    |
+| `./texture`      | 40      | `.txm` libraries, DDS, Targa, DXT and 16-bit expansion                    |
 | `./material`     | 13      | `Material library` entries and the shader-name tables                     |
-| `./deformable`   | 23      | `.dfm` character models                                                   |
+| `./deformable`   | 22      | `.dfm` character models                                                   |
 | `./ini`          | 12      | INI in any of the three encodings, and the document model they share      |
 | `./ini/text`     | 4       | text INI only                                                             |
-| `./ini/binary`   | 14      | BINI only, and its layout constants                                       |
-| `./ini/save`     | 6       | `.fl` saves: text under a positional XOR mask                             |
+| `./ini/binary`   | 8       | BINI only, and its layout constants                                       |
+| `./ini/save`     | 4       | `.fl` saves: text under a positional XOR mask                             |
 | `./thn`          | 16      | scene scripts in either encoding, interim layer                           |
 | `./thn/text`     | 3       | Lua source only — the whole write path                                    |
-| `./thn/bytecode` | 10      | compiled Lua 3.2 chunks, read only                                        |
+| `./thn/bytecode` | 4       | compiled Lua 3.2 chunks, read only                                        |
 | `./thn/scene`    | 67      | the typed scene layer: entities and events                                |
 | `./resource`     | 35      | resource DLLs, `ids_name` strings and `ids_info` infocards                |
 
@@ -437,7 +437,6 @@ The narrowest entry point in the package, and the one where the most is left beh
 | `AnimatedTextureFrame`   | interface | One frame: which atlas, and the rectangle within it.                               |
 | `Compression`            | enum      | DDS `dwFourCC` compression, `dxt1`/`dxt3`/`dxt5` or none.                          |
 | `CubeFaces`              | type      | The six faces of a cubemap, in the order DirectDraw stores them.                   |
-| `CUBEMAP_FACES`          | const     | How many faces a cubemap holds.                                                    |
 | `CubeTexture`            | interface | A cubemap, stored as a single DirectDrawSurface holding all six faces.             |
 | `decompress`             | function  | DXT1/3/5 block decompression to RGB(A).                                            |
 | `decompressAlphaDXT3`    | function  | Decompress DXT3 alpha channel.                                                     |
@@ -498,7 +497,6 @@ The narrowest entry point in the package, and the one where the most is left beh
 | Export                 | Kind      |                                                                                     |
 | ---------------------- | --------- | ----------------------------------------------------------------------------------- |
 | `Bone`                 | interface | One bone, stored as a `<name>.3db` directory at the file root.                      |
-| `BONE_TO_ROOT_LENGTH`  | const     | Byte length of `Bone to root`: a 3x3 rotation followed by a translation.            |
 | `DeformableModel`      | interface | A `.dfm` model — a rigid compound turned inside out.                                |
 | `Edge`                 | interface | An edge of a face group, with the angle between the two faces meeting along it.     |
 | `FaceGroup`            | interface | A run of faces sharing one material; strip or list, never both.                     |
@@ -564,32 +562,32 @@ document and there is nothing to import for it.
 
 ## `./ini/binary`
 
+The record layout — `SIGNATURE`, `VERSION`, and the four `*_BYTE_LENGTH` sizes — is **not exported**:
+`isBinary` is what the signature is good for, the version is what the writer emits rather than
+something to pick, and a caller never lays out a BINI record. The three `MAX_*` ceilings are here
+because a hand-built `Document` can exceed them and `write` throws when it does.
+
 | Export                 | Kind     |                                                                                      |
 | ---------------------- | -------- | ------------------------------------------------------------------------------------ |
 | `Dictionary`           | class    | The names-and-values block at the end of a BINI. One table, not two.                 |
-| `HEADER_BYTE_LENGTH`   | const    | `signature`, `version`, `namesOffset`.                                               |
 | `isBinary`             | function | Whether a buffer starts with the `BINI` signature. Check this, not the suffix.       |
 | `MAX_NAME_OFFSET`      | const    | Largest offset a name can sit at, since those offsets are `uint16`.                  |
 | `MAX_PROPERTIES`       | const    | Largest `propertyCount`.                                                             |
 | `MAX_VALUES`           | const    | Largest `valueCount`.                                                                |
-| `PROPERTY_BYTE_LENGTH` | const    | `nameOffset` uint16, `valueCount` uint8.                                             |
 | `read`                 | function | Reads a BINI into sections.                                                          |
-| `SECTION_BYTE_LENGTH`  | const    | `nameOffset` uint16, `propertyCount` uint16.                                         |
-| `SIGNATURE`            | const    | `BINI`, read as a little-endian `uint32`.                                            |
-| `VALUE_BYTE_LENGTH`    | const    | `type` uint8 and a fixed four-byte payload, whatever the type.                       |
 | `ValueTag`             | type     | `Boolean`/`Integer`/`Float`/`String` — a `const` object and the union of its values. |
-| `VERSION`              | const    | The only version retail carries, in all 1,251 files.                                 |
 | `write`                | function | Writes sections as a BINI, reproducing the original compiler's byte layout.          |
 
 ## `./ini/save`
 
+`SIGNATURE` and `HEADER_BYTE_LENGTH` are module-private for the same reason `./ini/binary`'s are —
+`isSave` answers the question, and the header is nothing but the signature.
+
 | Export               | Kind     |                                                                              |
 | -------------------- | -------- | ---------------------------------------------------------------------------- |
-| `HEADER_BYTE_LENGTH` | const    | The signature, and the whole of the header — no version field, no length.    |
 | `isSave`             | function | Whether a buffer starts with the `FLS1` signature. Check this, not the suffix. |
 | `mask`               | function | Applies the mask to a body, and is its own inverse.                          |
 | `read`               | function | Reads a masked save into sections.                                           |
-| `SIGNATURE`          | const    | `FLS1`, read as a little-endian `uint32`.                                    |
 | `write`              | function | Writes a document as a masked save.                                          |
 
 `Dictionary` instance: `byteLength`, `size`, `push(value)`, `toBytes()`.
@@ -630,18 +628,17 @@ document and there is nothing to import for it.
 
 Read only; there is no bytecode writer, and the two undecoded header fields are why.
 
+**The opcode table is the only constant that gets out.** `SIGNATURE` and `VERSION` are what
+`isBytecode` is for; `HEADER_BYTE_LENGTH` and `GAP_BYTE_LENGTH` are this reader's walk, and the gap
+is not even decoded; `ConstantTag` types nothing a caller receives, since a `Document` is `Global[]`
+and a `Value` carries no tag; and `OPCODE_BYTES` is the absent writer's direction, read by nothing.
+
 | Export               | Kind      |                                                                               |
 | -------------------- | --------- | ----------------------------------------------------------------------------- |
-| `ConstantTag`        | type      | Constant pool entry tags. Only two occur in 442,599 retail constants.         |
-| `GAP_BYTE_LENGTH`    | const     | Between `ENDCODE` and the constant count, in every file. Not decoded.         |
-| `HEADER_BYTE_LENGTH` | const     | Fixed prefix, code length, and two bytes that are not decoded.                |
 | `isBytecode`         | function  | Whether a buffer is a compiled chunk rather than script text.                 |
 | `Opcode`             | interface | `{ name, width: 0 \| 1 \| 2, count: boolean }`.                               |
-| `OPCODE_BYTES`       | const     | Opcode name to its byte. The writer's direction; unused by the reader.        |
 | `OPCODES`            | const     | Every opcode, indexed by its byte.                                            |
 | `read`               | function  | Reads a compiled Lua 3.2 chunk into a script. An evaluator, not a decompiler. |
-| `SIGNATURE`          | const     | `ESC` `L` `u` `a`, then the version byte.                                     |
-| `VERSION`            | const     | Lua 3.2. The version byte is the fifth of the signature.                      |
 
 ## `./thn/scene`
 

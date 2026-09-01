@@ -4,6 +4,9 @@ import * as corpus from '#/corpus.js'
 import { Document, formatOf, Property, Section, value } from './index.js'
 import * as binary from './binary/index.js'
 import * as save from './save/index.js'
+
+/** The `FLS1` header, stated rather than imported — `save/` keeps it private. */
+const SAVE_HEADER_BYTE_LENGTH = 4
 import * as text from './text/index.js'
 import { decode } from '#/utility/encoding.js'
 import { fold } from '#/utility/string.js'
@@ -343,7 +346,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
       // all. Only the trip through the document drops those, which is the text writer's limit.
       it('re-masks newplayer.fl byte for byte', () => {
         const asset = assets.find(({ path }) => /newplayer\.fl$/i.test(path))
-        const body = asset!.data.subarray(save.HEADER_BYTE_LENGTH)
+        const body = asset!.data.subarray(SAVE_HEADER_BYTE_LENGTH)
         const again = save.mask(save.mask(body))
 
         assert.equal(again.length, body.length)
