@@ -6,8 +6,8 @@ recovered; this is the enumeration.
 
 Like [ENGINE.md](ENGINE.md) and [RDL.md](RDL.md) it has **no module and will not get one**. To this
 library `[Solar]` is a section name and `type` is a property name — see the scope rule in
-[CLAUDE.md](../CLAUDE.md). The table exists so a consumer that *does* interpret them can be written
-against something measured.
+[README.md](../README.md#three-layers). The table exists so a consumer that *does* interpret them
+can be written against something measured.
 
 ## Where each row comes from
 

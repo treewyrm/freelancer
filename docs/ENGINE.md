@@ -7,8 +7,8 @@ measurable and losing it would be a waste.
 
 It is the same case [RDL.md](RDL.md) and [AUDIO.md](AUDIO.md) make. **There is no module here and there
 will not be one.** A consumer deciding what a `[Ship]`'s `type` means is exactly the policy
-[CLAUDE.md](../CLAUDE.md)'s scope rule assigns to the consumer; this is the reference it can be written
-against.
+[the scope rule](../README.md#three-layers) assigns to the consumer; this is the reference it can
+be written against.
 
 ## Where these live, and why they are readable
 

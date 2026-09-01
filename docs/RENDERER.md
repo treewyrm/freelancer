@@ -116,8 +116,7 @@ treatment.** Its local Z axis is the third *column* of the triples-as-rows. Read
 matrices each way is a trap worth naming: it cancels along any chain that uses both, which can make
 a wrong convention look right, or a right one look wrong.
 
-Three consequences for [`src/math/`](../src/math), given that reading — two traps and one
-retraction:
+Three consequences for `src/math/`, given that reading — two traps and one retraction:
 
 - **`Matrix3.transform` and `Matrix3.lookAt` apply the inverse of what the file means.** They take
   the triples for the axes, so `Matrix3.transform(v, M)` rotates by the transpose of `M`.
@@ -229,10 +228,10 @@ device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST,
   group.elementCount / 3);
 ```
 
-> **`getMeshDraw` in [`src/vmesh/library.ts`](../src/vmesh/library.ts) yields exactly those four
-> numbers**, per group: `startIndex`, `elementCount`, `baseVertex` — which is the sum above, not
-> `group.vertexStart` alone — and `numVertices`. It slices nothing, because `baseVertex` is a draw
-> parameter here and has to become something else under §3.3.
+> **`getMeshDraw` in `src/vmesh/library.ts` yields exactly those four numbers**, per group:
+> `startIndex`, `elementCount`, `baseVertex` — which is the sum above, not `group.vertexStart`
+> alone — and `numVertices`. It slices nothing, because `baseVertex` is a draw parameter here and
+> has to become something else under §3.3.
 >
 > It used to slice the vertex buffer at `group.vertexStart * stride`, the overlapping reading:
 > correct for the 2,257 references whose `ref.vertexStart` is 0, wrong for the other 6,535. If you
