@@ -1,19 +1,20 @@
 # API
 
 Every name reachable from a subpath export, listed once, so nothing useful stays hidden behind a
-barrel that never re-exported it. **505 exports across 21 entry points.** The format documents say
+barrel that never re-exported it. **505 exports across 22 entry points.** The format documents say
 what the bytes mean; this one says what you can import.
 
 Resolved from `src/` with the TypeScript checker rather than transcribed from the barrels, because
 five of them use `export *` and one adds declarations of its own. Whenever an `index.ts` changes,
-this list is what changes with it.
+this list is what changes with it — and `src/api.test.ts` resolves the exports the same way and
+fails when this document and the barrels disagree in either direction, so it cannot quietly drift.
 
 ## Entry points
 
 | Entry point      | Exports | What it is                                                                |
 | ---------------- | ------- | ------------------------------------------------------------------------- |
 | `.`              | 12      | hashing and name resolution — the one thing every module shares           |
-| `./utility`      | 26      | `BufferView`, windows-1252, C-style number parsing, tree walks            |
+| `./utility`      | 30      | `BufferView`, windows-1252, C-style number parsing, tree walks            |
 | `./math`         | 28      | vectors, quaternions, `Matrix3`/`Matrix4`, `Transform`, scalar and keyframe helpers |
 | `./utf`          | 4       | the UTF container: `Directory`, `File`                                    |
 | `./alchemy`      | 51      | `.ale` node and effect libraries, and the animation evaluators            |
@@ -21,11 +22,11 @@ this list is what changes with it.
 | `./vmesh`        | 32      | geometry: `VMeshData`, `VMeshRef`, LOD ranges, wireframes                 |
 | `./compound`     | 14      | `Cmpnd` hierarchy, constraints, hardpoints                                |
 | `./rigid`        | 24      | `.3db`/`.cmp` parts, cameras, spheres, material animations                |
-| `./surface`      | 8       | `.sur` collision hulls                                                    |
+| `./surface`      | 30      | `.sur` collision hulls, and the layer that builds one                     |
 | `./texture`      | 41      | `.txm` libraries, DDS, Targa, DXT and 16-bit expansion                    |
 | `./material`     | 13      | `Material library` entries and the shader-name tables                     |
 | `./deformable`   | 23      | `.dfm` character models                                                   |
-| `./ini`          | 24      | INI in any of the three encodings, plus the section/property accessors    |
+| `./ini`          | 12      | INI in any of the three encodings, and the document model they share      |
 | `./ini/text`     | 4       | text INI only                                                             |
 | `./ini/binary`   | 14      | BINI only, and its layout constants                                       |
 | `./ini/save`     | 6       | `.fl` saves: text under a positional XOR mask                             |
@@ -33,7 +34,7 @@ this list is what changes with it.
 | `./thn/text`     | 3       | Lua source only — the whole write path                                    |
 | `./thn/bytecode` | 10      | compiled Lua 3.2 chunks, read only                                        |
 | `./thn/scene`    | 67      | the typed scene layer: entities and events                                |
-| `./resource`     | 57      | resource DLLs, `ids_name` strings and `ids_info` infocards                |
+| `./resource`     | 35      | resource DLLs, `ids_name` strings and `ids_info` infocards                |
 
 `./ini` re-exports `binary`, `save`, `text` and `value` as namespaces, and `./thn` re-exports
 `bytecode`, `text` and `value` the same way, so the split subpaths are a convenience rather than the
@@ -72,13 +73,16 @@ The hash functions. `getResourceId` is UTF-side (mesh names, material names, Alc
 
 | Export             | Kind      |                                                                                         |
 | ------------------ | --------- | --------------------------------------------------------------------------------------- |
+| `assemble`         | function  | Builds a hierarchy from a flat array, pairing each record to its parent by id.          |
 | `atof`             | function  | C `atof`: leading whitespace, then as much of a decimal or exponential float as parses. |
 | `atoi`             | function  | C `atoi`: leading whitespace, an optional sign, then digits until the first non-digit.  |
 | `BufferView`       | class     | `DataView` with an internal cursor, for reading and writing in sequence.                |
+| `ChunkView`        | class     | Cursor over a chunked binary, as `.sur` is. Not a UTF tree and not a `BufferView`.      |
 | `classify`         | function  | Classifies a text token the way the BINI compiler did.                                  |
 | `encoding`         | namespace | windows-1252 `decode` / `encode` / `byteLengthOf`.                                      |
 | `equals`           | function  | Compares two names the way the game compares them.                                      |
 | `findTreeElement`  | function  | `<T extends Tree<T>>(root, predicate): T \| undefined`                                  |
+| `flatten`          | function  | Walks a hierarchy back into a flat array, the inverse of `assemble`.                    |
 | `fold`             | function  | Case-folds ASCII only, which is what `stricmp` does, and so every name lookup.          |
 | `formatFloat32`    | function  | Shortest decimal text that reads back as exactly the same `float32`.                    |
 | `formatInt32`      | function  | Text that parses back as exactly the same `int32`.                                      |
@@ -92,6 +96,7 @@ The hash functions. `getResourceId` is UTF-side (mesh names, material names, Alc
 | `listTreePairs`    | function  | `<T extends Tree<T>>(parent): Generator<Parenthesis<T>>`                                |
 | `Parenthesis`      | interface | A parent-child pair representing a link in a hierarchy.                                 |
 | `parseHex`         | function  | `(value: string): number`                                                               |
+| `path`             | namespace | UTF path helpers: `split`, `join`, `resolve`, `directoryOf`, `nameOf`, `equals`.        |
 | `reduceTree`       | function  | `<T extends Tree<T>, R>(root, reducer, initial): R`                                     |
 | `toDOSTimestamp`   | function  | Convert `Date` to DOS timestamp.                                                        |
 | `toFileTime`       | function  | `(date: Date): bigint`                                                                  |
@@ -308,7 +313,6 @@ Instance: `name`, `children`, `directories`, `files`, `getDirectory(...path)`, `
 | `atRange`           | function  | Picks the detail level covering a camera distance; `undefined` past the last one. |
 | `BoundingBox`       | interface | `{ a: Vector3, b: Vector3 }`.                                                     |
 | `BoundingSphere`    | interface | `{ center: Vector3, radius: number }`.                                            |
-| `Format`            | enum      | Direct3D flexible vertex format (FVF).                                            |
 | `getMapCount`       | function  | Calculates number of UV maps for the vertex format.                               |
 | `getMesh`           | function  | `(library: VMeshLibrary, name: Hashable): VMeshData \| undefined`                 |
 | `getMeshDraw`       | function  | Generator — yields one `MeshDraw` per group of a reference, in index order.       |
@@ -323,6 +327,7 @@ Instance: `name`, `children`, `directories`, `files`, `getDirectory(...path)`, `
 | `readVMeshRef`      | function  | `(parent: Directory): VMeshRef`                                                   |
 | `readVMeshWire`     | function  | `(parent: Directory): VMeshWire \| undefined`                                     |
 | `vertexByteLength`  | function  | Calculates vertex byte length for the vertex format.                              |
+| `VertexFormat`      | enum      | Direct3D flexible vertex format (FVF).                                            |
 | `VMeshData`         | interface | One mesh: `primitive`, `format`, `groups`, `indices`, `vertices`.                 |
 | `VMeshGroup`        | interface | One draw range: `materialId`, `vertexStart`, `vertexEnd`, `elementCount`.         |
 | `VMeshLibrary`      | type      | `VMeshData[]`.                                                                    |
@@ -393,13 +398,35 @@ The narrowest entry point in the package, and the one where the most is left beh
 
 | Export                | Kind      |                                                                                    |
 | --------------------- | --------- | ---------------------------------------------------------------------------------- |
+| `createBox`           | function  | The eight corners of a box and the twelve triangles over them, wound CCW from outside. |
+| `createFaces`         | function  | Face list of one hull, deriving the half-edge adjacency and pierce indices.        |
+| `createHierarchy`     | function  | Folds leaf nodes into the binary tree the format wants, tightest bounds first.     |
+| `createHull`          | function  | Builds one convex hull from triangles indexing the part's shared point list.       |
+| `createNode`          | function  | Leaf node bounding one terminal hull, from the points its faces index.             |
+| `createPart`          | function  | Builds a part from convex hulls — geometry to something `writeSurfaceLibrary` takes. |
+| `createSurface`       | function  | Builds a surface block around a hierarchy, deriving its `MassProperties`.          |
 | `Extent`              | interface | Extents section (bounding box).                                                    |
 | `Face`                | interface | Hull triangle face. Corresponds to IVP's `IVP_Compact_Triangle`.                   |
+| `getExtent`           | function  | Axis-aligned bounding box of a point set; an empty set yields an inverted one.     |
+| `getHulls`            | function  | Every hull in a hierarchy, in `getNodes` order. Nodes carrying none are skipped.   |
+| `getIndices`          | function  | The distinct point indices a hull's faces reference, in first-use order.           |
+| `getMassProperties`   | function  | Derives what a `Surface` records beyond geometry, from the terminal hulls only.    |
+| `getNodeExtent`       | function  | The box a node bounds, recovered from its sphere radius and quantised sizes.       |
+| `getNodes`            | function  | Walks a hierarchy depth-first, left before right, yielding every node.             |
+| `getNormal`           | function  | Unnormalized outward normal — IVP's `hesse` vector, `(b - a) x (c - a)`.           |
 | `Hull`                | interface | One convex hull: `id`, `type`, its faces, and a reserved word.                     |
+| `HullGeometry`        | interface | One hull as a caller has it: its own points, and triangles indexing them.          |
+| `HullType`            | enum      | Two packed flags in IVP, not an enum: `has_children` and `is_compact`.             |
+| `MassProperties`      | type      | What a `Surface` records about its geometry beyond the geometry itself.            |
+| `mergeNodes`          | function  | Inner node bounding two children, unioning their **quantised** boxes.              |
 | `Node`                | interface | Boundary volume hierarchy node. Corresponds to IVP's `IVP_Compact_Ledgetree_Node`. |
 | `Part`                | interface | `Extent & Surface & { id, fixed, hardpoints }` — one collidable piece.             |
+| `PartOptions`         | interface | What `createPart` cannot derive, plus overrides for what it can.                   |
 | `Point`               | interface | Hull vertex, shared between the hulls of a part.                                   |
 | `readSurfaceLibrary`  | function  | `(view: BufferView): Part[]`                                                       |
+| `Surface`             | interface | Surfaces section. Corresponds to IVP's `IVP_Compact_Surface`.                      |
+| `TriangleFlags`       | type      | A per-edge flag triple, indexed the same way `TriangleIndices` is.                 |
+| `TriangleIndices`     | type      | Three point indices, one per triangle corner, in winding order.                    |
 | `writeSurfaceLibrary` | function  | `(parts: Part[]): BufferView`                                                      |
 
 ## `./texture`
@@ -496,32 +523,32 @@ The narrowest entry point in the package, and the one where the most is left beh
 
 ## `./ini`
 
-| Export             | Kind      |                                                                              |
-| ------------------ | --------- | ---------------------------------------------------------------------------- |
-| `addProperty`      | function  | Appends a property, which is how a repeated property is added.               |
-| `addSection`       | function  | Appends a section.                                                           |
-| `binary`           | namespace | Everything under `./ini/binary`.                                             |
-| `Document`         | type      | A whole file: an ordered sequence of sections, duplicates legal.             |
-| `filterProperties` | function  | Every property with this name, in file order.                                |
-| `filterSections`   | function  | Every section with this name, in file order.                                 |
-| `findByNickname`   | function  | Finds a section by its `nickname`, comparing hashes rather than text.        |
-| `findProperty`     | function  | First property with this name, or `undefined`.                               |
-| `findSection`      | function  | First section with this name, or `undefined`.                                |
-| `Format`           | type      | `'binary' \| 'text' \| 'save'`.                                              |
-| `formatOf`         | function  | Detects the encoding of a buffer without parsing it.                         |
-| `getNickname`      | function  | The `nickname` a section identifies itself by, as text.                      |
-| `getValue`         | function  | First value of the first property with this name.                            |
-| `getValues`        | function  | Values of the first property with this name; `undefined` differs from empty. |
-| `hasProperty`      | function  | Whether a property is present at all, whatever its values.                   |
-| `Property`         | interface | A named list of values. Zero values is normal and means something.           |
-| `read`             | function  | Reads an INI in whichever encoding it is in — the signature decides.         |
-| `save`             | namespace | Everything under `./ini/save`.                                               |
-| `Section`          | interface | A named list of properties. The name is opaque text, not an identifier.      |
-| `text`             | namespace | Everything under `./ini/text`.                                               |
-| `value`            | namespace | Value constructors, predicates and coercions (below).                        |
-| `Value`            | type      | One value of one property, tagged rather than a bare primitive.              |
-| `ValueType`        | type      | Which of the four things a value is.                                         |
-| `write`            | function  | Writes a document as bytes, binary by default; never masks unless asked.     |
+| Export      | Kind      |                                                                              |
+| ----------- | --------- | ---------------------------------------------------------------------------- |
+| `binary`    | namespace | Everything under `./ini/binary`.                                             |
+| `Document`  | class     | A whole file: an ordered sequence of sections, duplicates legal.             |
+| `Format`    | type      | `'binary' \| 'text' \| 'save'`.                                              |
+| `formatOf`  | function  | Detects the encoding of a buffer without parsing it.                         |
+| `Line`      | type      | A verbatim source line the parser did not interpret. Text-only.              |
+| `Property`  | class     | A named list of values. Zero values is normal and means something.           |
+| `save`      | namespace | Everything under `./ini/save`.                                               |
+| `Section`   | class     | A named list of properties. The name is opaque text, not an identifier.      |
+| `text`      | namespace | Everything under `./ini/text`.                                               |
+| `value`     | namespace | Value constructors, predicates and coercions (below).                        |
+| `Value`     | type      | One value of one property, tagged rather than a bare primitive.              |
+| `ValueType` | type      | Which of the four things a value is.                                         |
+
+**`Document`, `Section` and `Property` are classes, and both the lookups and the serialization are
+their members** rather than free functions — the same shape as `utf/`'s `Directory`, which is
+`Directory.read(bytes)` and `directory.write()`. `Document.read` routes on the signature and
+`document.write(format)` emits any of the three, so nothing at module scope reads or writes a
+document and there is nothing to import for it.
+
+| Class      | Members                                                                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Document` | `read` (static), `write`, `entries`, `sections`, `getSection`, `filterSections`, `addSection`, `insertSection`, `deleteSection`, `removeSection`, `append`, `findByNickname`, `[Symbol.iterator]` |
+| `Section`  | `name`, `label`, `comment`, `entries`, `properties`, `getProperty`, `filterProperties`, `getValue`, `getValues`, `hasProperty`, `addProperty`, `insertProperty`, `deleteProperty`, `removeProperty`, `append`, `getNickname` |
+| `Property` | `name`, `label`, `comment`, `values`, `format`                                                                                              |
 
 `value`: `boolean`, `integer`, `float`, `string`, `from`, `list`, `isBoolean`, `isInteger`,
 `isFloat`, `isNumber`, `isString`, `toBoolean`, `toInteger`, `toFloat`, `toText`, `equals`.
@@ -551,6 +578,8 @@ The narrowest entry point in the package, and the one where the most is left beh
 | `SIGNATURE`            | const    | `BINI`, read as a little-endian `uint32`.                                            |
 | `VALUE_BYTE_LENGTH`    | const    | `type` uint8 and a fixed four-byte payload, whatever the type.                       |
 | `ValueTag`             | type     | `Boolean`/`Integer`/`Float`/`String` — a `const` object and the union of its values. |
+| `VERSION`              | const    | The only version retail carries, in all 1,251 files.                                 |
+| `write`                | function | Writes sections as a BINI, reproducing the original compiler's byte layout.          |
 
 ## `./ini/save`
 
@@ -562,8 +591,6 @@ The narrowest entry point in the package, and the one where the most is left beh
 | `read`               | function | Reads a masked save into sections.                                           |
 | `SIGNATURE`          | const    | `FLS1`, read as a little-endian `uint32`.                                    |
 | `write`              | function | Writes a document as a masked save.                                          |
-| `VERSION`              | const    | The only version retail carries, in all 1,251 files.                                 |
-| `write`                | function | Writes sections as a BINI, reproducing the original compiler's byte layout.          |
 
 `Dictionary` instance: `byteLength`, `size`, `push(value)`, `toBytes()`.
 
@@ -712,6 +739,8 @@ Split three ways: the id space, the two payload formats, and the PE container.
 | `partition`        | function  | Splits a global map back into per-library maps of local ids, ready for the writers. |
 | `readLibrary`      | function  | Merges libraries into one id space, keeping names and infocards apart.              |
 | `RETAIL_LIBRARIES` | const     | Retail's order, as `freelancer.ini` gives it. A default, not a rule.                |
+| `writeLibrary`     | function  | The editing counterpart of `readLibrary`: carries through what the readers did not consume. |
+| `languageOf`       | function  | Language id of a resource, from the third level of the directory path.              |
 
 ### Strings and infocards
 
@@ -729,6 +758,9 @@ Split three ways: the id space, the two payload formats, and the PE container.
 | `writeInfocards`      | function  | Encodes infocards as `RT_HTML` resources, one per id.                 |
 | `ResourceOptions`     | interface | Options shared by the writers that build resources from decoded text. |
 | `STRING_BLOCK_LENGTH` | const     | Strings per `RT_STRING` block. Fixed by the format.                   |
+| `LANGUAGE_ENGLISH_US`  | const     | `ResourceOptions.language`'s default, and every retail content resource. |
+| `LANGUAGE_NEUTRAL`     | const     | `LANG_NEUTRAL`/`SUBLANG_NEUTRAL`, what `languageOf` reports for a mixed set. |
+| `CODE_PAGE_WINDOWS_1252` | const   | `ResourceOptions.codePage`'s default, and every retail data entry.      |
 
 ### PE container
 
@@ -736,21 +768,19 @@ Split three ways: the id space, the two payload formats, and the PE container.
 | -------------- | --------- | ---------------------------------------------------------------------------- |
 | `isImage`      | function  | Whether a buffer starts with `MZ` and its `e_lfanew` reaches a `PE\0\0`.     |
 | `read`         | function  | Reads every resource in a Win32 image, flattening the three-level directory. |
+| `inspect`      | function  | Reads the image's headers without walking its resources.                     |
+| `Image`        | interface | What `inspect` reports: the headers and the resource directory's location.   |
 | `write`        | function  | Writes resources as a resource-only DLL.                                     |
 | `writeSection` | function  | Builds the `.rsrc` section, in the linker's layout.                          |
 | `WriteOptions` | interface | `imageBase` and COFF `timestamp`; both default, so output is deterministic.  |
 | `Resource`     | interface | One resource: a leaf of the directory tree, with the path that reaches it.   |
 | `ResourceId`   | type      | A resource type or entry identity: a number, or a name.                      |
-| `Type`         | type      | Resource types, by their Win32 `RT_*` numbers.                               |
+| `Type`         | const     | `RT_*` resource type numbers — a `const` object and the union of its values. |
 
-Plus the layout constants, all measured against retail: `CODE_PAGE_WINDOWS_1252`, `DATA_ALIGNMENT`,
-`DEFAULT_IMAGE_BASE`, `DIRECTORY_COUNT`, `DIRECTORY_RELOCATION`, `DIRECTORY_RESOURCE`,
-`DOS_SIGNATURE`, `FILE_ALIGNMENT`, `HEADERS_BYTE_LENGTH`, `IMAGE_CHARACTERISTICS`,
-`LANGUAGE_ENGLISH_US`, `LANGUAGE_NEUTRAL`, `MACHINE_I386`, `OPTIONAL_BYTE_LENGTH`, `OPTIONAL_MAGIC`,
-`PADDING`, `PE_OFFSET_POINTER`, `PE_SIGNATURE`, `RESOURCE_DATA_BYTE_LENGTH`,
-`RESOURCE_DIRECTORY_BYTE_LENGTH`, `RESOURCE_ENTRY_BYTE_LENGTH`, `RESOURCE_HIGH_BIT`,
-`RESOURCE_VERSION_MAJOR`, `RESOURCE_VERSION_MINOR`, `SECTION_ALIGNMENT`, `SECTION_BYTE_LENGTH`,
-`SECTION_DISCARDABLE_DATA`, `SECTION_READ_DATA`, `SUBSYSTEM_GUI`.
+The image's own layout constants — `DOS_SIGNATURE`, `SECTION_ALIGNMENT`,
+`RESOURCE_ENTRY_BYTE_LENGTH` and twenty-three others — are **not exported**, and that is deliberate.
+`write` mints a whole image, so nothing a caller passes or receives is a PE header, and no signature
+in this module names one. They live in `resource/data.ts` for the reader and writer that need them.
 
 ---
 
@@ -787,16 +817,13 @@ Per-record readers and writers that only their own module's aggregate function c
 Each of these is either named in a public signature, or needed to do the thing its module exists to
 do, and neither is reachable.
 
-| Name                               | File                 | Why it matters                                                                                                                                                         |
-| ---------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Surface`                          | `surface/surface.ts` | `Part extends Extent, Surface` — `massCenter`, `rotationInertia`, `radius`, `surfaceDeviation`, `points` and the BVH `root` have no nameable type on the consumer side |
-| `getNodes`, `getHulls`             | `surface/surface.ts` | the only walk from a `Part` down to its hulls                                                                                                                          |
-| `readSurface`, `writeSurface`      | `surface/surface.ts` | per-part access; only the whole library is reachable                                                                                                                   |
-| `HullType`                         | `surface/hull.ts`    | the type of `Hull.type`, which is otherwise an opaque number                                                                                                           |
-| `getIndices`                       | `surface/hull.ts`    | faces to a flat index list — what drawing or colliding against a hull needs                                                                                            |
-| `TriangleIndices`, `TriangleFlags` | `surface/face.ts`    | the types of `Face.points`, `Face.opposites`, `Face.virtualEdges`                                                                                                      |
-| `Entry`, `Pair`                    | `alchemy/effect.ts`  | the link and pair records an `Effect`'s instance tree is built from                                                                                                    |
-| `TargaOptions`                     | `texture/targa.ts`   | the parameter type of the exported `readTargaImage`                                                                                                                    |
+| Name                          | File                 | Why it matters                                                     |
+| ----------------------------- | -------------------- | ------------------------------------------------------------------ |
+| `readSurface`, `writeSurface` | `surface/surface.ts` | per-part access; only the whole library is reachable               |
+| `Entry`, `Pair`               | `alchemy/effect.ts`  | the link and pair records an `Effect`'s instance tree is built from |
+| `TargaOptions`                | `texture/targa.ts`   | the parameter type of the exported `readTargaImage`                |
 
-`./surface` accounts for six of the eight. It exports eight names against the directory's 34, and a
-consumer holding a `Part` can reach its extents but not its geometry.
+**`./surface` used to account for six of these and now accounts for one.** It exported eight names
+against the directory's 34, so a consumer holding a `Part` could reach its extents but not its
+geometry; `Surface`, `HullType`, `getNodes`, `getHulls`, `getIndices`, `TriangleIndices` and
+`TriangleFlags` are exported now, along with the whole construction layer, and the entry point is 30.

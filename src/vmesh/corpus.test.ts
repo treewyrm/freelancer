@@ -4,7 +4,7 @@ import { list, load, skip } from '#/corpus.js'
 import type Directory from '#/utf/directory.js'
 import type File from '#/utf/file.js'
 import { getResourceId } from '#/hash.js'
-import { Format, Primitive, readVMeshData, vertexByteLength } from './data.js'
+import { VertexFormat, Primitive, readVMeshData, vertexByteLength } from './data.js'
 import { getMesh, getMeshDraw, readVMeshLibrary, writeVMeshLibrary } from './library.js'
 import { readMultiLevel } from './multilevel.js'
 import { readVMeshPart, writeVMeshPart } from './part.js'
@@ -83,8 +83,8 @@ describe('retail asset corpus', { skip }, () => {
 
       for (const { path, root } of assets())
         for (const { name, format } of readVMeshLibrary(root)) {
-          ok(format & Format.Position, `${path}/${name}: format 0x${format.toString(16)}`)
-          ok(!(format & (Format.PointSize | Format.Specular)), `${path}/${name}: unexpected flag`)
+          ok(format & VertexFormat.Position, `${path}/${name}: format 0x${format.toString(16)}`)
+          ok(!(format & (VertexFormat.PointSize | VertexFormat.Specular)), `${path}/${name}: unexpected flag`)
           seen.add(format)
         }
 

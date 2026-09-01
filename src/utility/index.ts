@@ -1,5 +1,7 @@
 export { default as BufferView } from './bufferview.js'
+export { default as ChunkView } from './chunkview.js'
 export * as encoding from './encoding.js'
+export { assemble, flatten } from './hierarchy.js'
 export * from './number.js'
 export * as path from './path.js'
 export * from './string.js'

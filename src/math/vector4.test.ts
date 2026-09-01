@@ -495,8 +495,7 @@ describe('Vector4.random', () => {
 describe('Vector4.read / write', () => {
   it('round-trips a vector through binary', () => {
     const original = { x: 1.5, y: -2.5, z: 3.0, w: -0.25 }
-    const view = Vector4.write(original)
-    view.rewind()
+    const view = BufferView.from(Vector4.write(original))
     assert.deepEqual(Vector4.read(view), original)
   })
 

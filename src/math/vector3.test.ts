@@ -421,8 +421,7 @@ describe('Vector3.sphere', () => {
 describe('Vector3.read / write', () => {
   it('round-trips a vector through binary', () => {
     const original = { x: 1.5, y: -2.5, z: 3.0 }
-    const view = Vector3.write(original)
-    view.rewind()
+    const view = BufferView.from(Vector3.write(original))
     const result = Vector3.read(view)
     assert.ok(Vector3.equal(result, original), `got ${JSON.stringify(result)}`)
   })

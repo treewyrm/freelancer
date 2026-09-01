@@ -8,5 +8,14 @@
  * the header. Both are recorded in [THN.md](../../../docs/THN.md), and `data.ts` already carries the
  * name → byte direction of the opcode table so a writer does not start from nothing.
  */
-export * from './data.js'
-export * from './read.js'
+export {
+  ConstantTag,
+  GAP_BYTE_LENGTH,
+  HEADER_BYTE_LENGTH,
+  OPCODES,
+  OPCODE_BYTES,
+  SIGNATURE,
+  VERSION,
+  type Opcode,
+} from './data.js'
+export { isBytecode, read } from './read.js'

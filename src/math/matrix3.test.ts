@@ -384,8 +384,7 @@ describe('Matrix3.push', () => {
 describe('Matrix3.read / write', () => {
   it('round-trips through binary', () => {
     const original = Matrix3.axisAngle({ x: 1, y: 2, z: 3 }, Math.PI / 7)
-    const view = Matrix3.write(original)
-    view.rewind()
+    const view = BufferView.from(Matrix3.write(original))
     const result = Matrix3.read(view)
     assert.ok(matApprox(result, original, 0.0001))
   })

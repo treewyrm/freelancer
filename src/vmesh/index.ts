@@ -1,6 +1,6 @@
 export {
   type VMeshData,
-  Format,
+  VertexFormat,
   Primitive,
   getMapCount,
   readVMeshData,

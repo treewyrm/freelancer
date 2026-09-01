@@ -116,9 +116,10 @@ Every format is read in the same three steps, and each step is usable on its own
 | `./texture` | `src/texture/index.ts` | `Texture library` entries: DDS surfaces, Targa mip chains, animations, cubemaps |
 | `./material` | `src/material/index.ts` | `Material library` entries: shader type, colours, texture slots |
 | `./deformable` | `src/deformable/index.ts` | `.dfm` character models: bone table, skinned meshes, detail levels |
-| `./ini` | `src/ini/index.ts` | The interim model, value coercion, document lookups, `read`/`write` by signature |
+| `./ini` | `src/ini/index.ts` | The interim model, value coercion, and `Document` — lookups plus `read`/`write` by signature |
 | `./ini/text` | `src/ini/text/index.ts` | Text INI parser and serializer |
 | `./ini/binary` | `src/ini/binary/index.ts` | BINI reader and writer |
+| `./ini/save` | `src/ini/save/index.ts` | `.fl` saves: text under a positional XOR mask |
 | `./thn` | `src/thn/index.ts` | The scene script model, value helpers, `read`/`write` by signature |
 | `./thn/text` | `src/thn/text/index.ts` | Lua source parser and serializer — the whole write path |
 | `./thn/bytecode` | `src/thn/bytecode/index.ts` | Compiled Lua 3.2 reader, and the opcode table. **No writer** |
@@ -176,15 +177,18 @@ model interprets formats.
   binary reader and writer operates on one.
 - **`encoding.ts`** — windows-1252 both ways. Needed for `initialworld.ini`'s U+00A0 padding, and
   it is the encoding hashing uses.
-- **`Dictionary`** — accumulates entry names for the UTF names block during serialization.
+- **`ChunkView`** — chunked-binary cursor, used by `surface/` and exported for consumers reading a
+  chunk this library does not model.
 - **`number.ts`** — C `atoi`/`atof`, shortest-round-trip float32 formatting, and the text token
   classifier the INI compiler's behaviour is reproduced from.
 - **`string.ts`** — `fold`/`equals` (ASCII-only, which is what `stricmp` does), `trim` (including
   U+00A0), `toHex`, `isHex`, `parseHex`.
 - **`tree.ts`** — generic `Tree<T>` helpers: `listTreeElements`, `listTreePairs`, `findTreeElement`,
   `reduceTree`. **`timestamp.ts`** — `Date` ↔ DOS timestamps / Windows 64-bit FILETIMEs.
-  **`hierarchy.ts`** — generic `assemble`/`flatten`. **`chunkview.ts`** — chunked-binary cursor,
-  used by `surface/`.
+  **`hierarchy.ts`** — generic `assemble`/`flatten`. **`path.ts`** — UTF path split/join/resolve.
+- **Not exported**, because a consumer has no use for them: `dictionary.ts` (the UTF names block
+  accumulator, and a second `Dictionary` already ships from `./ini/binary`) and `view.ts`
+  (`concatViews`, which `BufferView.concat` supersedes for everyone outside `ChunkView`).
 
 ## Modules
 

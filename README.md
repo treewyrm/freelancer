@@ -149,16 +149,27 @@ The signature decides which parser runs, never the extension or the location. Re
 `.fl` saves beside them are one masked and one plain.
 
 ```ts
-import { findByNickname, getValue, read, value } from '@treewyrm/freelancer/ini'
+import { Document, value } from '@treewyrm/freelancer/ini'
 
-const document = read(readFileSync('DATA/EQUIPMENT/goods.ini'))
+const document = Document.read(readFileSync('DATA/EQUIPMENT/goods.ini'))
 
-const good = findByNickname(document, 'commodity_gold')!
-const price = getValue(good, 'price')!
+const good = document.findByNickname('commodity_gold')!
+const price = good.getValue('price')!
 
-value.toFloat(price) // 100
-value.toInteger(price) // 100
-value.toText(price) // '100'
+value.toFloat(price) // 425
+value.toInteger(price) // 425
+value.toText(price) // '425'
+```
+
+`Document`, `Section` and `Property` are classes and both the lookups and the serialization are
+methods on them, the same way `Directory` owns `getFile` and `Directory.read` / `directory.write`. A section reached by `getSection` or `findByNickname` carries
+`getProperty` / `filterProperties`, `getValue` / `getValues`, `hasProperty` and `getNickname`; a
+document iterates its sections directly, so `for (const section of document)` reads as it looks.
+
+A property can also coerce positionally, which is how the engine reads a line of several values:
+
+```ts
+const [x, y, z] = document.getSection('Zone')!.getProperty('pos')!.format('float', 'float', 'float')
 ```
 
 A value carries the type the file recorded, and you ask for the type you want — this is how the
@@ -170,19 +181,23 @@ string yields `0` rather than failing, because that is what the game gets.
 Writing emits any of the three encodings from the same document:
 
 ```ts
-import { addProperty, addSection, value, write, type Document } from '@treewyrm/freelancer/ini'
+import { Document, value } from '@treewyrm/freelancer/ini'
 
-const document: Document = []
-const good = addSection(document, 'Good')
+const document = new Document()
+const good = document.addSection('Good')
 
-addProperty(good, 'nickname', [value.string('commodity_gold')])
-addProperty(good, 'price', [value.integer(100)])
-addProperty(good, 'separable') // a flag is a property with no values
+good.addProperty('nickname', value.string('commodity_gold'))
+good.addProperty('price', value.integer(100))
+good.addProperty('separable') // a flag is a property with no values
 
-writeFileSync('goods.ini', write(document, 'binary'))
-writeFileSync('goods.txt', write(document, 'text'))
-writeFileSync('goods.fl', write(document, 'save')) // FLS1, masked
+writeFileSync('goods.ini', document.write('binary'))
+writeFileSync('goods.txt', document.write('text'))
+writeFileSync('goods.fl', document.write('save')) // FLS1, masked
 ```
+
+`addSection` and `addProperty` always **append** — never find-or-replace, because duplicate names
+are legal and carry meaning. Use `insertSection` / `insertProperty` when a section belongs to the
+one above it, the way a `[LOD]` trails its `[Gun]`.
 
 The mask on a `.fl` is obfuscation and nothing more — the pad depends only on a byte's position, so
 it is its own inverse and `save.mask` both reads and writes it. A document does not remember what it

@@ -82,11 +82,23 @@ are structural — they do not need to know what the game does with the bytes �
 neighbouring `Line`s alone, since a comment above a section cannot be told apart from one closing the
 section above it.
 
-`read`/`write`/`formatOf` stay free functions in `./ini`'s barrel rather than becoming
-`Document.read`/`.write`, because INI has three encodings, each in its own submodule, and each one
-constructs `Document`/`Section`/`Property` instances to return them — so a `Document.read` that
-dispatched to those submodules would import back into the module that defines it. `utf/`'s
-`Directory.read` has no such problem because UTF has exactly one binary encoding, implemented inline.
+**Serialization is the class's**, as it is for `utf/`'s `Directory`: `Document.read(bytes)` routes on
+the signature, `document.write(format)` emits any of the three. `formatOf` stays a free function
+because it asks a question about bytes and there is no document yet when it is asked.
+
+That arrangement costs a **cycle**, and it is worth naming rather than discovering. Each encoding
+lives in its own submodule and each constructs `Document`/`Section`/`Property` to return them, so
+`document.ts` importing the three submodules means those submodules import back into the module that
+defines the class. It is benign — every reference to `Document` inside them is in a function body,
+never at module scope, so the class is initialized long before a reader runs — and `utf/` has no
+such problem only because UTF has one encoding, implemented inline.
+
+The measured price is that `Document` reaches all three encoders, so **every path into `./ini` or any
+of its subpaths carries all three**: importing `./ini/text` alone bundles 15.8 KB where the free
+functions let it be 6.7 KB. That is the trade for an API that matches `Directory`, and it is the
+right one here — `binary.read` hands back a `Document`, and a caller holding one wants its methods.
+A consumer who truly needs one decoder and nothing else should reach for `isBinary` plus the
+submodule's own `read`, and accept that the class comes with it.
 
 ## Text form
 
@@ -219,7 +231,7 @@ Three things follow from the pad depending on **position and nothing else**:
   so where the word came from is unknown.
 
 Under the mask is ordinary text, with no dialect of its own. **Writing never masks unless asked** — a
-document does not remember what it was read from, so `write(document, 'save')` is explicit and the
+document does not remember what it was read from, so `document.write('save')` is explicit and the
 default stays `binary`.
 
 ## How the game reads a value

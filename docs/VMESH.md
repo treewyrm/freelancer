@@ -54,7 +54,7 @@ which the API takes separately, is derived from `elementCount`:
 | 5     | `TriangleStrip` | `D3DPT_TRIANGLESTRIP` | `elementCount - 2` |
 | 6     | `TriangleFan`   | `D3DPT_TRIANGLEFAN`   | `elementCount - 2` |
 
-### `Format`
+### `VertexFormat`
 
 A `D3DFVF_*` bitmask, passed as a DWORD to `SetVertexShader` (D3D8) or `SetFVF` (D3D9) to describe
 the in-memory vertex layout.
@@ -77,12 +77,12 @@ the in-memory vertex layout.
 ```ts
 interface VMeshData {
   name: string
-  type: 1                // version field in the binary; always 1
-  primitive: Primitive   // D3DPRIMITIVETYPE
-  format: Format         // D3DFVF bitmask
+  type: 1                  // version field in the binary; always 1
+  primitive: Primitive     // D3DPRIMITIVETYPE
+  format: VertexFormat     // D3DFVF bitmask
   groups: VMeshGroup[]
-  indices: Uint16Array   // D3DFMT_INDEX16 index buffer, shared across all groups
-  vertices: Uint8Array   // FVF-described vertex buffer, stride = vertexByteLength(format)
+  indices: Uint16Array     // D3DFMT_INDEX16 index buffer, shared across all groups
+  vertices: Uint8Array     // FVF-described vertex buffer, stride = vertexByteLength(format)
 }
 ```
 

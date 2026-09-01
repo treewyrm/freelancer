@@ -76,10 +76,10 @@ export function writeRigid(rigid: Rigid): Directory {
  * Reads one part fragment, dispatching on what the directory holds. Camera and sphere are probed
  * for by name; anything else is geometry, which is the only form with no marker of its own.
  */
-export function readPart(directory: Directory): RigidPart {
-  if (isCamera(directory)) return readCamera(directory)
-  if (isSphere(directory)) return readSphere(directory)
-  return readRigid(directory)
+export function readPart(parent: Directory): RigidPart {
+  if (isCamera(parent)) return readCamera(parent)
+  if (isSphere(parent)) return readSphere(parent)
+  return readRigid(parent)
 }
 
 /**
@@ -103,11 +103,11 @@ export function writePart(part: RigidPart): Directory {
  *
  * `MaterialAnim` is a root-level sibling of `Cmpnd` and is not part of the model — read it from the
  * same root with `readMaterialAnimLibrary`.
- * @param directory File root directory
+ * @param parent File root directory
  */
-export function readRigidModel(directory: Directory): RigidModel {
-  if (isCompoundModel(directory)) return readModel(directory, readPart)
-  return readPart(directory)
+export function readRigidModel(parent: Directory): RigidModel {
+  if (isCompoundModel(parent)) return readModel(parent, readPart)
+  return readPart(parent)
 }
 
 /**

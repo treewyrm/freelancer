@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import * as corpus from '#/corpus.js'
-import { Document, formatOf, Property, read, Section, value } from './index.js'
+import { Document, formatOf, Property, Section, value } from './index.js'
 import * as binary from './binary/index.js'
 import * as save from './save/index.js'
 import * as text from './text/index.js'
@@ -35,7 +35,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
 
   it('reads every file without throwing', () => {
     for (const { path, data } of assets)
-      assert.doesNotThrow(() => read(data), `failed to read ${path}`)
+      assert.doesNotThrow(() => Document.read(data), `failed to read ${path}`)
   })
 
   describe('BINI', () => {
@@ -264,7 +264,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
 
     it('is a fixed point over every file', () => {
       for (const { path, data } of assets) {
-        const once = text.write(read(data))
+        const once = text.write(Document.read(data))
         assert.equal(text.write(text.read(once)), once, `${path} is not a fixed point`)
       }
     })
@@ -283,7 +283,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
 
       // freelancer.ini carries [;Display] and keymap-style names; dacom.ini opens with @include.
       it('reads them, keeping a section commented out by its name', () => {
-        const documents = assets.map(({ data }) => read(data))
+        const documents = assets.map(({ data }) => Document.read(data))
         const names = documents.flatMap((document) => document.sections).map(({ name }) => name)
 
         assert.ok(names.includes(';Display'))
@@ -291,7 +291,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
 
       it('keeps @include as a property rather than following it', () => {
         const dacom = assets.find(({ path }) => /dacom\.ini$/i.test(path))
-        const properties = read(dacom!.data).sections.flatMap(({ properties }) => properties)
+        const properties = Document.read(dacom!.data).sections.flatMap(({ properties }) => properties)
 
         assert.ok(properties.some(({ name }) => name.startsWith('@include')))
       })
@@ -320,7 +320,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
         let properties = 0
 
         for (const { data } of assets) {
-          const document = read(data)
+          const document = Document.read(data)
           sections += document.sections.length
           for (const section of document) properties += section.properties.length
         }
@@ -333,7 +333,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
         const asset = assets.find(({ path }) => /newplayer\.fl$/i.test(path))
 
         assert.deepEqual(
-          read(asset!.data).sections.map(({ name }) => name),
+          Document.read(asset!.data).sections.map(({ name }) => name),
           ['Player', 'StoryInfo', 'mPlayer'],
         )
       })
@@ -352,7 +352,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
 
       it('is a fixed point over both files', () => {
         for (const { path, data } of assets) {
-          const once = save.write(read(data))
+          const once = save.write(Document.read(data))
           assert.deepEqual(save.write(save.read(once)), once, `${path} is not a fixed point`)
         }
       })

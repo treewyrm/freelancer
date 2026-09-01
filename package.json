@@ -16,6 +16,7 @@
   "author": "Yuriy Alexeev",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "imports": {
     "#/*": [
       "./dist/*"

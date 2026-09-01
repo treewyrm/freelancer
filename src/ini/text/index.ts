@@ -1,2 +1,2 @@
-export * from './read.js'
-export * from './write.js'
+export { read } from './read.js'
+export { write, writeSection, type WriteOptions } from './write.js'

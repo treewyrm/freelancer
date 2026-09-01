@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import { HEADER_BYTE_LENGTH, isSave, mask, read, write } from './index.js'
 import { Document } from '#/ini/document.js'
-import { formatOf, read as readAny, write as writeAny } from '#/ini/index.js'
+import { formatOf } from '#/ini/index.js'
 import { Property } from '#/ini/property.js'
 import { Section } from '#/ini/section.js'
 import * as value from '#/ini/value.js'
@@ -71,7 +71,7 @@ describe('read', () => {
 
 describe('write', () => {
   it('round-trips a document', () => {
-    const document = readAny('[Player]\r\nname = Trent\r\nhouse = 0.65, li_n_grp\r\n')
+    const document = Document.read('[Player]\r\nname = Trent\r\nhouse = 0.65, li_n_grp\r\n')
     assert.deepEqual(read(write(document)), document)
   })
 
@@ -94,13 +94,13 @@ describe('the top-level entry', () => {
     const bytes = write(document)
 
     assert.equal(formatOf(bytes), 'save')
-    assert.deepEqual(readAny(bytes), document)
+    assert.deepEqual(Document.read(bytes), document)
   })
 
   // A document does not remember what it was read from, so the mask has to be asked for.
   it('never masks unless the format says so', () => {
-    assert.ok(!isSave(writeAny(document, 'text')))
-    assert.ok(!isSave(writeAny(document, 'binary')))
-    assert.ok(isSave(writeAny(document, 'save')))
+    assert.ok(!isSave(document.write('text')))
+    assert.ok(!isSave(document.write('binary')))
+    assert.ok(isSave(document.write('save')))
   })
 })

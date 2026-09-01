@@ -4,7 +4,7 @@ import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
 import {
-  Format,
+  VertexFormat,
   Primitive,
   getMapCount,
   readVMeshData,
@@ -22,7 +22,7 @@ const sample = (): VMeshData => ({
   name: 'body.lod0.vms',
   type: 1,
   primitive: Primitive.TriangleList,
-  format: Format.Position | Format.Normal | Format.Texture1,
+  format: VertexFormat.Position | VertexFormat.Normal | VertexFormat.Texture1,
   groups: [group(0x11111111, 0, 2, 6), group(-1, 3, 5, 6)],
   indices: Uint16Array.from([0, 1, 2, 2, 1, 0, 3, 4, 5, 5, 4, 3]),
   vertices: Uint8Array.from({ length: 6 * 32 }, (_, i) => i & 0xff),
@@ -32,15 +32,15 @@ const wrap = (data: VMeshData) => new Directory('VMeshLibrary', [writeVMeshData(
 
 describe('getMapCount', () => {
   it('extracts the UV set count from bits 8..11', () => {
-    strictEqual(getMapCount(Format.Position), 0)
-    strictEqual(getMapCount(Format.Position | Format.Texture1), 1)
-    strictEqual(getMapCount(Format.Position | Format.Texture2), 2)
-    strictEqual(getMapCount(Format.Position | Format.Texture8), 8)
+    strictEqual(getMapCount(VertexFormat.Position), 0)
+    strictEqual(getMapCount(VertexFormat.Position | VertexFormat.Texture1), 1)
+    strictEqual(getMapCount(VertexFormat.Position | VertexFormat.Texture2), 2)
+    strictEqual(getMapCount(VertexFormat.Position | VertexFormat.Texture8), 8)
   })
 
   it('ignores the non-texture flags', () => {
-    const format = Format.Position | Format.Normal | Format.Diffuse | Format.Specular
-    strictEqual(getMapCount(format | Format.Texture3), 3)
+    const format = VertexFormat.Position | VertexFormat.Normal | VertexFormat.Diffuse | VertexFormat.Specular
+    strictEqual(getMapCount(format | VertexFormat.Texture3), 3)
   })
 })
 
@@ -64,8 +64,8 @@ describe('vertexByteLength', () => {
     })
 
   it('counts point size and specular, which the game files never use', () => {
-    strictEqual(vertexByteLength(Format.Position | Format.PointSize), 16)
-    strictEqual(vertexByteLength(Format.Position | Format.Specular), 16)
+    strictEqual(vertexByteLength(VertexFormat.Position | VertexFormat.PointSize), 16)
+    strictEqual(vertexByteLength(VertexFormat.Position | VertexFormat.Specular), 16)
   })
 })
 
@@ -133,7 +133,7 @@ describe('readVMeshData', () => {
       name: 'empty.vms',
       type: 1,
       primitive: Primitive.TriangleList,
-      format: Format.Position,
+      format: VertexFormat.Position,
       groups: [],
       indices: new Uint16Array(0),
       vertices: new Uint8Array(0),

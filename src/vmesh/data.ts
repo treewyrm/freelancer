@@ -21,7 +21,7 @@ export interface VMeshData {
   primitive: Primitive
 
   /** Vertex format. */
-  format: Format
+  format: VertexFormat
 
   /** Mesh groups. */
   groups: VMeshGroup[]
@@ -57,7 +57,7 @@ export enum Primitive {
 }
 
 /** Direct3D flexible vertex format (FVF). */
-export enum Format {
+export enum VertexFormat {
   /** Vertex position `D3DFVF_XYZ` */
   Position = 0x02,
 
@@ -109,22 +109,22 @@ export enum Format {
  * @param format FVF bitmask
  * @returns
  */
-export const getMapCount = (format: Format) =>
-  (format & Format.TextureCountMask) >> Format.TextureCountShift
+export const getMapCount = (format: VertexFormat) =>
+  (format & VertexFormat.TextureCountMask) >> VertexFormat.TextureCountShift
 
 /**
  * Calculates vertex byte length for the vertex format.
  * @param format FVF bitmask
  * @returns
  */
-export function vertexByteLength(format: Format): number {
+export function vertexByteLength(format: VertexFormat): number {
   let size = 0
 
-  if (format & Format.Position) size += Float32Array.BYTES_PER_ELEMENT * 3
-  if (format & Format.PointSize) size += Float32Array.BYTES_PER_ELEMENT
-  if (format & Format.Normal) size += Float32Array.BYTES_PER_ELEMENT * 3
-  if (format & Format.Diffuse) size += Uint32Array.BYTES_PER_ELEMENT
-  if (format & Format.Specular) size += Uint32Array.BYTES_PER_ELEMENT
+  if (format & VertexFormat.Position) size += Float32Array.BYTES_PER_ELEMENT * 3
+  if (format & VertexFormat.PointSize) size += Float32Array.BYTES_PER_ELEMENT
+  if (format & VertexFormat.Normal) size += Float32Array.BYTES_PER_ELEMENT * 3
+  if (format & VertexFormat.Diffuse) size += Uint32Array.BYTES_PER_ELEMENT
+  if (format & VertexFormat.Specular) size += Uint32Array.BYTES_PER_ELEMENT
 
   size += Float32Array.BYTES_PER_ELEMENT * 2 * getMapCount(format)
 

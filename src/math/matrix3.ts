@@ -1,5 +1,6 @@
-import BufferView from '#/utility/bufferview.js'
+import { writeFloat32 } from './bytes.js'
 import Vector3 from './vector3.js'
+import type BufferView from '#/utility/bufferview.js'
 import type Vector4 from './vector4.js'
 
 /** 3x3 transformation matrix. */
@@ -257,13 +258,13 @@ const Matrix3 = {
     }
   },
 
-  /** Writes nine `float32` components into a view of its own, one basis vector at a time. */
-  write(matrix: Matrix3) {
-    return BufferView.join(
-      Vector3.write(matrix.x),
-      Vector3.write(matrix.y),
-      Vector3.write(matrix.z),
-    )
+  /**
+   * Writes nine `float32` components into a little-endian buffer of its own, one basis vector at a
+   * time.
+   */
+  write(matrix: Matrix3): Uint8Array {
+    const { x, y, z } = matrix
+    return writeFloat32(x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z)
   },
 }
 

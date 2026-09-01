@@ -1,5 +1,6 @@
-import BufferView from '#/utility/bufferview.js'
+import { writeFloat32 } from './bytes.js'
 import { equal, lerp, random } from './scalar.js'
+import type BufferView from '#/utility/bufferview.js'
 import type Vector3 from './vector3.js'
 
 /** 4D vector. */
@@ -240,13 +241,9 @@ const Vector4 = {
     }
   },
 
-  /** Writes four `float32` components into a view of its own. */
-  write(vector: Vector4) {
-    return BufferView.allocate(Float32Array.BYTES_PER_ELEMENT * 4)
-      .writeFloat32(vector.x)
-      .writeFloat32(vector.y)
-      .writeFloat32(vector.z)
-      .writeFloat32(vector.w)
+  /** Writes four `float32` components into a little-endian buffer of its own. */
+  write(vector: Vector4): Uint8Array {
+    return writeFloat32(vector.x, vector.y, vector.z, vector.w)
   },
 }
 

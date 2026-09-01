@@ -2,12 +2,12 @@ import { deepStrictEqual, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import Directory from '#/utf/directory.js'
 import { getResourceId } from '#/hash.js'
-import { Format, Primitive, vertexByteLength, type VMeshData } from './data.js'
+import { VertexFormat, Primitive, vertexByteLength, type VMeshData } from './data.js'
 import { getMesh, getMeshDraw, readVMeshLibrary, writeVMeshLibrary } from './library.js'
 import type { VMeshGroup } from './group.js'
 import type { VMeshRef } from './ref.js'
 
-const stride = vertexByteLength(Format.Position | Format.Normal | Format.Texture1)
+const stride = vertexByteLength(VertexFormat.Position | VertexFormat.Normal | VertexFormat.Texture1)
 
 const group = (materialId: number, vertexStart: number, vertexEnd: number, elementCount: number) =>
   ({ materialId, vertexStart, vertexEnd, elementCount, padding: 0 }) satisfies VMeshGroup
@@ -20,7 +20,7 @@ const mesh = (name: string): VMeshData => ({
   name,
   type: 1,
   primitive: Primitive.TriangleList,
-  format: Format.Position | Format.Normal | Format.Texture1,
+  format: VertexFormat.Position | VertexFormat.Normal | VertexFormat.Texture1,
   groups: [group(0x11111111, 0, 2, 3), group(0x22222222, 3, 5, 6)],
   indices: Uint16Array.from([0, 1, 2, 3, 4, 5, 5, 4, 3]),
   vertices: Uint8Array.from({ length: 6 * stride }, (_, i) => i & 0xff),
