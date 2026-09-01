@@ -1,4 +1,4 @@
-import type { Document, Entry, Value } from '#/thn/types.js'
+import type { Entry, Globals, Value } from '#/thn/types.js'
 import { identifier, number, string } from '#/thn/value.js'
 
 /**
@@ -16,7 +16,7 @@ import { identifier, number, string } from '#/thn/value.js'
  * @param source Script text. Decode bytes with `utility/encoding` first.
  * @throws SyntaxError on anything outside the literal grammar.
  */
-export const read = (source: string): Document => {
+export const read = (source: string): Globals => {
   let offset = 0
 
   const lineOf = (at: number): number => {
@@ -214,11 +214,11 @@ export const read = (source: string): Document => {
     return value
   }
 
-  const document: Document = []
+  const globals: Globals = []
 
   for (;;) {
     skip()
-    if (offset >= source.length) return document
+    if (offset >= source.length) return globals
 
     const start = offset
     const global = name()
@@ -227,7 +227,7 @@ export const read = (source: string): Document => {
     if (global === 'local') fail('A scene script holds no locals')
 
     expect('=')
-    document.push({ name: global!, value: expression() })
+    globals.push({ name: global!, value: expression() })
 
     // A statement separator is optional in Lua and this format never writes one.
     take(';')

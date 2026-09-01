@@ -402,7 +402,7 @@ background layer.
 
 ## The typed layer
 
-`./thn/scene` turns an interim `Document` into these structures and back. Two consequences of the above
+`./thn/scene` turns an interim `Globals` into these structures and back. Two consequences of the above
 shape it:
 
 - **It folds the two export forms.** The interim layer keeps `type = SCENE` and `type = 9` apart because

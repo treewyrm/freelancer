@@ -5,7 +5,7 @@ import { read as readDocument } from '#/thn/index.js'
 import { read } from './read.js'
 import { write } from './write.js'
 import { ENTITY_TYPES, EVENT_TYPES } from './data.js'
-import type { Document, Value } from '#/thn/types.js'
+import type { Globals, Value } from '#/thn/types.js'
 import type { Entity, Event, Script } from './types.js'
 
 /**
@@ -103,8 +103,8 @@ describe('retail scenes, typed', { skip: corpus.skip }, () => {
     const numeric = new Set<string>()
 
     for (const { path, data } of assets) {
-      const document = readDocument(data)
-      const entities = document.find(({ name }) => name === 'entities')?.value
+      const globals = readDocument(data)
+      const entities = globals.find(({ name }) => name === 'entities')?.value
 
       if (entities?.type !== 'table') continue
 
@@ -237,7 +237,7 @@ describe('retail scenes, typed', { skip: corpus.skip }, () => {
    * would otherwise silently flatten. Compared against the interim document, which is the file.
    */
   it('writes every path_data back byte for byte', () => {
-    const strings = (document: Document): string[] => {
+    const strings = (globals: Globals): string[] => {
       const found: string[] = []
 
       const walk = (v: Value, key?: string): void => {
@@ -250,7 +250,7 @@ describe('retail scenes, typed', { skip: corpus.skip }, () => {
         }
       }
 
-      for (const { name, value } of document) walk(value, name)
+      for (const { name, value } of globals) walk(value, name)
       return found
     }
 

@@ -1,20 +1,20 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import * as value from '#/thn/value.js'
-import type { Document } from '#/thn/types.js'
+import type { Globals } from '#/thn/types.js'
 import { read } from './read.js'
 import { write } from './write.js'
 import type { Script } from './types.js'
 
-/** A document with one entity in it, so a test can say only what it is about. */
-const withEntity = (fields: Parameters<typeof value.table>[0]): Document => [
+/** A script with one entity in it, so a test can say only what it is about. */
+const withEntity = (fields: Parameters<typeof value.table>[0]): Globals => [
   { name: 'duration', value: value.number(10) },
   { name: 'entities', value: value.list(value.table(fields)) },
   { name: 'events', value: value.list() },
 ]
 
-/** A document with one event in it. */
-const withEvent = (...parts: Parameters<typeof value.list>): Document => [
+/** A script with one event in it. */
+const withEvent = (...parts: Parameters<typeof value.list>): Globals => [
   { name: 'duration', value: value.number(10) },
   { name: 'entities', value: value.list() },
   { name: 'events', value: value.list(value.list(...parts)) },
@@ -32,7 +32,7 @@ describe('the two export forms fold together', () => {
 
   // The same script as one of the 355: resolved numbers where the rest write the globals, and an
   // array stored as a hash keyed 1..n.
-  const numeric: Document = [
+  const numeric: Globals = [
     { name: 'duration', value: value.number(10) },
     {
       name: 'entities',
@@ -207,12 +207,12 @@ describe('what it refuses', () => {
 
 describe('what it keeps', () => {
   it('keeps a key the vocabulary does not name, and writes it back', () => {
-    const document = withEntity({
+    const globals = withEntity({
       entity_name: 'X',
       type: value.identifier('MARKER'),
       inventedByAMod: value.number(7),
     })
-    const script = read(document)
+    const script = read(globals)
 
     assert.deepEqual(script.entities[0]?.unknown, { inventedByAMod: value.number(7) })
     assert.deepEqual(
@@ -290,42 +290,38 @@ describe('the shapes the guide does not have', () => {
   // A SCENE writes the fog keys flat; a START_FOG_PROP_ANIM writes them as a block. Grouped either
   // way, and splatted back out flat when a scene entity is written.
   it('groups a scene entity’s flat fog keys and writes them back flat', () => {
-    const document = withEntity({
+    const globals = withEntity({
       entity_name: 'Scene',
       type: value.identifier('SCENE'),
       fogon: value.identifier('Y'),
       fogstart: 0,
       fogend: 400,
     })
-    const script = read(document)
+    const script = read(globals)
 
     assert.deepEqual(script.entities[0], {
       entity_name: 'Scene',
       type: 'SCENE',
       fog: { fogon: 'Y', fogstart: 0, fogend: 400 },
     })
-    assert.deepEqual(write(script), document)
+    assert.deepEqual(write(script), globals)
   })
 
   // Retail SET_CAMERA events are three fields long, not four with an empty table.
   it('writes a SET_CAMERA with no property table', () => {
-    const document = withEvent(
-      value.number(0),
-      value.identifier('SET_CAMERA'),
-      value.list('M', 'C'),
-    )
+    const globals = withEvent(value.number(0), value.identifier('SET_CAMERA'), value.list('M', 'C'))
 
-    assert.deepEqual(read(document).events[0], {
+    assert.deepEqual(read(globals).events[0], {
       time: 0,
       targets: ['M', 'C'],
       action: 'SET_CAMERA',
     })
-    assert.deepEqual(write(read(document)), document)
+    assert.deepEqual(write(read(globals)), globals)
   })
 })
 
 describe('pathprops', () => {
-  const withPath = (props: Parameters<typeof value.table>[0]): Document =>
+  const withPath = (props: Parameters<typeof value.table>[0]): Globals =>
     withEntity({
       entity_name: 'Path',
       type: value.identifier('MOTION_PATH'),
@@ -338,10 +334,10 @@ describe('pathprops', () => {
     'OPEN, {0.000000,-0.000000,0.000000}, {1.000000,0.000000,0.000000,0.000000}, ' +
     '{0.000000,0.099999,0.000224}, {1.000000,0.000000,-0.000000,0.000000}, '
 
-  const document = withPath({ path_type: 'CV_CROrientationSplinePath', path_data: data })
+  const globals = withPath({ path_type: 'CV_CROrientationSplinePath', path_data: data })
 
   it('reads path_data into position and orientation pairs', () => {
-    assert.deepEqual(read(document).entities[0], {
+    assert.deepEqual(read(globals).entities[0], {
       entity_name: 'Path',
       type: 'MOTION_PATH',
       pathprops: {
@@ -361,7 +357,7 @@ describe('pathprops', () => {
    * defensible if nothing is lost putting it back.
    */
   it('writes path_data back verbatim, negative zeros and all', () => {
-    assert.deepEqual(write(read(document)), document)
+    assert.deepEqual(write(read(globals)), globals)
   })
 
   // Neither is in a retail script and both are in `thorn.dll`, so both are readable rather than

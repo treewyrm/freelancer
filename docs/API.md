@@ -272,6 +272,7 @@ Instance: `name`, `children`, `directories`, `files`, `getDirectory(...path)`, `
 | `AnimationLibrary`      | type      | Animation scripts of a model.                                                   |
 | `AnimationMap`          | type      | `ObjectMap \| JointMap`.                                                        |
 | `Channel`               | interface | Keyframe track of a single animated property set.                               |
+| `ChannelKeyframe`       | interface | Animation keyframe. Which properties are set is dictated by the channel type.   |
 | `ChannelSample`         | interface | Channel value sampled between keyframes.                                        |
 | `ChannelType`           | enum      | Channel keyframe contents, a bitfield stored in the channel `Header` file.      |
 | `getChannelDuration`    | function  | Channel duration in seconds.                                                    |
@@ -282,7 +283,6 @@ Instance: `name`, `children`, `directories`, `files`, `getDirectory(...path)`, `
 | `getScript`             | function  | Finds script by name.                                                           |
 | `getScriptDuration`     | function  | Script duration in seconds, the longest of its maps.                            |
 | `JointMap`              | interface | Animates a child object relative to its parent, driving the joint between them. |
-| `Keyframe`              | interface | Animation keyframe. Which properties are set is dictated by the channel type.   |
 | `keyframeByteLength`    | function  | Calculates keyframe byte length for the channel type.                           |
 | `ObjectMap`             | interface | Animates the root object of a model in its own space.                           |
 | `POSITION_MASK`         | const     | Bits describing keyframe position.                                              |
@@ -597,11 +597,11 @@ because a hand-built `Document` can exceed them and `write` throws when it does.
 | Export            | Kind      |                                                                         |
 | ----------------- | --------- | ----------------------------------------------------------------------- |
 | `bytecode`        | namespace | Everything under `./thn/bytecode`.                                      |
-| `Document`        | type      | A whole script: an ordered sequence of assignments.                     |
 | `Entry`           | interface | One `key = value` pair of a table's hash part, in insertion order.      |
 | `Format`          | type      | `'bytecode' \| 'text'`.                                                 |
 | `formatOf`        | function  | Detects the encoding of a buffer without parsing it.                    |
 | `Global`          | interface | One top-level `name = value` assignment.                                |
+| `Globals`         | type      | A whole script: an ordered sequence of assignments.                     |
 | `IdentifierValue` | interface | A bare identifier — the one value with no JSON equivalent.              |
 | `NumberValue`     | interface | A number, kept as the literal text it was written as.                   |
 | `read`            | function  | Reads a scene script in whichever encoding it is in.                    |
@@ -630,7 +630,7 @@ Read only; there is no bytecode writer, and the two undecoded header fields are 
 
 **The opcode table is the only constant that gets out.** `SIGNATURE` and `VERSION` are what
 `isBytecode` is for; `HEADER_BYTE_LENGTH` and `GAP_BYTE_LENGTH` are this reader's walk, and the gap
-is not even decoded; `ConstantTag` types nothing a caller receives, since a `Document` is `Global[]`
+is not even decoded; `ConstantTag` types nothing a caller receives, since `Globals` is `Global[]`
 and a `Value` carries no tag; and `OPCODE_BYTES` is the absent writer's direction, read by nothing.
 
 | Export               | Kind      |                                                                               |
@@ -788,26 +788,32 @@ internal by design; a few are holes.
 
 ### Internal by design
 
-Per-record readers and writers that only their own module's aggregate function calls. They are
-`export`ed so the unit tests can reach them, and that is the whole reason.
+Per-record readers and writers that only their own module's aggregate function calls. Each is
+`export`ed because something inside the module crosses a file boundary to reach it — a sibling
+source file, or that module's unit tests — and no barrel re-exports it, so the name stops at the
+module edge.
 
-| File                    | Names                                                                                                |
-| ----------------------- | ---------------------------------------------------------------------------------------------------- |
-| `alchemy/animation.ts`  | the eighteen `read*`/`write*` keyframe and animation record functions                                |
-| `alchemy/effect.ts`     | `readEntry`, `writeEntry`, `readPair`, `writePair`, `readEffect`, `writeEffect`                      |
-| `alchemy/misc.ts`       | `readInteger`, `readFloat`, `readString`, `readBlending`, `readArray`, and writers                   |
-| `alchemy/node.ts`       | `readNode`, `writeNode`                                                                              |
-| `alchemy/property.ts`   | `readProperty`, `writeProperty`                                                                      |
-| `compound/hardpoint.ts` | `readPosition`, `readOrientation`, `readAxis`, `readFixed`, `readRevolute`, and writers              |
-| `compound/joint.ts`     | `readFixed`, `readRevolute`, `readPrismatic`, `readCylinder`, `readSphere`, `readLoose`, and writers |
-| `deformable/arrays.ts`  | `readUint16Array`, `readUint32Array`, `readFloat32Array`, and writers                                |
-| `rigid/rigid.ts`        | `readRigid`, `writeRigid`, `readPart`, `writePart`                                                   |
-| `surface/*.ts`          | `readExtent`, `readPoint`, `readNode`, `readPart`, `readHull`, and writers                           |
-| `texture/targa.ts`      | `readUncompressedColorMap`, `readUncompressedRGB`, `swapBGRtoRGB`                                    |
-| `vmesh/group.ts`        | `byteLength`                                                                                         |
-| `utility/*.ts`          | `chunkview`, `dictionary`, `view.concatViews`, `hierarchy.flatten`/`assemble`                        |
-| `crc32.ts`, `id32.ts`   | the raw hash functions, wrapped by `.`'s `getResourceId` / `getObjectId`                             |
-| `corpus.ts`             | the retail-tree test harness, deliberately outside the exports map                                   |
+**The rationale used to read "so the unit tests can reach them, and that is the whole reason", and
+that was wrong for sixteen of them.** Nothing reached `compound/hardpoint.ts`'s ten,
+`rigid/rigid.ts`'s four, or `texture/targa.ts`'s `readUncompressedColorMap` and
+`readUncompressedRGB` — not a sibling, not a test. They are file-local now and off this table.
+`swapBGRtoRGB` stays because `library.test.ts` does import it.
+
+| File                   | Names                                                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| `alchemy/animation.ts` | the eighteen `read*`/`write*` keyframe and animation record functions                                |
+| `alchemy/effect.ts`    | `readEntry`, `writeEntry`, `readPair`, `writePair`, `readEffect`, `writeEffect`                      |
+| `alchemy/misc.ts`      | `readInteger`, `readFloat`, `readString`, `readBlending`, `readArray`, and writers                   |
+| `alchemy/node.ts`      | `readNode`, `writeNode`                                                                              |
+| `alchemy/property.ts`  | `readProperty`, `writeProperty`                                                                      |
+| `compound/joint.ts`    | `readFixed`, `readRevolute`, `readPrismatic`, `readCylinder`, `readSphere`, `readLoose`, and writers |
+| `deformable/arrays.ts` | `readUint16Array`, `readUint32Array`, `readFloat32Array`, and writers                                |
+| `surface/*.ts`         | `readExtent`, `readPoint`, `readNode`, `readPart`, `readHull`, and writers                           |
+| `texture/targa.ts`     | `swapBGRtoRGB`                                                                                       |
+| `vmesh/group.ts`       | `byteLength`                                                                                         |
+| `utility/*.ts`         | `chunkview`, `dictionary`, `view.concatViews`, `hierarchy.flatten`/`assemble`                        |
+| `crc32.ts`, `id32.ts`  | the raw hash functions, wrapped by `.`'s `getResourceId` / `getObjectId`                             |
+| `corpus.ts`            | the retail-tree test harness, deliberately outside the exports map                                   |
 
 ### Holes
 

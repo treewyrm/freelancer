@@ -110,4 +110,4 @@ export interface Global {
  * unreadable for no gain; it is asserted in the corpus suite instead, which is where the equivalent
  * INI facts are pinned.
  */
-export type Document = Global[]
+export type Globals = Global[]

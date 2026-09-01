@@ -1,4 +1,4 @@
-import type { Document, Value } from '#/thn/types.js'
+import type { Globals, Value } from '#/thn/types.js'
 
 /** Lua 3.2's reserved words. A table key that is one of these cannot be written bare. */
 const RESERVED = new Set([
@@ -64,9 +64,9 @@ export interface WriteOptions {
  * and the model records which was used, so collapsing them would be the one thing here that loses
  * information on a round-trip.
  *
- * @param document Assignments to write, in order.
+ * @param globals Assignments to write, in order.
  */
-export const write = (document: Document, options: WriteOptions = {}): string => {
+export const write = (globals: Globals, options: WriteOptions = {}): string => {
   const { width = 96, indent = '  ' } = options
 
   const render = (value: Value, depth: number): string => {
@@ -106,5 +106,5 @@ export const write = (document: Document, options: WriteOptions = {}): string =>
       ? key.value
       : `[${render(key, depth)}]`
 
-  return document.map(({ name, value }) => `${name} = ${render(value, 0)}\n`).join('\n')
+  return globals.map(({ name, value }) => `${name} = ${render(value, 0)}\n`).join('\n')
 }

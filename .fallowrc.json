@@ -1,0 +1,134 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+
+  "rules": {
+    // Every enum here is a format vocabulary measured off retail — D3DPRIMITIVETYPE, D3DBLEND,
+    // Targa image types, material texture flags. A member no reader happens to hit is still what
+    // the byte means, and recording that is what this library is for. `fix --production` would
+    // delete 46 of them.
+    "unused-enum-members": "off"
+  },
+
+  // Test files are entry points, so their complexity is counted and then reported back as
+  // "untested risk". They are the tests.
+  "health": {
+    "ignore": ["**/*.test.ts", "src/corpus.ts"]
+  },
+
+  "ignoreExports": [
+    // Four `equals`, each namespaced by its barrel — `utility.equals`, `utility.path.equals`,
+    // `ini.value.equals`, `thn.value.equals`. No consumer can name two of them at once, so the
+    // duplicate-export rule stays on for the cases that are real.
+    { "file": "src/utility/string.ts", "exports": ["equals"] },
+    { "file": "src/utility/path.ts", "exports": ["equals"] },
+    { "file": "src/ini/value.ts", "exports": ["equals"] },
+    { "file": "src/thn/value.ts", "exports": ["equals"] }
+  ],
+
+  // CLAUDE.md's dependency direction, as a ratchet. The graph is already clean; these zones exist
+  // so it stays that way. Each `allow` list is the measured set, not an aspiration — adding an
+  // import that is not listed is the point at which fallow should object.
+  "boundaries": {
+    "zones": [
+      // The retail-tree harness and the build's own files. The one part of the tree allowed to
+      // touch a disk, and the reason every zone below it can be told it may not.
+      { "name": "harness", "patterns": ["src/corpus.ts", "src/**/*.test.ts", "scripts/**"] },
+
+      { "name": "utility", "patterns": ["src/utility/**"] },
+      { "name": "math", "patterns": ["src/math/**"] },
+      {
+        "name": "identity",
+        "patterns": ["src/index.ts", "src/hash.ts", "src/crc32.ts", "src/id32.ts"]
+      },
+      { "name": "utf", "patterns": ["src/utf/**"] },
+
+      { "name": "alchemy", "patterns": ["src/alchemy/**"] },
+      { "name": "animation", "patterns": ["src/animation/**"] },
+      { "name": "compound", "patterns": ["src/compound/**"] },
+      { "name": "deformable", "patterns": ["src/deformable/**"] },
+      { "name": "ini", "patterns": ["src/ini/**"] },
+      { "name": "material", "patterns": ["src/material/**"] },
+      { "name": "resource", "patterns": ["src/resource/**"] },
+      { "name": "rigid", "patterns": ["src/rigid/**"] },
+      { "name": "surface", "patterns": ["src/surface/**"] },
+      { "name": "texture", "patterns": ["src/texture/**"] },
+      { "name": "thn", "patterns": ["src/thn/**"] },
+      { "name": "vmesh", "patterns": ["src/vmesh/**"] }
+    ],
+
+    "rules": [
+      { "from": "utility", "allow": [] },
+      { "from": "math", "allow": ["utility"] },
+      { "from": "identity", "allow": ["utility"] },
+      { "from": "utf", "allow": ["utility", "identity"] },
+
+      { "from": "alchemy", "allow": ["utility", "math", "utf", "identity"] },
+      { "from": "animation", "allow": ["utility", "math", "utf", "identity"] },
+      { "from": "compound", "allow": ["utility", "math", "utf", "identity"] },
+      { "from": "deformable", "allow": ["utility", "math", "utf", "identity", "compound"] },
+      { "from": "ini", "allow": ["utility", "identity"] },
+      { "from": "material", "allow": ["utility", "math", "utf", "identity"] },
+      { "from": "resource", "allow": ["utility"] },
+      { "from": "rigid", "allow": ["utility", "math", "utf", "identity", "compound", "vmesh"] },
+      { "from": "surface", "allow": ["utility", "math"] },
+      { "from": "texture", "allow": ["utility", "utf"] },
+      { "from": "thn", "allow": ["utility"] },
+      { "from": "vmesh", "allow": ["utility", "math", "utf", "identity"] },
+
+      {
+        "from": "harness",
+        "allow": [
+          "utility",
+          "math",
+          "identity",
+          "utf",
+          "alchemy",
+          "animation",
+          "compound",
+          "deformable",
+          "ini",
+          "material",
+          "resource",
+          "rigid",
+          "surface",
+          "texture",
+          "thn",
+          "vmesh",
+          "harness"
+        ]
+      }
+    ],
+
+    "coverage": {
+      "requireAllFiles": true,
+      "allowUnmatched": ["tsdown.config.ts"]
+    },
+
+    // Invariant 1: no filesystem, no fetching. The library is handed bytes that have already
+    // arrived, which is what `platform: 'neutral'` in tsdown.config.ts asserts at build time and
+    // nothing asserted at edit time until now.
+    "calls": {
+      "forbidden": [
+        {
+          "from": "utility",
+          "callee": ["fs.*", "fs/promises.*", "fetch", "XMLHttpRequest"]
+        },
+        { "from": "math", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "identity", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "utf", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "alchemy", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "animation", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "compound", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "deformable", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "ini", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "material", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "resource", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "rigid", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "surface", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "texture", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "thn", "callee": ["fs.*", "fs/promises.*", "fetch"] },
+        { "from": "vmesh", "callee": ["fs.*", "fs/promises.*", "fetch"] }
+      ]
+    }
+  }
+}

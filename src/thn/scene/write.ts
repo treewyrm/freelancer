@@ -1,4 +1,4 @@
-import type { Document, TableValue, Value } from '#/thn/types.js'
+import type { Globals, TableValue, Value } from '#/thn/types.js'
 import * as value from '#/thn/value.js'
 import type {
   AudioProps,
@@ -398,7 +398,7 @@ const writeEvent = (event: Event): TableValue => {
  *
  * @param script Entities and events to write.
  */
-export const write = (script: Script): Document => [
+export const write = (script: Script): Globals => [
   { name: 'duration', value: value.number(script.duration) },
   { name: 'entities', value: value.list(...script.entities.map(writeEntity)) },
   { name: 'events', value: value.list(...script.events.map(writeEvent)) },

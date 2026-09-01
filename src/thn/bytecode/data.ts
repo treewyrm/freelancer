@@ -101,5 +101,11 @@ export const ConstantTag = {
   String: 0x02,
 } as const
 
-/** The tag byte preceding a constant pool entry. */
+/**
+ * The tag byte preceding a constant pool entry.
+ *
+ * Deliberately not re-exported: a caller never receives one, since `Globals` is `Global[]` and a
+ * `Value` carries no tag. See [`./index.ts`](./index.ts).
+ */
+// fallow-ignore-next-line unused-type -- not re-exported on purpose; a caller never receives one
 export type ConstantTag = (typeof ConstantTag)[keyof typeof ConstantTag]

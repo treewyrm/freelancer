@@ -15,8 +15,8 @@ export {
   writeQuaternion,
   writeVectorQuaternion,
   type Channel,
+  type ChannelKeyframe,
   type ChannelSample,
-  type Keyframe,
 } from './channel.js'
 
 export {

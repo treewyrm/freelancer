@@ -1,4 +1,4 @@
-import type { Document, TableValue, Value } from '#/thn/types.js'
+import type { Globals, TableValue, Value } from '#/thn/types.js'
 import * as value from '#/thn/value.js'
 import {
   ATTACH_FLAGS,
@@ -736,14 +736,14 @@ const readEvent = (where: string, v: Value): Event => {
  * when an entity type, event action, enum value or flag bit is one this library has not measured.
  * Every one of the 1,506 retail scripts reads without either.
  *
- * @param document Assignments, from any of the readers under `./thn`.
+ * @param globals Assignments, from any of the readers under `./thn`.
  */
-export const read = (document: Document): Script => {
-  const duration = value.getGlobal(document, 'duration')
+export const read = (globals: Globals): Script => {
+  const duration = value.getGlobal(globals, 'duration')
   if (duration === undefined) throw at('duration', 'the script does not set it')
 
-  const entities = value.getGlobal(document, 'entities')
-  const events = value.getGlobal(document, 'events')
+  const entities = value.getGlobal(globals, 'entities')
+  const events = value.getGlobal(globals, 'events')
 
   return {
     duration: asNumber('duration', duration),

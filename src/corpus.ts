@@ -36,7 +36,7 @@ export const root = process.env['FREELANCER_DATA'] ?? join(homedir(), 'Downloads
 export const executables = join(root, '../EXE')
 
 /** The install root — the directory holding `DATA` and `EXE`. */
-export const install = join(root, '..')
+const install = join(root, '..')
 
 const exists = (path: string): boolean => {
   try {
@@ -46,7 +46,7 @@ const exists = (path: string): boolean => {
   }
 }
 
-export const available = exists(root)
+const available = exists(root)
 
 /** Reason to hand to a suite's `skip` option, or `false` to run it. */
 export const skip = available ? false : `no game data at ${root}`
@@ -128,7 +128,7 @@ export const glob = (from: string = root, pattern = '**/*.ini'): Asset[] => {
  * because folding is a resolver's job and this is not one. A host that quietly matched case would
  * make a suite pass on a case-insensitive volume and prove nothing.
  */
-export const filesystem = (from: string = install): FileSystem => ({
+const filesystem = (from: string = install): FileSystem => ({
   async read(path: string): Promise<Uint8Array> {
     return readFileSync(join(from, path))
   },

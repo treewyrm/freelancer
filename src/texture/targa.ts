@@ -92,7 +92,7 @@ export const swapBGRtoRGB = (array: Uint8Array, depth: number) => {
  * @param options Image options
  * @returns
  */
-export function readUncompressedColorMap(
+function readUncompressedColorMap(
   view: BufferView,
   width: number,
   height: number,
@@ -159,7 +159,7 @@ export function readUncompressedColorMap(
  * @param options Image options
  * @returns
  */
-export function readUncompressedRGB(
+function readUncompressedRGB(
   view: BufferView,
   width: number,
   height: number,

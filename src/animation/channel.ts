@@ -1,7 +1,7 @@
 import BufferView from '#/utility/bufferview.js'
 import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
-import { at, type Keyframe as TimedKeyframe } from '#/math/animation.js'
+import { at, type Keyframe } from '#/math/animation.js'
 import Quat from '#/math/quat.js'
 import { clamp, lerp } from '#/math/scalar.js'
 import Vector3 from '#/math/vector3.js'
@@ -199,7 +199,7 @@ export function writeAngleQuaternion(view: BufferView, quat: Quat): BufferView {
 }
 
 /** Animation keyframe. Which properties are set is dictated by the channel type. */
-export interface Keyframe extends TimedKeyframe {
+export interface ChannelKeyframe extends Keyframe {
   /** Time offset in seconds from the start of the script. */
   key: number
 
@@ -225,7 +225,7 @@ export interface Channel {
   type: ChannelType
 
   /** Keyframes in ascending time order. */
-  keyframes: Keyframe[]
+  keyframes: ChannelKeyframe[]
 }
 
 /** Channel duration in seconds. */
@@ -260,10 +260,10 @@ export function readChannel(parent: Directory): Channel {
     throw new RangeError(`Channel frames in ${parent.name} hold fewer than ${count} keyframes`)
 
   const data = frames ? BufferView.from(frames) : BufferView.allocate(0)
-  const keyframes: Keyframe[] = new Array(count)
+  const keyframes: ChannelKeyframe[] = new Array(count)
 
   for (let i = 0; i < count; i++) {
-    const keyframe: Keyframe = { key: interval < 0 ? data.readFloat32() : i * interval }
+    const keyframe: ChannelKeyframe = { key: interval < 0 ? data.readFloat32() : i * interval }
 
     if (type & ChannelType.Angle) keyframe.value = data.readFloat32()
 

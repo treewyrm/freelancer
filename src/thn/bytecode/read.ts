@@ -1,4 +1,4 @@
-import type { Document, Entry, Value } from '#/thn/types.js'
+import type { Entry, Globals, Value } from '#/thn/types.js'
 import { identifier, number, string } from '#/thn/value.js'
 import BufferView from '#/utility/bufferview.js'
 import { decode } from '#/utility/encoding.js'
@@ -47,7 +47,7 @@ interface Instruction {
  * @param data File bytes.
  * @throws RangeError when the signature, structure or an opcode is not what this format allows.
  */
-export const read = (data: ArrayBufferView | ArrayBufferLike): Document => {
+export const read = (data: ArrayBufferView | ArrayBufferLike): Globals => {
   if (!isBytecode(data)) throw new RangeError('Not a compiled Lua chunk')
 
   const view = ArrayBuffer.isView(data)
@@ -120,7 +120,7 @@ export const read = (data: ArrayBufferView | ArrayBufferLike): Document => {
 }
 
 /** Runs the instruction stream on a value stack. */
-const evaluate = (code: readonly Instruction[], constants: readonly Value[]): Document => {
+const evaluate = (code: readonly Instruction[], constants: readonly Value[]): Globals => {
   const constant = (index: number): Value => {
     const value = constants[index]
     if (!value) throw new RangeError(`Constant ${index} is out of range`)
@@ -141,7 +141,7 @@ const evaluate = (code: readonly Instruction[], constants: readonly Value[]): Do
     return value
   }
 
-  const document: Document = []
+  const globals: Globals = []
 
   for (const { name: op, a, c } of code) {
     switch (op) {
@@ -197,7 +197,7 @@ const evaluate = (code: readonly Instruction[], constants: readonly Value[]): Do
       case 'SETGLOBALW': {
         const value = stack.pop()
         if (!value) throw new RangeError('Assignment with an empty stack')
-        document.push({ name: name(a), value })
+        globals.push({ name: name(a), value })
         break
       }
 
@@ -226,5 +226,5 @@ const evaluate = (code: readonly Instruction[], constants: readonly Value[]): Do
 
   if (stack.length) throw new RangeError(`${stack.length} values left on the stack`)
 
-  return document
+  return globals
 }

@@ -23,6 +23,34 @@ export const isImage = (data: ArrayBufferView | ArrayBufferLike): boolean => {
   return offset + 4 <= view.byteLength && view.getUint32(offset, true) === PE_SIGNATURE
 }
 
+/**
+ * The three offsets every other read here is measured from: how many sections there are, how long
+ * the optional header is, and where it starts. Both {@link inspect} and {@link read} need all
+ * three before they can look at anything, and neither can share the walk that follows.
+ *
+ * @throws TypeError on anything that is not a PE32 image.
+ */
+const headers = (view: BufferView) => {
+  if (!isImage(view)) throw new TypeError('Not a PE image')
+
+  const coff = view.getUint32(PE_OFFSET_POINTER, true) + 4
+  const optional = coff + 20
+
+  // PE32+ differs from PE32 from the image base onwards, which moves every field this reads.
+  // Freelancer is 32-bit and so is everything it loads, so this is a refusal rather than a branch.
+  if (view.getUint16(optional, true) !== OPTIONAL_MAGIC) throw new TypeError('Not a PE32 image')
+
+  return {
+    sectionCount: view.getUint16(coff + 2, true),
+    optionalSize: view.getUint16(coff + 16, true),
+    optional,
+  }
+}
+
+/** A section's name: eight bytes, NUL-padded rather than NUL-terminated when it fills them. */
+const sectionName = (view: BufferView, offset: number): string =>
+  String.fromCharCode(...view.bytes.subarray(offset, offset + 8)).replace(/\0+$/, '')
+
 /** What an image says about itself, apart from its resources. */
 export interface Image {
   /** Preferred load address. Retail gives each library its own so none has to be rebased. */
@@ -47,25 +75,12 @@ export interface Image {
  */
 export const inspect = (data: ArrayBufferView | ArrayBufferLike): Image => {
   const view = BufferView.from(data as ArrayBufferLike)
-
-  if (!isImage(view)) throw new TypeError('Not a PE image')
-
-  const pe = view.getUint32(PE_OFFSET_POINTER, true)
-  const coff = pe + 4
-  const sectionCount = view.getUint16(coff + 2, true)
-  const optionalSize = view.getUint16(coff + 16, true)
-  const optional = coff + 20
-
-  if (view.getUint16(optional, true) !== OPTIONAL_MAGIC) throw new TypeError('Not a PE32 image')
+  const { sectionCount, optionalSize, optional } = headers(view)
 
   const sections: string[] = []
 
-  for (let i = 0; i < sectionCount; i++) {
-    const offset = optional + optionalSize + i * SECTION_BYTE_LENGTH
-    sections.push(
-      String.fromCharCode(...view.bytes.subarray(offset, offset + 8)).replace(/\0+$/, ''),
-    )
-  }
+  for (let i = 0; i < sectionCount; i++)
+    sections.push(sectionName(view, optional + optionalSize + i * SECTION_BYTE_LENGTH))
 
   return {
     imageBase: view.getUint32(optional + 28, true),
@@ -100,18 +115,7 @@ interface Section {
  */
 export const read = (data: ArrayBufferView | ArrayBufferLike): Resource[] => {
   const view = BufferView.from(data as ArrayBufferLike)
-
-  if (!isImage(view)) throw new TypeError('Not a PE image')
-
-  const pe = view.getUint32(PE_OFFSET_POINTER, true)
-  const coff = pe + 4
-  const sectionCount = view.getUint16(coff + 2, true)
-  const optionalSize = view.getUint16(coff + 16, true)
-  const optional = coff + 20
-
-  // PE32+ differs from PE32 from the image base onwards, which moves every field this reads.
-  // Freelancer is 32-bit and so is everything it loads, so this is a refusal rather than a branch.
-  if (view.getUint16(optional, true) !== OPTIONAL_MAGIC) throw new TypeError('Not a PE32 image')
+  const { sectionCount, optionalSize, optional } = headers(view)
 
   const directoryCount = view.getUint32(optional + 92, true)
   if (DIRECTORY_RESOURCE >= directoryCount) return []
@@ -126,7 +130,7 @@ export const read = (data: ArrayBufferView | ArrayBufferLike): Resource[] => {
     const offset = optional + optionalSize + i * SECTION_BYTE_LENGTH
 
     sections.push({
-      name: String.fromCharCode(...view.bytes.subarray(offset, offset + 8)).replace(/\0+$/, ''),
+      name: sectionName(view, offset),
       virtualSize: view.getUint32(offset + 8, true),
       virtualAddress: view.getUint32(offset + 12, true),
       rawSize: view.getUint32(offset + 16, true),

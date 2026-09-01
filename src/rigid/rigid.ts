@@ -39,7 +39,7 @@ export type RigidModel = Model<RigidPart> | RigidPart
  * off — so nothing here throws on an empty fragment. Detail levels win over a bare reference where
  * both somehow appear.
  */
-export function readRigid(parent: Directory): Rigid {
+function readRigid(parent: Directory): Rigid {
   const hardpoints = [...readHardpoints(parent)]
   const part = readMultiLevel(parent) ?? readVMeshPart(parent)
   const wire = readVMeshWire(parent)
@@ -53,7 +53,7 @@ export function readRigid(parent: Directory): Rigid {
  *
  * Absent pieces stay absent: no empty `Hardpoints` directory is emitted for a part carrying none.
  */
-export function writeRigid(rigid: Rigid): Directory {
+function writeRigid(rigid: Rigid): Directory {
   const { part, hardpoints, wireframe: wire } = rigid
   const directory = new Directory()
 
@@ -76,7 +76,7 @@ export function writeRigid(rigid: Rigid): Directory {
  * Reads one part fragment, dispatching on what the directory holds. Camera and sphere are probed
  * for by name; anything else is geometry, which is the only form with no marker of its own.
  */
-export function readPart(parent: Directory): RigidPart {
+function readPart(parent: Directory): RigidPart {
   if (isCamera(parent)) return readCamera(parent)
   if (isSphere(parent)) return readSphere(parent)
   return readRigid(parent)
@@ -86,7 +86,7 @@ export function readPart(parent: Directory): RigidPart {
  * Writes one part fragment into an unnamed directory, for the caller to name. Camera and sphere
  * fragments are wrapped, since their readers return the inner directory.
  */
-export function writePart(part: RigidPart): Directory {
+function writePart(part: RigidPart): Directory {
   switch (part.type) {
     case 'rigid':
       return writeRigid(part)

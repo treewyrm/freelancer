@@ -1,5 +1,5 @@
 import type {
-  Document,
+  Globals,
   Entry,
   IdentifierValue,
   NumberValue,
@@ -108,8 +108,8 @@ export const getEntry = (value: TableValue, key: string): Value | undefined =>
   value.entries.find(({ key: k }) => isString(k) && k.value === key)?.value
 
 /** Finds a top-level assignment by name. Case-sensitive, for the same reason. */
-export const getGlobal = (document: Document, name: string): Value | undefined =>
-  document.find((global) => global.name === name)?.value
+export const getGlobal = (globals: Globals, name: string): Value | undefined =>
+  globals.find((global) => global.name === name)?.value
 
 /** Structural equality, tag included, recursing into tables. */
 export const equals = (a: Value, b: Value): boolean => {

@@ -56,7 +56,7 @@ export interface Bone {
 }
 
 /** Byte length of `Bone to root`: a 3x3 rotation followed by a translation. */
-export const BONE_TO_ROOT_LENGTH = Float32Array.BYTES_PER_ELEMENT * 12
+const BONE_TO_ROOT_LENGTH = Float32Array.BYTES_PER_ELEMENT * 12
 
 /**
  * Reads a bone from its `<name>.3db` directory.

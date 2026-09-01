@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import { read } from './read.js'
 import { write } from './write.js'
-import type { Document } from '#/thn/types.js'
+import type { Globals } from '#/thn/types.js'
 import * as value from '#/thn/value.js'
 
 describe('read', () => {
@@ -99,12 +99,12 @@ describe('read', () => {
 
 describe('write', () => {
   it('writes identifiers bare and strings quoted', () => {
-    const document: Document = [
+    const globals: Globals = [
       { name: 'a', value: value.identifier('SCENE') },
       { name: 'b', value: value.string('SCENE') },
     ]
 
-    assert.equal(write(document), 'a = SCENE\n\nb = "SCENE"\n')
+    assert.equal(write(globals), 'a = SCENE\n\nb = "SCENE"\n')
   })
 
   it('writes a composed flag with `+`', () => {
@@ -119,7 +119,7 @@ describe('write', () => {
   })
 
   it('brackets a key that is not a name, and a reserved word', () => {
-    const document: Document = [
+    const globals: Globals = [
       {
         name: 't',
         value: {
@@ -134,7 +134,7 @@ describe('write', () => {
       },
     ]
 
-    assert.equal(write(document), 't = { [1] = 2, ["end"] = 3, ["a b"] = 4 }\n')
+    assert.equal(write(globals), 't = { [1] = 2, ["end"] = 3, ["a b"] = 4 }\n')
   })
 
   // The one place the writer is faithful rather than tidy: `{ [1] = 1 }` and `{ 1 }` are the same
@@ -160,9 +160,9 @@ describe('write', () => {
   })
 
   it('breaks a table across lines past the width', () => {
-    const document: Document = [{ name: 't', value: value.list('a'.repeat(120)) }]
+    const globals: Globals = [{ name: 't', value: value.list('a'.repeat(120)) }]
 
-    assert.match(write(document), /^t = \{\n {2}"a+"\n\}\n$/)
+    assert.match(write(globals), /^t = \{\n {2}"a+"\n\}\n$/)
   })
 
   it('escapes what Lua needs escaped', () => {
@@ -175,7 +175,7 @@ describe('write', () => {
 
 describe('round-trip', () => {
   it('is a fixed point over every kind of value', () => {
-    const document: Document = [
+    const globals: Globals = [
       { name: 'duration', value: value.number('361.872') },
       {
         name: 'entities',
@@ -191,6 +191,6 @@ describe('round-trip', () => {
       { name: 'events', value: value.list(value.identifier('START_PSYS', 'LOOP')) },
     ]
 
-    assert.deepEqual(read(write(document)), document)
+    assert.deepEqual(read(write(globals)), globals)
   })
 })

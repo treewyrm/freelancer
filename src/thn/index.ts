@@ -1,6 +1,6 @@
 import * as bytecode from './bytecode/index.js'
 import * as text from './text/index.js'
-import type { Document } from './types.js'
+import type { Globals } from './types.js'
 import { decode, encode } from '#/utility/encoding.js'
 
 export * from './types.js'
@@ -18,7 +18,7 @@ export type Format = 'bytecode' | 'text'
  *
  * @param data File bytes, or source that has already been decoded.
  */
-export const read = (data: ArrayBufferView | ArrayBufferLike | string): Document => {
+export const read = (data: ArrayBufferView | ArrayBufferLike | string): Globals => {
   if (typeof data === 'string') return text.read(data)
 
   if (bytecode.isBytecode(data)) return bytecode.read(data)
@@ -45,13 +45,13 @@ export const formatOf = (data: ArrayBufferView | ArrayBufferLike): Format =>
  * Output is windows-1252, which is what the game reads. Use `text.write` when a string is what you
  * want.
  *
- * @param document Assignments to write.
+ * @param globals Assignments to write.
  * @param format Encoding to write in.
  */
 export const write = (
-  document: Document,
+  globals: Globals,
   _format: Extract<Format, 'text'> = 'text',
   options?: text.WriteOptions,
-): Uint8Array => encode(text.write(document, options))
+): Uint8Array => encode(text.write(globals, options))
 
 export { bytecode, text }

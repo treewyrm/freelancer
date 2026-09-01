@@ -46,10 +46,10 @@ describe('lookups', () => {
   })
 
   it('finds a global by name', () => {
-    const document = [{ name: 'duration', value: value.number(1) }]
+    const globals = [{ name: 'duration', value: value.number(1) }]
 
-    assert.deepEqual(value.getGlobal(document, 'duration'), value.number(1))
-    assert.equal(value.getGlobal(document, 'entities'), undefined)
+    assert.deepEqual(value.getGlobal(globals, 'duration'), value.number(1))
+    assert.equal(value.getGlobal(globals, 'entities'), undefined)
   })
 })
 

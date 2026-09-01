@@ -56,7 +56,7 @@ it, and what a `[Ship]` or a `[Nebula]` means is yours to define.
 | `@treewyrm/freelancer/ini/text`    | Text INI parser and serializer                                                      | [INI.md](docs/INI.md)               |
 | `@treewyrm/freelancer/ini/binary`  | BINI reader and writer                                                              | [INI.md](docs/INI.md)               |
 | `@treewyrm/freelancer/ini/save`    | `.fl` saves: text under a positional XOR mask                                       | [INI.md](docs/INI.md)               |
-| `@treewyrm/freelancer/thn`         | `Document`, `Global`, `Value`, value helpers, `read` / `write`                      | [THN.md](docs/THN.md)               |
+| `@treewyrm/freelancer/thn`         | `Globals`, `Global`, `Value`, value helpers, `read` / `write`                       | [THN.md](docs/THN.md)               |
 | `@treewyrm/freelancer/thn/text`    | Lua source parser and serializer                                                    | [THN.md](docs/THN.md)               |
 | `@treewyrm/freelancer/thn/bytecode`| Compiled Lua 3.2 reader, and the opcode table                                       | [THN.md](docs/THN.md)               |
 | `@treewyrm/freelancer/thn/scene`   | Entities and events as typed records, and THORN's vocabulary                        | [THORN.md](docs/THORN.md)           |

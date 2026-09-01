@@ -34,40 +34,40 @@ interface Revolute extends Base<'revolute'> {
 export type Hardpoint = Fixed | Revolute
 
 /** Reads a `Position` file, defaulting to the origin when the hardpoint carries none. */
-export function readPosition(parent: Directory): Vector3 {
+function readPosition(parent: Directory): Vector3 {
   const file = parent.getFile('position')
   return (file && Vector3.read(BufferView.from(file))) ?? Vector3.copy({})
 }
 
 /** Writes a `Position` file, in the retail capitalization. */
-export function writePosition(position: Vector3): File {
+function writePosition(position: Vector3): File {
   return new File('Position', Vector3.write(position))
 }
 
 /** Reads an `Orientation` file, defaulting to identity when the hardpoint carries none. */
-export function readOrientation(parent: Directory): Matrix3 {
+function readOrientation(parent: Directory): Matrix3 {
   const file = parent.getFile('orientation')
   return (file && Matrix3.read(BufferView.from(file))) ?? Matrix3.copy({})
 }
 
 /** Writes an `Orientation` file, in the retail capitalization. */
-export function writeOrientation(orientation: Matrix3): File {
+function writeOrientation(orientation: Matrix3): File {
   return new File('Orientation', Matrix3.write(orientation))
 }
 
 /** Reads an `Axis` file, defaulting to Y when the hardpoint carries none. */
-export function readAxis(parent: Directory): Vector3 {
+function readAxis(parent: Directory): Vector3 {
   const file = parent.getFile('axis')
   return (file && Vector3.read(BufferView.from(file))) ?? Vector3.copy(Vector3.y)
 }
 
 /** Writes an `Axis` file, in the retail capitalization. */
-export function writeAxis(axis: Vector3): File {
+function writeAxis(axis: Vector3): File {
   return new File('Axis', Vector3.write(axis))
 }
 
 /** Reads one fixed hardpoint from its own directory, which is also its name. */
-export function readFixed(parent: Directory): Fixed {
+function readFixed(parent: Directory): Fixed {
   return {
     type: 'fixed',
     name: parent.name,
@@ -77,7 +77,7 @@ export function readFixed(parent: Directory): Fixed {
 }
 
 /** Writes one fixed hardpoint as a directory named after it, for placing under `Hardpoints/Fixed`. */
-export function writeFixed(fixed: Fixed): Directory {
+function writeFixed(fixed: Fixed): Directory {
   const { name, position, orientation } = fixed
   return new Directory(name, [writePosition(position), writeOrientation(orientation)])
 }
@@ -86,7 +86,7 @@ export function writeFixed(fixed: Fixed): Directory {
  * Reads one revolute hardpoint from its own directory, which is also its name. `Min` and `Max` are
  * the rotation limits about `axis`, in radians, and default to zero when absent.
  */
-export function readRevolute(parent: Directory): Revolute {
+function readRevolute(parent: Directory): Revolute {
   const position = readPosition(parent)
   const orientation = readOrientation(parent)
   const axis = readAxis(parent)
@@ -101,7 +101,7 @@ export function readRevolute(parent: Directory): Revolute {
  * Writes one revolute hardpoint as a directory named after it, for placing under
  * `Hardpoints/Revolute`. Every file is emitted, defaults included, the way retail writes them.
  */
-export function writeRevolute(revolute: Revolute): Directory {
+function writeRevolute(revolute: Revolute): Directory {
   const { name, position, orientation, axis, min, max } = revolute
 
   const directory = new Directory(name, [

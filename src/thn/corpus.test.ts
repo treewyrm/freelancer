@@ -5,7 +5,7 @@ import * as bytecode from './bytecode/index.js'
 import { ConstantTag, GAP_BYTE_LENGTH, HEADER_BYTE_LENGTH } from './bytecode/data.js'
 import * as text from './text/index.js'
 import { formatOf, read } from './index.js'
-import type { Document, Value } from './types.js'
+import type { Globals, Value } from './types.js'
 
 /**
  * The scene script readers against the retail install.
@@ -16,7 +16,7 @@ import type { Document, Value } from './types.js'
  */
 describe('retail scene scripts', { skip: corpus.skip }, () => {
   const assets = corpus.glob(corpus.root, '**/*.thn')
-  const documents = new Map<string, Document>()
+  const scripts = new Map<string, Globals>()
 
   it('holds 1,506 scripts, all of them compiled Lua 3.2', () => {
     assert.equal(assets.length, 1506)
@@ -24,9 +24,9 @@ describe('retail scene scripts', { skip: corpus.skip }, () => {
   })
 
   it('reads every one of them', () => {
-    for (const { path, data } of assets) documents.set(path, read(data))
+    for (const { path, data } of assets) scripts.set(path, read(data))
 
-    assert.equal(documents.size, 1506)
+    assert.equal(scripts.size, 1506)
   })
 
   // `SETGLOBAL` fires 4,518 times, which is 3 × 1,506: the whole format is `duration` plus two
@@ -35,9 +35,9 @@ describe('retail scene scripts', { skip: corpus.skip }, () => {
     const shapes = new Set<string>()
     let assignments = 0
 
-    for (const document of documents.values()) {
-      assignments += document.length
-      shapes.add(document.map(({ name }) => name).join(','))
+    for (const globals of scripts.values()) {
+      assignments += globals.length
+      shapes.add(globals.map(({ name }) => name).join(','))
     }
 
     assert.equal(assignments, 4518)
@@ -58,7 +58,7 @@ describe('retail scene scripts', { skip: corpus.skip }, () => {
       }
     }
 
-    for (const document of documents.values()) for (const { value } of document) descend(value)
+    for (const globals of scripts.values()) for (const { value } of globals) descend(value)
   }
 
   // The value domain, and the reason identifiers are their own arm: 155,259 reads over 55 names.
@@ -162,8 +162,8 @@ describe('retail scene scripts', { skip: corpus.skip }, () => {
    * so this compares exactly rather than approximately.
    */
   it('round-trips every script through text', () => {
-    for (const [path, document] of documents)
-      assert.deepEqual(text.read(text.write(document)), document, path)
+    for (const [path, globals] of scripts)
+      assert.deepEqual(text.read(text.write(globals)), globals, path)
   })
 
   /**
@@ -179,7 +179,7 @@ describe('retail scene scripts', { skip: corpus.skip }, () => {
     let keyed = 0
     const numeric = new Set<string>()
 
-    for (const [path, document] of documents) {
+    for (const [path, globals] of scripts) {
       const descend = (value: Value): void => {
         if (value.type !== 'table') return
 
@@ -192,7 +192,7 @@ describe('retail scene scripts', { skip: corpus.skip }, () => {
         for (const { value: item } of value.entries) descend(item)
       }
 
-      for (const { value } of document) descend(value)
+      for (const { value } of globals) descend(value)
     }
 
     assert.equal(numeric.size, 355)

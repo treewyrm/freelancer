@@ -92,9 +92,9 @@ describe('read', () => {
   })
 
   it('assigns a global from an inline number', () => {
-    const document = read(chunk(['PUSHNUMBER', 42, 'SETGLOBAL', 0, 'ENDCODE'], ['duration']))
+    const globals = read(chunk(['PUSHNUMBER', 42, 'SETGLOBAL', 0, 'ENDCODE'], ['duration']))
 
-    assert.deepEqual(document, [{ name: 'duration', value: value.number(42) }])
+    assert.deepEqual(globals, [{ name: 'duration', value: value.number(42) }])
   })
 
   // The pool stores numbers as text, and the text is what round-trips: parsing and reformatting
@@ -119,14 +119,14 @@ describe('read', () => {
   // The distinction the whole model exists for: the same word is a string through one opcode and an
   // identifier through the other.
   it('reads a global read as an identifier and a pool string as a string', () => {
-    const document = read(
+    const globals = read(
       chunk(
         ['GETGLOBAL', 1, 'SETGLOBAL', 0, 'PUSHCONSTANT', 1, 'SETGLOBAL', 2, 'ENDCODE'],
         ['a', 'SCENE', 'b'],
       ),
     )
 
-    assert.deepEqual(document, [
+    assert.deepEqual(globals, [
       { name: 'a', value: value.identifier('SCENE') },
       { name: 'b', value: value.string('SCENE') },
     ])

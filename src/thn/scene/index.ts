@@ -2,8 +2,8 @@
  * The typed layer for scene scripts: entities and events rather than Lua tables.
  *
  * Sits on top of [`../index.ts`](../index.ts), which reads either encoding into an interim
- * `Document`. Take that document here to get structures with real types, and hand one back to write
- * it. The vocabulary and the evidence behind every value are in
+ * `Globals`. Take those here to get structures with real types, and hand them back to write
+ * them. The vocabulary and the evidence behind every value are in
  * [THORN.md](../../../docs/THORN.md).
  *
  * ```ts
