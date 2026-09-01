@@ -359,21 +359,23 @@ and the driven degree of freedom:
 
 ```
 fixed, loose   L      = T(position) · R(rotation)
-revolute       L(θ)   = T(position) · R(rotation) · R(axis, θ)      θ ∈ [min, max]
-prismatic      L(d)   = T(position) · R(rotation) · T(axis · d)     d ∈ [min, max]
-sphere         L(q)   = T(position) · R(rotation) · R(q)
+revolute       L(θ)   = T(position) · R(axis, θ) · R(rotation)      θ ∈ [min, max]
+prismatic      L(d)   = T(position) · T(axis · d) · R(rotation)     d ∈ [min, max]
+sphere         L(q)   = T(position) · R(q) · R(rotation)
 world          W_child = W_parent · L_child
 ```
 
-Two things this does not settle, both of which want an in-engine check rather than more measurement:
+**The driven factor goes on the left, before the rest rotation.** That is `axis` living in the
+*parent* frame, which is what the `Cyl` struct comment inherited from Conquest: Frontier Wars says
+and what an earlier revision of this section declined to conclude from it — the reading taken here
+until then, with the driven factor on the right, was the wrong one. The two orders coincide only
+where the rest rotation is identity, true for just **294 of the 929** driven joints, so 635 come out
+visibly wrong under it. Nothing in the files separates them; this was settled by playing retail
+scripts under both orders and watching, in freelancer-testing's viewer.
 
-- **Whether the driven rotation goes before or after the rest rotation.** The `Cyl` struct comment
-  inherited from Conquest: Frontier Wars describes `axis` as living in the *parent* frame, which
-  would put `R(axis, θ)` on the left of `R(rotation)`. The two orders coincide only when the rest
-  rotation is identity — true for just **294 of the 929** driven joints, so 635 will visibly differ.
-  Animate something with an obvious correct answer (a docking bay ring, landing gear) and look.
-- **Where `offset` belongs if a non-retail asset ever sets one.** The natural reading is a pivot,
-  `… · T(offset) · R(…) · T(-offset)`, but nothing in the data exercises it.
+One thing this still does not settle, and it needs a non-retail asset rather than an experiment:
+**where `offset` belongs if anything ever sets one.** The natural reading is a pivot,
+`… · T(offset) · R(…) · T(-offset)`, but all 3,699 retail records leave it zero.
 
 ### 5.3 Animation
 
@@ -389,6 +391,11 @@ standalone `.anm`. Both parse through the same `readAnimationLibrary(root)`.
 `sampleChannel(channel, time)` lerps position, slerps rotation and lerps the scalar. A channel with a
 negative `interval` stores a timestamp per keyframe; otherwise keyframes are evenly spaced at
 `i * interval` and no timestamps are stored.
+
+**`getScriptDuration` is the last keyframe's own key, not the key after it**, so a clock that reads
+`t mod duration` lands on zero at exactly the end. Looping wants that; *holding* on the last frame
+does not, and gets the first frame instead — a door left open at the end of its closing animation.
+Wrap in the clock, where the choice is known, and clamp at the sampler.
 
 Rotations arrive in four encodings — full float W-X-Y-Z, implied identity, and two `int16`
 quantizations — all decoded to a `Quat` by `readChannel`, so a renderer never sees the packing. It
@@ -725,6 +732,10 @@ find:
     effects and wrong on the first asset another tool writes (§9).
 13. Hermite tangents applied without the `end.key - start.key` scale — only 562 of 25,081 keyframes
     carry a non-zero tangent, so almost everything still looks right (§9.5).
+14. A driven joint composed with the rest rotation on the left — 635 of 929 driven joints assemble
+    wrongly, and the 294 whose rest rotation is identity keep looking right (§5.2).
+15. An animation clock wrapped at `getScriptDuration` while *holding* — the last frame of a script
+    shows its first, so a closing door ends open (§5.3).
 
 ---
 
@@ -778,6 +789,10 @@ which reading is right.
 | `Edge_angles` on two deformable models | ignored | [DEFORMABLE.md § TODO](DEFORMABLE.md#todo) |
 | `TransformFlags` low bits on an Alchemy node (§9) | ignored; `transformAt` applies the curves without them | [ALCHEMY.md § TODO](ALCHEMY.md#todo) |
 | The four version-1.1 `Effect` floats (§9.7) | unused; no effect culling | [ALCHEMY.md § TODO](ALCHEMY.md#todo) |
+
+The joint composition order (§5.2) was on this list and is **closed**: freelancer-testing's animation
+player answered it by playing retail scripts under both orders, and the driven factor goes before the
+rest rotation. It is recorded there rather than here, and nothing composes the other order any more.
 
 The two particle rows differ in kind from the first four. `TransformFlags` is constant across all
 5,590 retail transforms, so the data cannot say what the bits select — and what is left for them to

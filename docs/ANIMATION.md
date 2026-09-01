@@ -48,14 +48,30 @@ Which keyframe field a joint map consumes follows the joint type:
 | Joint       | Keyframe field used                                                                                    |
 | ----------- | ------------------------------------------------------------------------------------------------------ |
 | `fixed`     | none — fixed joints cannot be animated                                                                 |
-| `revolute`  | `value` — angle in radians, between the joint's `min` and `max`                                        |
-| `prismatic` | `value` — offset along the joint axis                                                                  |
+| `revolute`  | `value` — angle in radians, nominally between the joint's `min` and `max` †                            |
+| `prismatic` | `value` — offset along the joint axis, nominally within the same range †                               |
 | `sphere`    | `rotation`                                                                                             |
 | `loose`     | `position`, `rotation`, or both                                                                        |
 | `cylinder`  | unimplementable — see [below](#why-cylinder-joints-cannot-be-animated)                                 |
 
+† Nominally — retail exceeds it. See [The range is nominal](#the-range-is-nominal).
+
 `Root height` is an elevation added on top of the object map position. Only deformable models use it,
 and in retail it appears exactly once per object map.
+
+### The range is nominal
+
+**A driven joint's `min`/`max` bound what the joint declares, not what its channel contains, and
+retail exceeds it.** Across the `.cmp` scripts — where every driven channel lives — **278 keyframes
+in 22 prismatic channels sit outside their own joint's range**, the worst by 423.25 units against a
+declared `[0, 3302.125]`: `BASES/BRETONIA/br_03_warwick_cityscape.cmp`, whose `Sc_loop` runs the city
+traffic past the end of its rail. **No revolute channel exceeds its range**, in any of the 414 the
+tree holds.
+
+Neither this library nor the engine's behaviour is settled by that. This reader does not clamp — a
+value is what the file records — and whether the *engine* clamps is a question for the game, listed
+with the rest in [RETAIL.md](RETAIL.md#todo--what-is-pending-in-the-game). Measured by
+freelancer-testing's `npm run corpus`.
 
 ---
 
@@ -201,6 +217,37 @@ because both are one float.
 | Channels setting `0x08` | **0** |
 
 The stride always divides the `Frames` file exactly — there are no trailing bytes anywhere.
+
+### What a `.cmp` script actually drives
+
+Rigid models are the half of the corpus a renderer reaches without deformable support, and they are
+a narrower thing than the totals above suggest. The 323 scripts embedded in `.cmp` files hold 977
+maps — 2 object maps and 975 joint maps — and the 974 that resolve to a part land on:
+
+| Joint      | Maps | Channel type |
+| ---------- | ---- | ------------ |
+| prismatic  | 543  | `0x01`       |
+| revolute   | 414  | `0x01`       |
+| sphere     | 17   | `0x04`       |
+
+**No `.cmp` script drives a loose joint, and none targets a fixed one** — a fact about what retail
+authored, not about what the format allows. A loose joint map in a `.cmp` is perfectly well formed;
+Digital Anvil simply never wrote one, and a reader that treats the absence as a rule will reject a
+mod that does. Only three channel types occur — `0x01` ×958, `0x04` ×17, and `0x06` ×2, both of
+which are the two object maps — so the compressed forms in the table above are `.anm` alone. Note
+that the channel type does not identify the joint on its own: a `0x04` fits a sphere and a loose
+joint equally, and only the joint it lands on separates them, which matters because the two compose
+differently.
+
+The one map that resolves to nothing is `EQUIPMENT/MODELS/TURRET/trade_turret01.cmp`, whose `Sc_fire`
+animates `Barrel01` in a model declaring only `Root` and `Gun01` — the same file whose `Cons` list
+constrains a part it never declares. The stored name carries a trailing tab, so no trimming rescues
+it either.
+
+Script durations run from 0 — a single keyframe, which is a closed pose rather than a defect — to
+400 seconds, with a median of 3.33.
+
+Measured by freelancer-testing's `npm run corpus`.
 
 **Ten channel type combinations occur**, and `corpus.test.ts` asserts that set exactly:
 
