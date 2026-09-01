@@ -59,6 +59,47 @@ Which keyframe field a joint map consumes follows the joint type:
 `Root height` is an elevation added on top of the object map position. Only deformable models use it,
 and in retail it appears exactly once per object map.
 
+### A revolute angle is an angle, and one bit cannot say so
+
+`Angle` (`0x01`) carries a revolute joint's angle in radians **or** a prismatic joint's offset in
+metres, and the bit does not distinguish them. Neither does anything else in the channel: the two
+are told apart only by the joint the map lands on, which is exactly what Conquest: Frontier Wars'
+`GetChannelType` did by searching the revolute and prismatic lists by name.
+
+That matters more than it looks, because **every one of retail's 414 revolute channels stores its
+angle wrapped into (-π, π]**. A keyframe pair stepping across the seam — `+3.1329` to `-3.0720`,
+say — means a further 4.49° in the same direction, and interpolating it on a line instead of on a
+circle runs 355.5° *backwards*. `SOLAR/MISC/gyro_05x.cmp` in Discovery is the clean demonstration:
+five keyframes describing one revolution whose linear sum is **exactly zero** and whose wrapped sum
+is **exactly 2π**. Retail is full of the same shape — **150 of the 414 step over π somewhere** — and
+so is prismatic data, **370 of 543**, where π metres means nothing and wrapping would be a bug.
+
+Wrapped storage is retail's habit rather than the format's rule, and the distinction is load-bearing
+for anything reading a mod. A channel is wrapped iff no value leaves the band, which is a per-channel
+test worth making: 51 of Discovery's 532 revolute channels store angles reaching ±2π, and one of
+them, `SHIPS/RHEINLAND/RH_MINER/rh_miner.cmp`, runs a propeller 0 → -179.8° → **-360°** — a genuine
+sweep just past half a turn, which a blanket shortest-arc reverses into +179.7°.
+
+So the reader hands back what the file stores and `sampleChannel` lerps the scalar on a line, which
+is right for the one case it can be sure of. A consumer holding the joint takes the short way round
+for a revolute channel whose values stay in the band. Note that this library already does that
+wherever the *channel* is enough to know: `Quat.slerp` folds the double cover for a sphere joint, and
+`0x40`/`0x80` fold negative-W quaternions on the way in. The angle bit is the one place the
+information is not there.
+
+### Channels loop independently, at their own lengths
+
+`getScriptDuration` is the longest of a script's maps, and it is not the length everything in the
+script runs to. Each channel cycles on its own, which is the only reading the data supports:
+`SOLAR/MISC/rift_pylon.cmp`'s `Sc_anim active` gives its eight channels 2, 4, 8 and 16 seconds —
+harmonics nobody authors unless they cycle apart — and `rh_miner.cmp`'s `sc_rotate drill` pairs a
+0.75-second drill with a 10-second arm, which on a shared clock spins once and then stands still for
+nine seconds.
+
+The shape is a minority and easy to miss: **14 of the 186 multi-map scripts in retail `.cmp` mix
+channel lengths**, 24 of Discovery's 451. The rest are uniform, so a consumer that runs everything to
+the script's duration is right about most scripts and visibly wrong about the rest.
+
 ### The range is nominal
 
 **A driven joint's `min`/`max` bound what the joint declares, not what its channel contains, and

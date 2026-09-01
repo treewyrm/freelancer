@@ -392,6 +392,22 @@ standalone `.anm`. Both parse through the same `readAnimationLibrary(root)`.
 negative `interval` stores a timestamp per keyframe; otherwise keyframes are evenly spaced at
 `i * interval` and no timestamps are stored.
 
+**A revolute channel's scalar is an angle and must be interpolated as one, where its storage is
+wrapped.** All 414 retail revolute channels keep the angle inside (-π, π], so `sampleChannel`'s plain
+lerp runs an almost-full turn backwards wherever a keyframe pair steps across the seam — 150 of them
+do. Take the short way round: `a + wrap(b - a) · span`, with `wrap(d) = d - 2π·round(d / 2π)`, which
+drops the direction reversals across retail from 492 to 155. **Test the channel first**: wrapped
+means no value leaves the band, and a channel that does leave it is stating a real sweep past half a
+turn, which the short way would reverse. Retail never does; mods do. **And never do this to a
+prismatic channel**, whose scalar is metres on a line; 370 of 543 of those step over π and every one
+means it. `ChannelType.Angle` is a single bit shared by both, so only the joint says which, and
+`sampleChannel` cannot — see [ANIMATION.md](ANIMATION.md).
+
+**Channels loop at their own lengths, not the script's.** `getScriptDuration` is the longest map, and
+a shorter channel cycles inside it rather than holding — `rift_pylon.cmp` gives one script channels
+of 2, 4, 8 and 16 seconds. 14 of retail's 186 multi-map `.cmp` scripts mix lengths. Keep the playback
+clock on the script, so a scrubber spans something, and wrap per channel underneath it.
+
 **`getScriptDuration` is the last keyframe's own key, not the key after it**, so a clock that reads
 `t mod duration` lands on zero at exactly the end. Looping wants that; *holding* on the last frame
 does not, and gets the first frame instead — a door left open at the end of its closing animation.
@@ -736,6 +752,12 @@ find:
     wrongly, and the 294 whose rest rotation is identity keep looking right (§5.2).
 15. An animation clock wrapped at `getScriptDuration` while *holding* — the last frame of a script
     shows its first, so a closing door ends open (§5.3).
+16. A revolute angle lerped on a line instead of round a circle — 150 of 414 retail channels whip
+    backwards through a seam, and the other 264 look perfect (§5.3).
+17. …or lerped round a circle unconditionally, which reverses any channel that stores a sweep past
+    half a turn. No retail channel does; a mod's will (§5.3).
+18. Every channel of a script run to the script's duration — the short ones freeze while the long
+    ones play, on 14 of retail's 186 multi-map scripts (§5.3).
 
 ---
 
