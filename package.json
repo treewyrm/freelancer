@@ -1,6 +1,6 @@
 {
   "name": "@treewyrm/freelancer",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Reads and writes the data formats of Freelancer (Digital Anvil, 2003): UTF assets, INI and BINI, THN scene scripts, and the resource DLLs.",
   "keywords": [
     "freelancer",
@@ -18,111 +18,112 @@
   "type": "module",
   "sideEffects": false,
   "imports": {
-    "#/*": [
-      "./dist/*"
-    ]
+    "#/*": "./dist/*"
   },
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./utility": {
-      "import": "./dist/utility/index.js",
-      "types": "./dist/utility/index.d.ts"
+      "types": "./dist/utility/index.d.ts",
+      "import": "./dist/utility/index.js"
     },
     "./math": {
-      "import": "./dist/math/index.js",
-      "types": "./dist/math/index.d.ts"
+      "types": "./dist/math/index.d.ts",
+      "import": "./dist/math/index.js"
     },
     "./utf": {
-      "import": "./dist/utf/index.js",
-      "types": "./dist/utf/index.d.ts"
+      "types": "./dist/utf/index.d.ts",
+      "import": "./dist/utf/index.js"
     },
     "./alchemy": {
-      "import": "./dist/alchemy/index.js",
-      "types": "./dist/alchemy/index.d.ts"
+      "types": "./dist/alchemy/index.d.ts",
+      "import": "./dist/alchemy/index.js"
     },
     "./animation": {
-      "import": "./dist/animation/index.js",
-      "types": "./dist/animation/index.d.ts"
+      "types": "./dist/animation/index.d.ts",
+      "import": "./dist/animation/index.js"
     },
     "./vmesh": {
-      "import": "./dist/vmesh/index.js",
-      "types": "./dist/vmesh/index.d.ts"
+      "types": "./dist/vmesh/index.d.ts",
+      "import": "./dist/vmesh/index.js"
     },
     "./compound": {
-      "import": "./dist/compound/index.js",
-      "types": "./dist/compound/index.d.ts"
+      "types": "./dist/compound/index.d.ts",
+      "import": "./dist/compound/index.js"
     },
     "./rigid": {
-      "import": "./dist/rigid/index.js",
-      "types": "./dist/rigid/index.d.ts"
+      "types": "./dist/rigid/index.d.ts",
+      "import": "./dist/rigid/index.js"
     },
     "./surface": {
-      "import": "./dist/surface/index.js",
-      "types": "./dist/surface/index.d.ts"
+      "types": "./dist/surface/index.d.ts",
+      "import": "./dist/surface/index.js"
     },
     "./texture": {
-      "import": "./dist/texture/index.js",
-      "types": "./dist/texture/index.d.ts"
+      "types": "./dist/texture/index.d.ts",
+      "import": "./dist/texture/index.js"
     },
     "./material": {
-      "import": "./dist/material/index.js",
-      "types": "./dist/material/index.d.ts"
+      "types": "./dist/material/index.d.ts",
+      "import": "./dist/material/index.js"
     },
     "./deformable": {
-      "import": "./dist/deformable/index.js",
-      "types": "./dist/deformable/index.d.ts"
+      "types": "./dist/deformable/index.d.ts",
+      "import": "./dist/deformable/index.js"
     },
     "./ini": {
-      "import": "./dist/ini/index.js",
-      "types": "./dist/ini/index.d.ts"
+      "types": "./dist/ini/index.d.ts",
+      "import": "./dist/ini/index.js"
     },
     "./ini/text": {
-      "import": "./dist/ini/text/index.js",
-      "types": "./dist/ini/text/index.d.ts"
+      "types": "./dist/ini/text/index.d.ts",
+      "import": "./dist/ini/text/index.js"
     },
     "./ini/binary": {
-      "import": "./dist/ini/binary/index.js",
-      "types": "./dist/ini/binary/index.d.ts"
+      "types": "./dist/ini/binary/index.d.ts",
+      "import": "./dist/ini/binary/index.js"
     },
     "./ini/save": {
-      "import": "./dist/ini/save/index.js",
-      "types": "./dist/ini/save/index.d.ts"
+      "types": "./dist/ini/save/index.d.ts",
+      "import": "./dist/ini/save/index.js"
     },
     "./thn": {
-      "import": "./dist/thn/index.js",
-      "types": "./dist/thn/index.d.ts"
+      "types": "./dist/thn/index.d.ts",
+      "import": "./dist/thn/index.js"
     },
     "./thn/text": {
-      "import": "./dist/thn/text/index.js",
-      "types": "./dist/thn/text/index.d.ts"
+      "types": "./dist/thn/text/index.d.ts",
+      "import": "./dist/thn/text/index.js"
     },
     "./thn/bytecode": {
-      "import": "./dist/thn/bytecode/index.js",
-      "types": "./dist/thn/bytecode/index.d.ts"
+      "types": "./dist/thn/bytecode/index.d.ts",
+      "import": "./dist/thn/bytecode/index.js"
     },
     "./thn/scene": {
-      "import": "./dist/thn/scene/index.js",
-      "types": "./dist/thn/scene/index.d.ts"
+      "types": "./dist/thn/scene/index.d.ts",
+      "import": "./dist/thn/scene/index.js"
     },
     "./resource": {
-      "import": "./dist/resource/index.js",
-      "types": "./dist/resource/index.d.ts"
+      "types": "./dist/resource/index.d.ts",
+      "import": "./dist/resource/index.js"
     }
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
+    "!dist/**/*.d.ts.map",
+    "docs",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
     "build": "tsdown",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "prepublishOnly": "npm run build"
+    "smoke": "node scripts/smoke.js",
+    "prepublishOnly": "npm test && npm run build && npm run smoke"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
@@ -133,8 +134,15 @@
   "engines": {
     "node": ">=18.19.0"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/treewyrm/freelancer.git"
+  },
+  "homepage": "https://github.com/treewyrm/freelancer#readme",
+  "bugs": {
+    "url": "https://github.com/treewyrm/freelancer/issues"
   }
 }
