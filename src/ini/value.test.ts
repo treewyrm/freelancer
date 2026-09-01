@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
 import * as value from './value.js'
+import type { Value } from './types.js'
 
 describe('constructors', () => {
   it('narrows a float to the precision the file stores', () => {
@@ -26,6 +27,47 @@ describe('from', () => {
   it('infers boolean and string from their primitives', () => {
     assert.equal(value.from(true).type, 'boolean')
     assert.equal(value.from('li_elite').type, 'string')
+  })
+})
+
+describe('type guards', () => {
+  // Every one of these is a test of the tag the file recorded, not of the number in it — which
+  // is the whole reason Value carries a tag at all.
+  const values = {
+    boolean: value.boolean(true),
+    integer: value.integer(100),
+    float: value.float(100),
+    string: value.string('100'),
+  }
+
+  const matched = (guard: (value: Value) => boolean) =>
+    Object.entries(values)
+      .filter(([, value]) => guard(value))
+      .map(([type]) => type)
+
+  it('matches exactly the tag each guard names', () => {
+    assert.deepEqual(matched(value.isBoolean), ['boolean'])
+    assert.deepEqual(matched(value.isInteger), ['integer'])
+    assert.deepEqual(matched(value.isFloat), ['float'])
+    assert.deepEqual(matched(value.isString), ['string'])
+  })
+
+  it('matches either numeric tag as a number', () => {
+    assert.deepEqual(matched(value.isNumber), ['integer', 'float'])
+  })
+
+  // 14,209 retail floats hold an integral value, so the tag is the only thing separating these
+  // two — a guard reading the number would call both of them integers.
+  it('separates a float holding a whole number from an integer', () => {
+    assert.equal(value.isFloat(value.float(100)), true)
+    assert.equal(value.isInteger(value.float(100)), false)
+  })
+
+  // A flag in a retail file is the string `true`, not a boolean: booleans occur zero times in
+  // 876,034 values, so isBoolean is a test for hand-built data and isString is what matches one.
+  it('reads a retail flag as a string rather than a boolean', () => {
+    assert.equal(value.isBoolean(value.string('true')), false)
+    assert.equal(value.isString(value.string('true')), true)
   })
 })
 
