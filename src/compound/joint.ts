@@ -13,7 +13,10 @@ interface Fixed {
 interface Revolute {
   type: 'revolute'
   position: Vector3
+
+  /** `child_point` — the child-frame point that lands on {@link position}. See RENDERER.md §5.2. */
   offset: Vector3
+
   rotation: Matrix3
   axis: Vector3
   min: number
@@ -24,7 +27,10 @@ interface Revolute {
 interface Prismatic {
   type: 'prismatic'
   position: Vector3
+
+  /** `child_point` — the child-frame point that lands on {@link position}. See RENDERER.md §5.2. */
   offset: Vector3
+
   rotation: Matrix3
   axis: Vector3
   min: number
@@ -78,7 +84,10 @@ interface Cylinder {
 interface Sphere {
   type: 'sphere'
   position: Vector3
+
+  /** `child_point` — the child-frame point that lands on {@link position}. See RENDERER.md §5.2. */
   offset: Vector3
+
   rotation: Matrix3
   minX: number
   maxX: number

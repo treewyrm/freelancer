@@ -77,6 +77,14 @@ degrees of freedom live in the `Animation` directory beside `Cmpnd` — see
 [ANIMATION.md](ANIMATION.md). How a joint composes into a world transform is in
 [RENDERER.md §5.2](RENDERER.md#52-composing-a-joint).
 
+**`position` and `offset` are the two ends of one contact**, `parent_point` and `child_point` in the
+Conquest: Frontier Wars structs the records come from: the point named in the child's frame is the
+one that lands on the point named in the parent's. So `offset` subtracts on the far right of the
+composition, `T(position) · R(…) · T(-offset)`, and not as the conjugating pair a pivot would want —
+[RENDERER.md §5.2](RENDERER.md#52-composing-a-joint) carries the reading and the evidence. Retail
+leaves the field zero in all 3,699 records that have one, so it is authored assets this bears on.
+`fixed` and `loose` record no second point and have nothing to subtract.
+
 > **Cylinder joints read and write, but cannot be animated.** A cylinder's two driven floats have no
 > representation in the channel type bitfield — see
 > [Why cylinder joints cannot be animated](ANIMATION.md#why-cylinder-joints-cannot-be-animated).

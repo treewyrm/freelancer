@@ -110,9 +110,23 @@ Trailing bytes past the pixel data — the 26-byte v2 footer six retail Targas c
 
 Bit 5 of the image descriptor selects a top-left origin; Targa's default is bottom-left. The reader
 **reports** the origin through `Texture.flip` rather than reordering rows, matching `readMIPS`, which
-reports `flip: true` unconditionally because DDS always stores the top row first. Whether Freelancer's
-own loader honours the descriptor bit is unresolved (see [TODO](#todo)); reporting rather than
-transforming means a consumer that finds out either way needs no decode change.
+reports `flip: true` unconditionally because DDS always stores the top row first.
+
+**Freelancer reorders nothing, and a consumer reproducing it should not either.** The declared origin
+is not the authored one: `BASES/LIBERTY/li_01_manhattan_cityscape.cmp :: banner2manh.tga` is a DDS,
+so `flip: true` by specification, and its lettering — *Weather*, *SODA*, *Avalon* — reads only once
+the rows are reversed. The bottom-left Targas store the picture the same way round;
+`INTERFACE/BASESIDE/news_vendor.3db :: UI_CITY_news.tga` spells `NEWS` reversed in file order too. So
+both containers hold the picture bottom row first, the UVs beside them are 3ds Max's with zero at the
+image bottom, and the two cancel: rows in file order sampled by the file's own V come out the right
+way up. What is left open is only the nine chains that set the bit (see [TODO](#todo)), and reporting
+rather than transforming is what lets a consumer act on that without a decode change.
+
+**Librelancer reached the same conclusion and left a note saying so.** Its Targa reader carries the
+row-reversal written out and commented out, under *"Technically we should flip these, but Freelancer
+does not / Leave unflipped"* (`ImageLib/TGA.cs:186`); its DDS reader has no flip either, and no
+shader in the tree flips `v`. Independent, and from the other direction — that reading was arrived at
+against the running game rather than against the pixels.
 
 The origin and bit depth are identical across every level of every retail chain, so `readMIP` throws
 rather than guessing when levels disagree.
@@ -329,9 +343,10 @@ Twelve entries, at 3, 10, 15 and 30 FPS, splitting evenly between two authoring 
 
 The seven tiled animations are the interesting ones: their rectangles run **V downward**
 (`v1: 1 → v2: 0.75` for the first frame of a 4×4 grid), and their atlases are precisely seven of the
-nine Targas that set the top-left origin bit. Rects authored V-up against a bitmap stored top-down is
-what you would expect if the descriptor bit is meaningful — suggestive on the open question below,
-though not on its own conclusive.
+nine Targas that set the top-left origin bit. Everywhere else that pairing is unremarkable — a rect
+with zero at the image bottom over a bitmap stored bottom row first puts frame 0 at the top left, the
+way a sprite sheet reads. On these seven it is the whole of the open question below: honour the bit
+and frame 0 lands at the bottom instead, so the animation runs its rows backwards.
 
 `Texture count` is exactly the highest frame index plus one in all twelve.
 
@@ -406,17 +421,22 @@ Freelancer cannot load either, so neither will this library.
 
 ## TODO
 
-### Does Freelancer honour the Targa origin bit?
+### Do the nine top-left Targa chains render mirrored?
 
-Nine retail Targa chains set bit 5 of the image descriptor, selecting a top-left origin against
-Targa's bottom-left default. The reader reports it through `Texture.flip` rather than reordering rows,
-so a consumer that finds out either way needs no decode change — but which way is right is unresolved,
-and the nine are conspicuous: HUD backdrops, lightning, flares, an explosion impact.
+**The general question is closed**: retail stores the picture bottom row first in both containers, the
+game reorders neither, and the UVs cancel it — see [Vertical origin](#vertical-origin). What that
+leaves is the nine chains that set bit 5, whose rows therefore run the other way to everything else:
+`FX/animated.txm :: lightningaxm_0_0` and `sparks1anim_0_0`, `FX/kioncannon.txm :: kionflare_0`,
+`FX/lightning2.txm :: lightning256_0`, `FX/missleeffect.txm :: impact_0`,
+`FX/standardeffects.txm :: XP_HERM_0`, `INTERFACE/HUD/hud.txm :: backdrop` and `static`,
+`SOLAR/BLACKHOLE/blackhole.txm :: bhflash_0`.
 
-They are their own test. If Freelancer honours the bit, those nine appear the same way up as everything
-else; if it ignores the bit and always reads bottom-up, they appear flipped in game, and being sprites
-and flares is exactly why nobody would have noticed while authoring them. Compare one against its own
-pixels — `INTERFACE/HUD/hud.txm :: backdrop` has an unambiguous up.
+A loader that reorders nothing draws those nine vertically mirrored against how they were authored,
+and being sprites, flares and a near-symmetric HUD plate is exactly why nobody would have noticed —
+`backdrop` was nominated for its unambiguous up and does not have one, its vault door reading the same
+either way. So this is now a question about **retail**, not about the reader: either the game mirrors
+them and always did, or its loader carries a case for the bit that the other 2,391 chains never
+exercise. Six of the nine are effect atlases, so the frame order is the tell.
 
 Clearing the bit on a chain and reading the pixels back the other way is the confirming edit, but the
 observation alone settles it.

@@ -48,33 +48,74 @@ holds 39 groups, and the busiest file (`SHIPS/LIBERTY/LI_DREADNOUGHT/li_dreadnou
 
 ## 2. Coordinate system, winding and matrices
 
-### Winding is consistent and needs no repair
+### Winding is consistent, but the screen mapping is not D3DX's
 
 **The index order is counter-clockwise when read with a right-handed cross product**, measured against
-the stored vertex normals ([Corpus](#corpus)). That does
-**not** make `gl.frontFace(gl.CCW)` — the default — correct, and an earlier revision of this
-document said it did.
+the stored vertex normals ([Corpus](#corpus)). Getting to the screen from there takes one more step
+than it looks, and this section has now been wrong in both directions.
 
-Freelancer's space is left-handed (D3D, +Z into the screen). Two consistent choices, and only two:
+**Freelancer's screen mapping is the mirror of `D3DXMatrixLookAtLH`'s about the vertical axis.**
+Build a view matrix the way `D3DXMatrixLookAtLH` does — `z = normalize(at − eye)`,
+`x = normalize(cross(up, z))`, `y = cross(z, x)` — pair it with a left-handed projection whose x
+scale is positive, put the eye at −Z, and world +X lands at ndc x **+0.241**, on the right of the
+screen. The game puts it on the left.
+
+Measured off the files rather than off a render, and unanimously. Take a wall face, stand a viewer in
+front of it (`forward = −N`, `up = +Y`, `right = cross(up, forward)`), and ask which way the texture's
+`u` runs. Across `li_01_manhattan_cityscape`, `br_01_avalon_cityscape` and `br_03_warwick_cityscape`,
+**all 60 faces carrying legible signage have `u` increasing to the viewer's left** — 60 of 60, no
+exceptions; whole models run the same way about 4:1. The lettering on those textures — *Weather*,
+*SODA*, *Avalon*, *THE STORYTELLER* — is plainly readable in game, so the mapping that produces them
+readable is the game's, and the D3DX one is not it.
+
+So there is a reflection to place, and where you put it is the choice:
 
 | Import | Projection | Front face | Notes |
 |---|---|---|---|
-| Positions verbatim | left-handed (map +Z to increasing depth) | `gl.CW` | Hardpoint axes, joint axes and `.sur` hulls stay comparable to the data |
-| Negate Z on import | ordinary right-handed GL | `gl.CW` | Every axis, normal and matrix must be mirrored too, consistently |
+| Positions verbatim | left-handed, **x column negated** | `gl.CCW` | Hardpoint axes, joint axes and `.sur` hulls stay comparable to the data |
+| Negate X on import | left-handed, x column as written | `gl.CCW` | Every position, normal, axis and matrix must be mirrored too, consistently |
 
-**Both rows are `gl.CW`**, and the front face is the one thing the choice does not change: negating
-Z mirrors the scene *and* the camera that looks at it, and a mirror of both renders the identical
-image. What the rows really trade off is whether the imported data still matches the file.
+**Both rows are `gl.CCW`**, and the front face is the one thing the choice does not change — a
+reflection is present either way, and it is the reflection that decides the winding. What the rows
+trade off is whether the imported data still matches the file, which is why the first is the one to
+take.
 
-Why a right-handed winding presents clockwise: GL's NDC is left-handed — x right, y up, z
-increasing away from the viewer. In the pipeline GL is usually described with, view space is
-right-handed, so the projection reverses handedness exactly once, and that reversal is what makes
-the `CCW` default right. Here view space is already left-handed, the reversal never happens, and a
-triangle whose right-handed normal faces the camera stays clockwise in window coordinates.
+**Librelancer lands on the same image by a third route**, which is the best corroboration available
+short of the game: it uploads the vertex buffer verbatim (`Utf/Vms/VMeshData.cs`) and then uses
+**`System.Numerics`' right-handed** `Matrix4x4.CreateLookAt` and `CreatePerspectiveFieldOfView`
+(`Render/Cameras/LookAtCamera.cs:31`), never the `…LeftHanded` variants, which appear nowhere in the
+tree. A right-handed `CreateLookAt` takes `z = normalize(eye − target)` and so yields
+`x = cross(up, z) = (−1, 0, 0)` where `LookAtLH` yields `(+1, 0, 0)` — the same eye, the mirror
+image, `+X` on the left. And it never calls `glFrontFace` at all, leaving GL's **`CCW`** default;
+the only culling state it sets is `glCullFace(GL_BACK)`
+(`Graphics/Backends/OpenGL/GLRenderContext.cs:203`). Right-handed view space reverses handedness
+once in the projection, which is what makes that default correct there. Two implementations, two
+different sets of matrices, one picture.
 
-Getting it wrong renders the model inside-out, and turning culling off "fixes" it while leaving the
-lighting wrong. Mirroring positions without mirroring the axes and matrices with them fails the
-same way.
+Why the reflection flips the winding: GL decides facing from the signed area in window coordinates.
+A left-handed view space projected onto GL's left-handed NDC preserves handedness, so a triangle
+whose right-handed normal faces the camera would arrive **clockwise** — and negating the x column
+mirrors that to counter-clockwise. Both halves are real, and taking only the first is the trap
+below.
+
+> **The trap, and it is a good one.** Measure the winding through an unmirrored `perspectiveLH` and
+> a camera-facing retail triangle comes out clockwise 18,268 times against 2. That number is
+> correct, reproducible, and endorses `gl.CW` — which, paired with the unmirrored projection, is
+> perfectly self-consistent and draws every model *mirrored*. It is invisible on a ship, because
+> ships are very nearly symmetric about their long axis; it is unmissable the moment anything
+> carries lettering. A winding probe cannot catch it, because the probe and the renderer share the
+> projection under test. **Measure winding through the same view-projection you draw through**, and
+> settle the mirror against something outside the pipeline — texture `u` on a legible sign is the
+> cheapest such thing in the corpus.
+
+Getting the front face wrong on its own renders the model inside-out, and turning culling off
+"fixes" it while leaving the lighting wrong. Mirroring positions without mirroring the axes and
+matrices with them fails the same way.
+
+**One more thing moves with the mirror:** whatever names the view's `right` in world space — the
+vector a billboard is built from and a pan slides along — is the **negative** of the view matrix's x
+axis, because the reflection changes which world direction ends up on the right of the screen. Read
+it unnegated and every camera-facing sprite is mirrored and every pan drags backwards.
 
 **No part transform mirrors.** Every joint rotation and every hardpoint orientation has determinant
 **+1** and is orthonormal, so winding never flips per-part and a rotation's inverse is its transpose.
@@ -353,16 +394,25 @@ Measured over every record that has the fields:
 - `position` is non-zero in 13,865 of 14,412.
 - No revolute or prismatic joint has `min === max === 0`; every one has a real range.
 
-Because `offset` is always zero, the local transform reduces to a translation, the rest rotation,
-and the driven degree of freedom:
+`position` (`parent_point`) and `offset` (`child_point`) are the two ends of one contact: the point
+named in the *child's* frame is the one that lands on the point named in the parent's. So `offset`
+subtracts on the far right of the product, past the rest rotation and past whatever degree of freedom
+the joint is driven through:
 
 ```
 fixed, loose   L      = T(position) · R(rotation)
-revolute       L(θ)   = T(position) · R(axis, θ) · R(rotation)      θ ∈ [min, max]
-prismatic      L(d)   = T(position) · T(axis · d) · R(rotation)     d ∈ [min, max]
-sphere         L(q)   = T(position) · R(q) · R(rotation)
+revolute       L(θ)   = T(position) · R(axis, θ) · R(rotation) · T(-offset)    θ ∈ [min, max]
+prismatic      L(d)   = T(position) · T(axis · d) · R(rotation) · T(-offset)   d ∈ [min, max]
+cylinder       L(θ,d) = T(position) · T(axis · d) · R(axis, θ) · R(rotation) · T(-offset)
+sphere         L(q)   = T(position) · R(q) · R(rotation) · T(-offset)
 world          W_child = W_parent · L_child
 ```
+
+`fixed` and `loose` have no second point in the record, so there is nothing for them to subtract.
+Because `offset` is zero in every retail record, all four of the others reduce on retail data to a
+translation, the rest rotation and the driven degree of freedom — the trailing factor is there for
+authored assets, and a renderer that drops it draws every retail model correctly and a mod's joint in
+the wrong place.
 
 **The driven factor goes on the left, before the rest rotation.** That is `axis` living in the
 *parent* frame, which is what the `Cyl` struct comment inherited from Conquest: Frontier Wars says
@@ -372,9 +422,18 @@ where the rest rotation is identity, true for just **294 of the 929** driven joi
 visibly wrong under it. Nothing in the files separates them; this was settled by playing retail
 scripts under both orders and watching, in freelancer-testing's viewer.
 
-One thing this still does not settle, and it needs a non-retail asset rather than an experiment:
-**where `offset` belongs if anything ever sets one.** The natural reading is a pivot,
-`… · T(offset) · R(…) · T(-offset)`, but all 3,699 retail records leave it zero.
+**`offset` is a contact point, not a pivot.** An earlier revision of this section guessed at
+`… · T(offset) · R(…) · T(-offset)` and left the question open, because all 3,699 retail records
+leave the field zero and nothing in retail can tell the two apart. The field names settle it and
+MAXLancer agrees: `scripts/Transform.ms` composes its axis and spheric joint controllers as
+`preTranslate (translate R position) -offset`, which in column-vector order is
+`T(position) · R · T(-offset)` — the offset *inside* the rotation, one trailing factor, not a
+conjugating pair. A pivot would leave the child's contact point where it already was; this moves it
+onto the parent's, which is what `parent_point`/`child_point` describe. MAXLancer omits it from its
+prismatic branch alone, with a `(?)` on the comment that says so; the two points mean the same thing
+in a `Pris` record as in a `Rev` one and the table above applies it there too — **but whether the
+engine reads it on a `Pris` at all is open, and is the one row of that table under suspicion. See
+[TODO](#todo).**
 
 ### 5.3 Animation
 
@@ -503,12 +562,17 @@ Things that will bite:
   6,849 image entries — 64% — are block-compressed and unreadable without it. `dxt1` must upload as `COMPRESSED_RGBA_S3TC_DXT1_EXT`, never
   the RGB variant — punch-through is selected per block and nothing in the container flags it, so
   the RGB decode renders those texels opaque black.
-- **`UNPACK_FLIP_Y_WEBGL` is illegal for compressed uploads** — `compressedTexImage2D` raises
-  `INVALID_OPERATION` when it is set. Since DDS is already top-down and 2,391 Targa chains are
-  bottom-up, the only convention that covers both is to **normalize at load**: flip the bottom-up
-  Targa rows yourself, then sample with a single origin everywhere. The `flip` field on each entry
-  reports the actual origin (top-down for all 4,447 DDS, both cubemaps and 9 Targas; bottom-up for
-  the rest) — it is a statement of fact, not an instruction.
+- **Do not normalize the vertical origin — upload every level in file order.** The declared origin is
+  not the authored one. `BASES/LIBERTY/li_01_manhattan_cityscape.cmp :: banner2manh.tga` is a DDS,
+  and so `flip: true` by specification, yet its lettering reads only once the rows are reversed; the
+  bottom-left Targas hold the picture the same way round. Both containers store it bottom row first,
+  the UVs beside them put zero at the image bottom, and the game reorders nothing — so rows in file
+  order sampled by the file's own V come out the right way up, and a flip on either side of that puts
+  the image upside down. The `flip` field is a statement of what the container declared, not an
+  instruction (top-down for all 4,447 DDS, both cubemaps and 9 Targas; bottom-up for the rest), and
+  the 9 are an open question about retail rather than about the loader — see
+  [TEXTURE.md § TODO](TEXTURE.md#todo). This is also why `UNPACK_FLIP_Y_WEBGL` never comes up, which
+  is as well: `compressedTexImage2D` raises `INVALID_OPERATION` when it is set.
 - **`UNPACK_ALIGNMENT` must be 1 for `rgb24_888`.** Rows are `width * 3` bytes, which is not a
   multiple of 4 for most widths, and the default alignment of 4 shears the image.
 - **Mip chains are usually incomplete.** 4,394 of them stop at 4×4 (six more at 8×4) and 807 hold a
@@ -731,8 +795,8 @@ find:
 2. Diffuse colour read as RGBA instead of BGRA (§3.1).
 3. `TEXTURE_MAX_LEVEL` unset on a chain that stops at 4×4 — black textures (§7).
 4. `UNPACK_ALIGNMENT` left at 4 for `rgb24_888` — sheared image (§7).
-5. `frontFace` left at the `gl.CCW` default — inside-out hull. Neither import convention wants it;
-   both are `gl.CW` (§2).
+5. The projection's x column left unnegated — the whole scene mirrored, invisible on a ship and
+   unmissable on a sign, and a winding probe sharing the projection cannot catch it (§2).
 6. `vertexEnd` treated as exclusive — the last vertex of every group missing (§3.2).
 7. A `Matrix3` uploaded untransposed — every part whose rest rotation is not identity assembles
    rotated backwards, which reads as a broken model rather than as a mirror (§2).
@@ -787,7 +851,8 @@ Three sweeps are this document's alone and appear nowhere else:
   cross product `(b-a) × (c-a)` agrees with the stored normal in **381,539** and opposes it in 692,
   with one degenerate triangle. Not one part of 6,962 is majority-reversed. Projecting those through a
   left-handed `lookAt`/`perspective` pair with the camera out along each stored normal gives **18,268
-  clockwise against 2** (§2).
+  counter-clockwise against 2** once the projection's x column is negated — and exactly 18,268
+  *clockwise* against 2 if it is not, which is the trap §2 carries.
 - **Determinants.** Every joint rotation (14,412) and every hardpoint orientation (12,053) has
   determinant **+1** to within 1e-2, and all are orthonormal — so winding never flips per-part, an
   attached model never mirrors, and a rotation's inverse is its transpose (§2).
@@ -798,12 +863,13 @@ Three sweeps are this document's alone and appear nowhere else:
 
 ## TODO
 
-Six open questions reach the renderer. None of them blocks a correct-looking image — each is a
+Seven open questions reach the renderer. None of them blocks a correct-looking image — each is a
 place where this document picks the reading that cannot go visibly wrong, and the game would settle
 which reading is right.
 
 | Question | Taken here as | Settled by |
 | --- | --- | --- |
+| Whether a **prismatic** joint's `offset` is applied at all (§5.2) | applied, the same as on the other three types | Author a `Pris` joint with a non-zero `child_point` and load the model |
 | Texture flag bits 4 and 6 — the wrap mode field (§6) | ignored; bit 4 is probably "sample UV1", which would matter on detail maps | [MATERIAL.md § TODO](MATERIAL.md#todo) |
 | Targa origin bit on nine chains (§7) | reported through `flip`, rows untouched | [TEXTURE.md § TODO](TEXTURE.md#todo) |
 | `MAKeys` against `MADeltas` in material animation | both read, neither derived; the UV transform driver is unconfirmed | [RIGID.md § TODO](RIGID.md#todo) |
@@ -814,6 +880,20 @@ which reading is right.
 The joint composition order (§5.2) was on this list and is **closed**: freelancer-testing's animation
 player answered it by playing retail scripts under both orders, and the driven factor goes before the
 rest rotation. It is recorded there rather than here, and nothing composes the other order any more.
+
+**The prismatic row is a suspicion with a source behind it**, and the only one here where the reading
+taken may be an over-generalization rather than a coin toss. MAXLancer's `scripts/Transform.ms`
+applies `offset` in its revolute, cylinder and spheric branches and **not** in its prismatic one, with
+a `(?)` on the comment saying so — an author who implemented three of four the same way and then
+stopped is weak evidence that the engine does too, and the field being present in the `Pris` record is
+weak evidence that it is read. §5.2 applies it, because the two points mean the same thing in a `Pris`
+record as in a `Rev` one and nothing in the format distinguishes them; but a `Pris` joint whose slide
+axis already carries the displacement has no obvious need for a second one, which is the shape of a
+field the engine ignores. Retail cannot say — all 3,699 records that carry an offset leave it zero,
+prismatic ones included — so this needs a hand-authored `.cmp`: one `Pris` joint, a non-zero
+`child_point`, and a look at whether the child sits where the offset puts it or where it would sit
+without one. A null result means the trailing factor should be dropped from the prismatic row of
+§5.2's table alone.
 
 The two particle rows differ in kind from the first four. `TransformFlags` is constant across all
 5,590 retail transforms, so the data cannot say what the bits select — and what is left for them to
