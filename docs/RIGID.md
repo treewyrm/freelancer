@@ -94,14 +94,16 @@ Reading them as full angles gives no sensible aspect.
 ### Procedural spheres
 
 Planets and stars ship as `.sph` files, which carry **no geometry at all**. The game tessellates a
-sphere at load time and skins it with one material per cube face, so the whole document is a single
-`Sphere` directory of material names, a radius and a count.
+sphere at load time and skins it with one material per cube face, so the document is a `Sphere`
+directory of material names, a radius and a count — plus, like any other part, the hardpoints
+mounted on it.
 
 ```ts
 interface Sphere {
   type: 'sphere'
-  sides: string[] // material name per side, in M0..M6 order
-  radius: number  // float32
+  hardpoints: Hardpoint[] // from a Hardpoints directory beside Sphere, as a .3db part has
+  sides: string[]         // material name per side, in M0..M6 order
+  radius: number          // float32
 }
 ```
 
@@ -116,9 +118,15 @@ interface Sphere {
 `Sides` is the authority on how many materials to read, and `writeSphere` derives it from
 `sides.length` rather than carrying it.
 
+**`Hardpoints` is a sibling of `Sphere`, not a child of it**, exactly where `readRigid` looks for a
+`.3db` part's. So `readSphere` and `writeSphere` both work on the **part** directory rather than on
+`Sphere` — `writeSphere` returns the part directory the way `writeRigid` does, and a caller wanting
+just the `Sphere` node takes it from there. `writeCamera` is the one that still returns its inner
+directory, and that asymmetry is deliberate: nothing mounts to a camera.
+
 > **Unhandled siblings.** Like `writeRigid`, `writeSphere` builds a fresh directory and does not carry
 > unrecognised siblings across — which `sun.sph`, the one sphere with root-level `Texture Library` and
-> `Material Library` directories, is the only case of.
+> `Material Library` directories, is now the only case of.
 
 ## Material UV animation
 
@@ -224,6 +232,12 @@ atmosphere, 6 for `planet_neutron_800.sph`, and 1 for `sun.sph`. Material names 
 everywhere except `sun.sph`, whose `M0` is exactly the four bytes `none`; the reader treats the
 terminator as optional and the writer always emits one, so that single file grows by one byte on
 rewrite.
+
+**No retail sphere carries a hardpoint — 0 of 86**, and 85 of the 86 have a bare `Sphere`-only root
+(`sun.sph` is the one that adds anything). So `Sphere.hardpoints` is not read off the corpus, which
+is silent on it: a sphere placed in a system is an object like any other and its loadout addresses
+hardpoints by name, which is an observation in the running game. The corpus suite asserts the zero
+rather than ignoring it, so a reader that started inventing hardpoints would be caught.
 
 ### Material animation
 

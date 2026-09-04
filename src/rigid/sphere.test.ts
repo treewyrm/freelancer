@@ -4,12 +4,15 @@ import { load, skip } from '#/corpus.js'
 import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
+import Matrix3 from '#/math/matrix3.js'
+import Vector3 from '#/math/vector3.js'
 import { readRigidModel, writeRigidModel } from './rigid.js'
 import { isSphere, readSphere, writeSphere, type Sphere } from './sphere.js'
 
 /** A fully skinned planet: four equatorial faces, two caps, one atmosphere shell. */
 const sample = (): Sphere => ({
   type: 'sphere',
+  hardpoints: [],
   sides: [
     'planet_earth_side1',
     'planet_earth_side2',
@@ -22,7 +25,11 @@ const sample = (): Sphere => ({
   radius: 3000,
 })
 
-const wrap = (sphere: Sphere) => new Directory('\\', [writeSphere(sphere)])
+/** The part directory `writeSphere` returns, which is already shaped like a `.sph` file root. */
+const wrap = (sphere: Sphere) => writeSphere(sphere)
+
+/** The `Sphere` directory inside it, which is what the entry-level assertions are about. */
+const inner = (sphere: Sphere) => writeSphere(sphere).getDirectory('Sphere')!
 
 /** Rewrites Sides to a value writeSphere would never derive, to exercise the reader against it. */
 function claimSides(directory: Directory, count: number): Directory {
@@ -43,15 +50,16 @@ describe('isSphere', () => {
 })
 
 describe('writeSphere', () => {
-  it('names the directory Sphere', () => {
-    strictEqual(writeSphere(sample()).name, 'Sphere')
+  it('returns a part directory holding Sphere, the way writeRigid does', () => {
+    deepStrictEqual(
+      writeSphere(sample()).directories.map(({ name }) => name),
+      ['Sphere'],
+    )
   })
 
   it('numbers the material files from M0 and adds Radius and Sides', () => {
-    const directory = writeSphere(sample())
-
     deepStrictEqual(
-      directory.files.map(({ name }) => name),
+      inner(sample()).files.map(({ name }) => name),
       ['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'Radius', 'Sides'],
     )
   })
@@ -60,21 +68,26 @@ describe('writeSphere', () => {
     const sphere = sample()
     sphere.sides = sphere.sides.slice(0, 6)
 
-    deepStrictEqual([...writeSphere(sphere).getFile('Sides')!.readIntegers()], [6])
+    deepStrictEqual([...inner(sphere).getFile('Sides')!.readIntegers()], [6])
   })
 
   it('writes the radius as a single float32', () => {
-    const file = writeSphere(sample()).getFile('Radius')
+    const file = inner(sample()).getFile('Radius')
 
     strictEqual(file?.byteLength, 4)
     deepStrictEqual([...file.readFloats()], [3000])
   })
 
   it('NUL-terminates each material name', () => {
-    const file = writeSphere(sample()).getFile('M0')!
+    const file = inner(sample()).getFile('M0')!
 
     strictEqual(file.byteLength, 'planet_earth_side1'.length + 1)
     deepStrictEqual([...file.readStrings()], ['planet_earth_side1'])
+  })
+
+  // Absent stays absent, which is what keeps the 86 retail spheres re-serialising unchanged.
+  it('emits no Hardpoints directory for a sphere carrying none', () => {
+    strictEqual(writeSphere(sample()).getDirectory('Hardpoints'), undefined)
   })
 
   it('rejects a side count outside one to seven', () => {
@@ -91,7 +104,7 @@ describe('readSphere', () => {
   })
 
   it('reads a star, which has a single material and no caps', () => {
-    const sphere: Sphere = { type: 'sphere', sides: ['none'], radius: 1000 }
+    const sphere: Sphere = { type: 'sphere', hardpoints: [], sides: ['none'], radius: 1000 }
 
     deepStrictEqual(readSphere(wrap(sphere)), sphere)
   })
@@ -106,7 +119,7 @@ describe('readSphere', () => {
   })
 
   it('reads only as many materials as Sides announces', () => {
-    strictEqual(readSphere(claimSides(writeSphere(sample()), 6)).sides.length, 6)
+    strictEqual(readSphere(claimSides(inner(sample()), 6)).sides.length, 6)
   })
 
   it('throws when the parent has no Sphere directory', () => {
@@ -114,24 +127,65 @@ describe('readSphere', () => {
   })
 
   it('throws when Sides or Radius is missing', () => {
-    const noSides = writeSphere(sample())
+    const noSides = inner(sample())
     noSides.delete('Sides')
     throws(() => readSphere(new Directory('\\', [noSides])), /Missing Sides/)
 
-    const noRadius = writeSphere(sample())
+    const noRadius = inner(sample())
     noRadius.delete('Radius')
     throws(() => readSphere(new Directory('\\', [noRadius])), /Missing Radius/)
   })
 
   it('throws when Sides announces a material that is not there', () => {
-    const directory = writeSphere({ ...sample(), sides: ['a', 'b'] })
-
-    throws(() => readSphere(claimSides(directory, 3)), /Missing M2/)
+    throws(() => readSphere(claimSides(inner({ ...sample(), sides: ['a', 'b'] }), 3)), /Missing M2/)
   })
 
   it('throws RangeError on a side count outside one to seven', () => {
     for (const count of [0, 8])
-      throws(() => readSphere(claimSides(writeSphere(sample()), count)), RangeError)
+      throws(() => readSphere(claimSides(inner(sample()), count)), RangeError)
+  })
+})
+
+// No retail .sph carries a hardpoint — 0 of 86 — so this rests on the sphere being an ordinary
+// system object whose loadout addresses hardpoints by name, observed in game rather than measured.
+describe('sphere hardpoints', () => {
+  const mounted = (): Sphere => ({
+    ...sample(),
+    hardpoints: [
+      {
+        type: 'fixed',
+        name: 'HpDockMountA',
+        position: { x: 0, y: 800, z: 0 },
+        orientation: Matrix3.copy({}),
+      },
+      {
+        type: 'revolute',
+        name: 'HpWeapon01',
+        position: { x: 0, y: 0, z: 800 },
+        orientation: Matrix3.copy({}),
+        axis: Vector3.copy(Vector3.y),
+        min: -1,
+        max: 1,
+      },
+    ],
+  })
+
+  it('writes them beside Sphere rather than inside it', () => {
+    const directory = writeSphere(mounted())
+
+    deepStrictEqual(
+      directory.directories.map(({ name }) => name),
+      ['Sphere', 'Hardpoints'],
+    )
+    strictEqual(directory.getDirectory('Sphere')!.getDirectory('Hardpoints'), undefined)
+  })
+
+  it('round-trips them', () => {
+    deepStrictEqual(readSphere(writeSphere(mounted())), mounted())
+  })
+
+  it('round-trips them through readRigidModel, which is how a .sph is opened', () => {
+    deepStrictEqual(readRigidModel(writeRigidModel(mounted())), mounted())
   })
 })
 
@@ -175,7 +229,7 @@ describe('retail sphere corpus', { skip }, () => {
   it('re-serialises every one of them byte for byte', () => {
     for (const { path, root } of spheres()) {
       const original = root.getDirectory('Sphere')
-      const result = writeSphere(readSphere(root))
+      const result = writeSphere(readSphere(root)).getDirectory('Sphere')!
 
       ok(original)
       deepStrictEqual(
@@ -226,6 +280,13 @@ describe('retail sphere corpus', { skip }, () => {
   it('does not claim any .3db or .cmp document', () => {
     for (const { path, root } of load('3db', 'cmp'))
       strictEqual(isSphere(root), false, `${path}: misdetected as a sphere`)
+  })
+
+  // What the hardpoint support is measured against: nothing retail exercises it, and 85 of the 86
+  // have a bare Sphere-only root (sun.sph adds its own texture and material libraries).
+  it('carries no hardpoints anywhere in the tree', () => {
+    for (const { path, root } of spheres())
+      deepStrictEqual(readSphere(root).hardpoints, [], `${path}: unexpected hardpoints`)
   })
 
   it('agrees with the Sides field in every file', () => {

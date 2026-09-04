@@ -83,8 +83,12 @@ function readPart(parent: Directory): RigidPart {
 }
 
 /**
- * Writes one part fragment into an unnamed directory, for the caller to name. Camera and sphere
- * fragments are wrapped, since their readers return the inner directory.
+ * Writes one part fragment into an unnamed directory, for the caller to name.
+ *
+ * A camera fragment is wrapped here, since `writeCamera` returns the inner `Camera` directory and a
+ * camera has nothing beside it. `writeRigid` and `writeSphere` already return the part directory,
+ * because both carry hardpoints as a sibling — nothing mounts to a camera, which is what makes that
+ * asymmetry a statement rather than an oversight.
  */
 function writePart(part: RigidPart): Directory {
   switch (part.type) {
@@ -93,7 +97,7 @@ function writePart(part: RigidPart): Directory {
     case 'camera':
       return new Directory(undefined, [writeCamera(part)])
     case 'sphere':
-      return new Directory(undefined, [writeSphere(part)])
+      return writeSphere(part)
   }
 }
 

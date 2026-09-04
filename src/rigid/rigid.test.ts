@@ -269,7 +269,12 @@ describe('a compound document, the shape a .cmp has', () => {
   })
 
   it('round-trips a sphere part inside a hierarchy', () => {
-    const planet: Sphere = { type: 'sphere', sides: ['planet_side'], radius: 3000 }
+    const planet: Sphere = {
+      type: 'sphere',
+      hardpoints: [fixedHardpoint('HpDock01')],
+      sides: ['planet_side'],
+      radius: 3000,
+    }
     const value = compoundPart('Root', rigid(), {
       children: [compoundPart('shell', planet, { index: 1, joint: fixed })],
     })

@@ -1,6 +1,7 @@
 import Directory from '#/utf/directory.js'
 import type File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
+import { readHardpoints, writeHardpoints, type Hardpoint } from '#/compound/hardpoint.js'
 
 /**
  * Procedural sphere model, used by `.sph` planet and star files.
@@ -12,6 +13,17 @@ import BufferView from '#/utility/bufferview.js'
  */
 export interface Sphere {
   type: 'sphere'
+
+  /**
+   * Hardpoints mounted on the sphere, from a `Hardpoints` directory beside the `Sphere` one.
+   *
+   * **No retail `.sph` carries any — 0 of 86, and 85 of the 86 have a bare `Sphere`-only root** — so
+   * this is not read off the corpus. A sphere placed in a system is an object like any other, and
+   * its loadout addresses hardpoints by name the same way a `.3db`'s does; that is an observation in
+   * the running game, and it is what this field rests on. Read and written exactly as {@link Rigid}
+   * does, from and to the part directory rather than the `Sphere` one.
+   */
+  hardpoints: Hardpoint[]
 
   /** Material name per side, in `M0`..`M6` order. */
   sides: string[]
@@ -38,7 +50,9 @@ function readName(file: File): string {
 }
 
 /**
- * Reads a `Sphere` fragment: the radius and one material name per side, `Sides` saying how many.
+ * Reads a sphere part fragment: the radius, one material name per side with `Sides` saying how
+ * many, and the hardpoints mounted beside it.
+ * @param parent The part directory holding `Sphere`, not the `Sphere` directory itself
  * @throws Error when the directory, `Sides`, `Radius` or any named side file is absent.
  * @throws RangeError when the side count is outside 1..7.
  */
@@ -62,24 +76,34 @@ export function readSphere(parent: Directory): Sphere {
     sides.push(readName(file))
   }
 
-  return { type: 'sphere', sides, radius }
+  return { type: 'sphere', hardpoints: [...readHardpoints(parent)], sides, radius }
 }
 
 /**
- * Writes a `Sphere` directory. `Sides` is derived from the list rather than carried, so it cannot
- * disagree with the `M<n>` files beside it.
+ * Writes a sphere part into an unnamed directory, for the caller to name — the same shape
+ * `writeRigid` returns, and for the same reason: a part is the `Sphere` directory *plus* the
+ * hardpoints beside it, and a writer that emitted only the first while the reader returned both
+ * would drop them silently.
+ *
+ * `Sides` is derived from the list rather than carried, so it cannot disagree with the `M<n>` files
+ * beside it. Absent stays absent: no empty `Hardpoints` directory for a sphere carrying none, which
+ * is what keeps all 86 retail spheres re-serialising as they were.
  * @throws RangeError when the side count is outside 1..7.
  */
-export function writeSphere({ sides, radius }: Sphere): Directory {
+export function writeSphere({ hardpoints, sides, radius }: Sphere): Directory {
   if (sides.length < 1 || sides.length > maximumSides)
     throw new RangeError(`Invalid sphere side count: ${sides.length}`)
 
-  const directory = new Directory('Sphere')
+  const sphere = new Directory('Sphere')
 
-  for (const [index, name] of sides.entries()) directory.setFile(`M${index}`).writeStrings(name)
+  for (const [index, name] of sides.entries()) sphere.setFile(`M${index}`).writeStrings(name)
 
-  directory.setFile('Radius').writeFloats(radius)
-  directory.setFile('Sides').writeIntegers(sides.length)
+  sphere.setFile('Radius').writeFloats(radius)
+  sphere.setFile('Sides').writeIntegers(sides.length)
+
+  const directory = new Directory(undefined, [sphere])
+
+  if (hardpoints.length) directory.children.push(writeHardpoints(hardpoints))
 
   return directory
 }

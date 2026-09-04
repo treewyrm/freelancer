@@ -107,6 +107,24 @@ interface Part extends Extent, Surface {
 continuing past one would silently desynchronize the rest of the file. `readPart` throws a
 `RangeError` instead.
 
+### Matching a part to a model part
+
+**There are two rules and the id-by-name one is only the second.** A part built for a **non-compound**
+model carries `id` **0**, not the CRC of anything — MAXLancer's `SurfacePart.Parse` sets
+`partID = if compound then Hash target.name else 0`, and `SurfaceLibrary.Build` looks it back up the
+same way. So a consumer resolves a part as:
+
+1. `id === 0` → the model root, for a `.3db` with no `Cmpnd`.
+2. `id === getResourceId(partName)` → that compound part.
+
+Measured over the 1,308 parts in the 735 retail `.sur` files with a sibling model: **549 match by the
+zero, 747 by name, 12 by neither**. The zero is not an edge case — it is 549 of the 551 single-part
+`.3db` surfaces — so a reader implementing rule 2 alone loses every one of them, silently.
+
+**Compare ids unsigned.** `readPart` reads `id` with `readInt32` and `readHull` with `readUint32`,
+while `getResourceId` returns a signed int32, so a CRC with the high bit set matches neither under a
+bare `===`.
+
 `fixed` is the **inverse** of the `!fxd` chunk: a part reads back as `fixed: true` when the chunk is
 absent, and on write the chunk is emitted whenever `fixed` is falsy. The `hpid` chunk is written only
 when `hardpoints` is non-empty, matching Freelancer. Chunks are written in Freelancer's order: `!fxd`
@@ -172,6 +190,18 @@ data because a leaf node always carries a terminal ledge.
 `surfaceDeviation` is a **deviation, not a scale factor**: multiply it by `radius` to recover how far
 the surface departs from the bounding sphere. The builder computes it as
 `int(1 + deviation / (radius / 250))`.
+
+> **MAXLancer reads this byte as something else, and the disagreement is unresolved.** Its
+> `SurfacePart.scaler` is `minRadius / maxRadius`, where `maxRadius` covers every point of the part
+> and `minRadius` only the points of hulls **whose id is not in the `hpid` list** — a bounding-sphere
+> scale that deliberately excludes hardpoint hulls. Both readings divide by 250 and land in the same
+> range, so this module's reproducing retail in 1,349 of 1,365 does not by itself separate them.
+> That reading is more plausible than it first looks, now that hardpoint hulls are known to be a real
+> category — 1,272 of the 9,111. Nothing here depends on the answer, since the field is written from
+> the derivation and round-trips either way. **It is settleable by measurement, not by observation**,
+> which is why it is not in [TODO](#todo): compute both quantities over the corpus and compare each
+> against the stored byte, on the parts that discriminate — those whose hardpoint hulls reach further
+> than the rest, where `minRadius / maxRadius` departs from 1.
 
 ### Where the four derived values come from
 
@@ -257,7 +287,40 @@ interface Hull {
 That distinction is what gives **`id` two meanings**: it is IVP's
 `union { ledgetree_node_offset; client_data; }`. A terminal ledge stores user data — Freelancer's part
 CRC, which may differ from the id of the surface part containing it — while a subtree-bounding ledge
-stores a relative offset back to the node that owns it. **`writeSurface` recomputes the type-5 value**,
+stores a relative offset back to the node that owns it.
+
+> **A terminal hull's `id` is a label, not a coordinate frame.** Its points are in the frame of the
+> **part containing it**, whatever the id names. MAXLancer's `SurfaceLibrary.GetPartSurfaces` walks
+> descendant parts joined by a **fixed** joint and folds their hulls into the nearest non-fixed
+> ancestor's part, reading every vertex `in coordsys target`; `SurfacePart.Build` restates it by
+> hanging each rebuilt hull at `hull.transform = target.transform`, with no per-hull transform
+> anywhere. Scored against the named part's own mesh bounding sphere over the 1,801 retail hulls
+> where the two candidate frames differ, the containing part wins **1,753 to 48**. The id survives as
+> provenance — which part or hardpoint the geometry came from, for damage attribution.
+>
+> It differs from its part's id in **3,164 of the 9,111** terminal hulls and **321 of 1,365** parts
+> hold hulls under more than one id, so reading it as a frame misplaces a third of the corpus — and
+> still draws something.
+
+**The fold does not move a hull, it copies it.** `SurfaceLibrary.Parse` runs `GetPartSurfaces` for
+every part, and the descent into fixed children is transitive, so a hull on a fixed-jointed child is
+written into that child's own part **and** into each of its fixed ancestors' — the same geometry,
+re-expressed once per frame it lands in. The game wants that: a parent answers for its whole fixed
+subtree without descending into it. It reaches **hardpoint hulls as well as part hulls**, and the
+ancestor's `hpid` chunk grows to list the descendants' hardpoints accordingly, which is why a root's
+`hpid` is routinely a superset of the hardpoints its own part carries. Over the retail files with a
+sibling model, **1,377 of 8,982** placeable hulls across **62 files** are copies of another part's;
+`freeport7_dmg.sur` is exactly half. A reader that wants each hull once drops those whose id names a
+part reached through an unbroken chain of fixed joints that holds them itself — MAXLancer's import
+default, its "Keep Duplicates" checkbox being the opt-out — and a reader that wants the file as the
+game sees it keeps them. **This library does neither**: `readSurfaceLibrary` reports what the bytes
+say, and which of the two a consumer wants is a policy.
+
+**A hull id is one of three things, and `hpid` is what tells them apart.** `GetPartSurfaces` also
+collects `HardpointHelper` children carrying a hull shape, hashing the **hardpoint's** name for the
+id, and `SurfacePart.hardpoints` — the `hpid` chunk — ends up holding exactly that set. So across the
+9,111 terminal hulls: **1,272** have an id listed in their part's `hardpoints` and are collision
+volumes on a hardpoint, **5,314** name a model part, and **2,525** are `0`. **`writeSurface` recomputes the type-5 value**,
 since it depends on where the node tree lands.
 
 `size_div_16` is the whole ledge size in 16-byte units: one header, one per triangle, one per point.
@@ -325,6 +388,17 @@ trailing word is the plane's `hesse_val` slot, reused as `client_data`.
 
 Points are shared across all the hulls of a part — the builder re-indexes each ledge into one common
 array — so faces reference them by index into `Surface.points`.
+
+**`clientData` is the id of the hull the point belongs to.** MAXLancer names the field
+`SurfacePoint.hullID`, and its `GetPointIndex position hullID` reuses an existing point only when the
+*hull id matches as well as the position* — so the array is partitioned by hull rather than shared
+across hulls in the way "shared" suggests. Measured: **every point of 9,085 of the 9,111 terminal
+hulls carries that hull's own id**, 26 hulls match partially, and none match not at all. The 25% of
+points whose `clientData` is zero are the points of the 2,525 id-zero hulls.
+
+Nothing in this module reads it — faces index points directly and `createPart` carries through
+whatever a caller supplies — but it means two hulls never share a point, which a reader building
+per-hull vertex buffers can rely on.
 
 ---
 
@@ -400,8 +474,9 @@ None of it is measurable from the bytes:
   enforced, which a non-convex closed mesh will usually fail, but not always.
 - **Decimation.** How many faces a collision hull should have is a budget, not a fact.
 - **Splitting a concave shape into convex hulls.** Retail parts carry up to hundreds of them.
-- **`Point.clientData`.** Unexplained; `createPart` carries through whatever a caller puts on its
-  input points and otherwise writes zero.
+- **`Point.clientData`.** The owning hull's id — see [Point](#point). `createPart` carries through
+  whatever a caller puts on its input points and otherwise writes zero, so a caller that wants
+  retail's convention sets it to the hull id itself.
 
 A part built this way is a fixed point: write it, read it back, write it again, and the bytes match.
 
@@ -424,7 +499,13 @@ the `surf` chunk's two size fields agree in all 1,365. `Surface.padding` is zero
 
 `Face.material` is 0 for all 177,824 faces; `virtual` is true for all 28,644 faces of type-5 hulls and
 false for all 149,180 of type-4, and the three per-edge `is_virtual` flags always agree with it.
-`Point.clientData` is non-zero for **75%** of the 79,596 points and unexplained.
+`Point.clientData` is the owning hull's id: it agrees on **every point of 9,085 of the 9,111**
+terminal hulls, partially on 26, and on none of none. The 25% of points that are zero belong to the
+2,525 hulls whose own id is zero.
+
+Terminal hull ids split **5,314 naming a model part · 1,272 listed in their part's `hpid` · 2,525
+zero**, and surface parts match a model **549 by the id-zero rule · 747 by part name · 12 by
+neither**.
 
 The extent encloses every point of its part in 1,134 of 1,365; every point a part holds is indexed by
 some face, in all 1,365.
