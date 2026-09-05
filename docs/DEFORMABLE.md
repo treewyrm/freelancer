@@ -61,6 +61,32 @@ which floats free. No `Fix`, `Rev` or `Pris` — a character's bones do not tran
 `getBoneModel` assembles the constraints into the same `Model<T>` tree a rigid compound reads into, so
 `listTreeElements` and `getModelHardpoint` work on a skeleton unchanged.
 
+### The chain is not the bind pose, and on bodies it is nowhere near it
+
+Composing `T(position) · R(rotation)` down that tree gives each bone a world transform, and it is
+tempting to read that as where the bone rests. **It is not the same thing as `Bone to root`**, and the
+corpus splits cleanly on which:
+
+| | Chain reproduces the bind pose |
+| --- | --- |
+| `CHARACTERS/HEADS` | 6,543 of 6,543 bones |
+| `CHARACTERS/HANDS` | 252 of 252 bones |
+| `CHARACTERS/BODIES` | **88 of 2,505** — the 88 roots, and nothing else |
+
+For heads and hands the two agree exactly and the distinction never surfaces. For bodies the
+constraint rest is a **genuinely different pose**: skinning a body's points through its own chain
+displaces them by 0.828 on average and 4.556 at worst, and not rigidly — pairwise distances change by
+up to 1.19 on a figure 1.6 tall, so it is a deformation and not a reorientation that some root
+transform could undo. `br_bartender_body.dfm` shows it plainly: the mesh spans y −0.97..0.63 while
+the chain lays the skeleton along z −0.10..1.23, a Max-style Z-up rig against a Y-up mesh.
+
+The reading is that a body's `Cons` hierarchy is the *animation* rig — the frame an `.anm`'s joint
+maps drive — while `Bone to root` carries the skin's own bind pose, and the skinning matrix
+`pose · inverse(bindPose)` is what reconciles them. A consumer with no animation loaded therefore
+poses each bone from its own `Bone to root` rather than by composing the chain. What the game shows
+for a body between animations is not something this corpus can answer, since in play a character is
+always running one.
+
 ## Bones are a table, not just a tree
 
 `Bone_id_chain` skins each point to bone numbers, and those numbers are what `Index` states. **`Index`
@@ -175,7 +201,25 @@ and one of the six shared-frame names.
 | `Exporter Version` values | 4, all build dates between June and November 2002 |
 
 Influences per point never exceed four, which is what a fixed-function pipeline can blend: 239,931 at
-one bone, 117,626 at two, 20,261 at three and 849 at four.
+one bone, 117,626 at two, 20,261 at three and 849 at four. **None has zero**, and the weights sum to
+one to `1.08e-7` at worst, so nothing downstream has to renormalize or invent a fallback influence.
+
+**378,667 points are declared and 378,318 are reached.** The 349 difference is points no
+`Point_indices` entry names, spread over 134 of the 1,220 meshes — exporter residue that never becomes
+a vertex. Both figures are right and they measure different things; the count above is the declared
+one, `Points` divided by three, which is what `Point_bone_first` is parallel to.
+
+**Elements and triangles.** The 1,220 meshes hold **855,377** `Point_indices` entries between them,
+peaking at 8,667 in one mesh — so a renderer welding one vertex per element stays inside a `uint16`
+index with room to spare. Unrolled, the strips give **547,731** triangles, and **996,073** further
+strip entries are degenerate: the exporter stitches short runs together with repeated indices rather
+than emitting one long strip, spending 1,014 entries on 204 triangles in the smallest hand mesh. A
+reader that does not skip them draws zero-area triangles across the whole model.
+
+**Winding.** Unrolled with the strip's own parity — `(i, i+1, i+2)` on even `i`, `(i+1, i, i+2)` on
+odd, degenerates skipped without disturbing it — the face normal under a right-handed cross product
+agrees with the stored vertex normals **542,903 times against 4,828**, with none zero-area. That is
+the same convention the rigid meshes follow, and the opposite parity gives exactly the mirrored count.
 
 **The UV bone** appears on `Mesh0` of all 104 heads. The scales are ±0.4 and the clamps ±0.2 in U and
 ±0.1035 in V across every head that has one, and `UV_plane_distance` is always 1. `UV_vertex_count`

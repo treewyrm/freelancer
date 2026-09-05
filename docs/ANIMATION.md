@@ -50,14 +50,59 @@ Which keyframe field a joint map consumes follows the joint type:
 | `fixed`     | none — fixed joints cannot be animated                                                                 |
 | `revolute`  | `value` — angle in radians, nominally between the joint's `min` and `max` †                            |
 | `prismatic` | `value` — offset along the joint axis, nominally within the same range †                               |
-| `sphere`    | `rotation`                                                                                             |
-| `loose`     | `position`, `rotation`, or both                                                                        |
+| `sphere`    | `rotation` ‡                                                                                           |
+| `loose`     | `position`, `rotation`, or both ‡                                                                      |
 | `cylinder`  | unimplementable — see [below](#why-cylinder-joints-cannot-be-animated)                                 |
 
 † Nominally — retail exceeds it. See [The range is nominal](#the-range-is-nominal).
 
-`Root height` is an elevation added on top of the object map position. Only deformable models use it,
-and in retail it appears exactly once per object map.
+‡ **A delta on top of the joint's rest, not a replacement for it.** See below.
+
+### A sphere or loose channel is a displacement of the joint's rest
+
+The keyframe fields compose onto what the `Cons` record already says, rather than standing in for it:
+
+```
+sphere   L(q)    = T(position)            · R(q) · R(rotation) · T(-offset)
+loose    L(p, q) = T(position + p)        · R(q) · R(rotation)
+```
+
+— the driven factor to the left of the rest rotation, as [RENDERER.md](RENDERER.md) §5.2 gives for
+every other joint, and the loose channel's own position **added to** the rest origin in the parent's
+frame.
+
+That is worth stating because the opposite reading is attractive and wrong. `0x06` is Conquest:
+Frontier Wars' seven-float loose-joint *state vector*, and an object map — which unambiguously
+replaces — carries the identical channel type, so a loose channel looks like it should restate the
+joint outright. **No retail `.cmp` script drives a loose joint**, so nothing in the embedded half of
+the corpus can tell the two apart; the `.anm` files are the only loose data in the game and they
+settle it. Over all eleven, bound against the skeleton each covers:
+
+- **1,955,761 position keyframes sit nearer zero than their joint's rest origin, against 1,854
+  nearer the rest** — counted only over the 105,747 joints whose rest origin is *not* the origin,
+  where the two are different questions.
+- **1,904,934 rotation keyframes sit nearer the identity than their joint's rest rotation, against
+  4,713 nearer the rest** — over the 77,581 joints whose rest rotation is not already the identity.
+
+Read as a replacement, every head bone collapses onto its parent's origin and every rest rotation is
+discarded. Librelancer composes the same way, in `BoneInstance.Update`: `Origin + Translation` under
+`Quaternion.Concatenate(OriginalRotation, Rotation)`.
+
+A field the channel omits contributes nothing and the rest's own value stands — which is what the two
+implied-constant types already say in the data, `ZeroPosition` and `IdentityQuaternion` storing no
+bytes at all.
+
+### `Root height` elevates the character, not the skeleton
+
+A float beside the object maps, on **1,008 of the 1,010** object maps in the tree — every one in an
+`.anm`, none of the two in a `.cmp`. Only deformable models carry it, and within them only the body
+scripts: all 455 of `bodygenericmale.anm` and 8 of `special.anm`'s 15, and no facial or hand script.
+
+It reads like an offset applied to the root object map's position, and it is not one: nothing in the
+skeleton moves by it. Librelancer applies it to the **world object** — `Translate.Y = FloorHeight +
+RootHeight`, with the floor height set by the THN event `START_FLR_HEIGHT_ANIM` — so it states how
+far off the floor of a room the character stands. A renderer with no room has nothing to apply it
+against, and leaving it out is the correct reading rather than an omission.
 
 ### A revolute angle is an angle, and one bit cannot say so
 
@@ -279,6 +324,18 @@ which are the two object maps — so the compressed forms in the table above are
 that the channel type does not identify the joint on its own: a `0x04` fits a sphere and a loose
 joint equally, and only the joint it lands on separates them, which matters because the two compose
 differently.
+
+That absence has teeth beyond the census: it means **nothing in the `.cmp` half of the corpus can
+falsify a reading of a loose channel**, and the reading is not the obvious one — see
+[A sphere or loose channel is a displacement of the joint's rest](#a-sphere-or-loose-channel-is-a-displacement-of-the-joints-rest).
+The `.anm` side is 109,056 loose joint maps against 31,318 sphere ones, so what a `.cmp` never
+exercises is the majority of what a `.dfm` does.
+
+The eleven `.anm` files hold the rest: **2,794 scripts, 1,008 object maps, 141,694 joint maps** —
+which with the `.cmp` side's 323, 2 and 975 is the 3,117 / 1,010 / 142,669 above. Their channel types
+are `0x22` ×66,409, `0x42` ×39,452, `0x80` ×27,064, `0x40` ×5,288, `0x50` ×3,171, `0x82` ×1,219,
+`0x90` ×79 and `0x04` ×20 — every compressed form in the table, and not one `0x01`, so the angle bit
+and the revolute wrap it drags in are a `.cmp` concern alone.
 
 The one map that resolves to nothing is `EQUIPMENT/MODELS/TURRET/trade_turret01.cmp`, whose `Sc_fire`
 animates `Barrel01` in a model declaring only `Root` and `Gun01` — the same file whose `Cons` list

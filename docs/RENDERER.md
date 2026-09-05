@@ -450,6 +450,22 @@ standalone `.anm`. Both parse through the same `readAnimationLibrary(root)`.
 negative `interval` stores a timestamp per keyframe; otherwise keyframes are evenly spaced at
 `i * interval` and no timestamps are stored.
 
+**Every sample is a delta on the joint's rest, loose included.** §5.2's composition takes the driven
+factor to the left of the rest rotation, and a loose channel's *position* goes the same way — added
+to the rest origin in the parent's frame, not substituted for it:
+
+```
+loose  L(p, q) = T(position + p) · R(q) · R(rotation)
+```
+
+The tempting reading is that a loose channel replaces outright, since `0x06` is Conquest: Frontier
+Wars' seven-float loose-joint state vector and an object map carries the identical type. **No retail
+`.cmp` script drives a loose joint**, so only `.anm` data can settle it, and it does, decisively:
+1,955,761 position keyframes nearer zero than their joint's rest origin against 1,854 nearer the
+rest, and 1,904,934 rotations nearer the identity against 4,713 — each counted only over the joints
+whose rest is not already the answer. See [ANIMATION.md](ANIMATION.md). Read as a replacement, every
+head bone in the game collapses onto its parent's origin.
+
 **A revolute channel's scalar is an angle and must be interpolated as one, where its storage is
 wrapped.** All 414 retail revolute channels keep the angle inside (-π, π], so `sampleChannel`'s plain
 lerp runs an almost-full turn backwards wherever a keyframe pair steps across the seam — 150 of them
@@ -593,10 +609,33 @@ the rigid one, so §5 applies unchanged — `getBoneModel` returns the same `Mod
 
 - **Bones are an ordered table**, and `Index` is the bone's directory position. That position, not
   the name, is what `Bone_id_chain` skins to.
-- **`Bone to root` is the bind pose in root space.** Points are stored in that same space (measured:
-  a head's points and its bones' positions occupy the same extents), so the skinning matrix is
-  `pose(bone) · inverse(boneToRoot)`. All bone rotations have determinant +1, so the inverse is
-  `[Rᵀ | -Rᵀt]`.
+- **`Bone to root` is stored as the *inverse* bind — read it, do not invert it.** The skinning matrix
+  is `pose(bone) · inverse(bindPose)`, and what the file holds under that name is already
+  `inverse(bindPose)`: reading the nine floats as rows and the three that follow as a translation, the
+  matrix maps root space **into** bone space. So with a `Bone` as this library reads it the product is
+  `pose(bone) · Matrix4.fromRotationTranslation(bone.rotation, bone.position)`, with **no inversion
+  anywhere**, and the forward bind pose — where a bone actually sits, and where a debug gizmo goes —
+  is that matrix inverted. All bone rotations have determinant +1, so the inverse is `[Rᵀ | -Rᵀt]`.
+
+  Librelancer computes `InvBindPose = boneToRoot.Inverse()` and looks like it disagrees; it does not.
+  Its *reader* has already inverted — `ConvertData.ToMatrix4x3` transposes the 3×3 and negates the
+  translation before composing — so its `BoneToRoot` is the inverse of what `fromRotationTranslation`
+  gives here. One operation, two names for the matrix, and taking both statements at face value
+  inverts once too many.
+
+  **Measured, in freelancer-testing:** composing `bindPose(bone) · asRead(bone)` over all 9,456 retail
+  bones gives the identity to **8.88e-16**, and skinning every one of the 855,377 drawn vertices with
+  the resulting table moves them **3.14e-7** at worst. Points are stored in bind-pose root space,
+  which is the same reading the extents test gave.
+
+- **A body's `Cons` chain is not its bind pose, so bind pose is what "rest" means.** For heads and
+  hands the constraint chain reproduces the bind pose exactly — 6,543 of 6,543 head bones and 252 of
+  252 hand bones — but **all 88 bodies disagree**, displacing their own points by 0.828 on average and
+  4.556 at worst, and not rigidly: pairwise distances change by up to 1.19 on a figure 1.6 tall.
+  `br_bartender_body.dfm`'s mesh spans y −0.97..0.63 while its chain lays the skeleton along
+  z −0.10..1.23. A renderer with no animation loaded should therefore take each bone's pose from its
+  own `Bone to root` and leave the chain to whatever `.anm` drives it; composing down the chain draws
+  every body mangled.
 - **At most 4 influences per point** across all 204 models — a `vec4` of weights and indices. Bones
   per model reach **86**; a character assembles from a head, a body and two hands sharing hardpoints,
   so budget for the sum. At 86 bones a `mat4` array is 344 vec4s and even a `mat3x4` one is 258 —
@@ -606,9 +645,34 @@ the rigid one, so §5 applies unchanged — `getBoneModel` returns the same `Mod
   `UV0_indices[i]`, which lets a UV seam split without splitting the skinning weights. GPUs have one
   index stream, so weld the pairs into unique vertices at load and rewrite the face group indices.
 - **All 4,184 face groups are triangle strips** (`Tristrip_indices`). Convert to lists at load: it
-  makes group merging possible and sidesteps WebGL2's untoggleable primitive restart.
+  makes group merging possible and sidesteps WebGL2's untoggleable primitive restart. Triangle `i` is
+  `(i, i+1, i+2)` for even `i` and `(i+1, i, i+2)` for odd, and **degenerates are skipped without
+  disturbing that parity** — the parity follows the position in the strip, not the count emitted. Not
+  an optimisation: the exporter stitches short runs together with repeated indices, spending 1,014
+  strip entries on 204 triangles in one hand mesh, and emitting them draws zero-area triangles across
+  the model. That parity is the one agreeing with the stored vertex normals under a right-handed
+  cross product, **542,903 against 4,828** over 547,731 triangles — the same convention §2 gives for
+  rigid meshes, so nothing about the projection or the front face changes for a `.dfm`.
 - **`Lod Bits` is a permission, not a usage mask** — all bits or none, and 2,237 bones with every bit
   set appear in no `Bone_id_chain`. Do not use it to decide which bones a level needs.
+- **An `.anm` drives the `Cons` chain, and §5.3 applies to it unchanged.** A joint map names a bone by
+  its `Object name` and the chain supplies the joint, which for a `.dfm` is only ever `Sphere` or
+  `Loose` — so the two arms a deformable needs are the two §5.3's loose paragraph is about, and the
+  revolute wrap has nothing to do here. Names match exactly: all 27 constrained bones of a body are
+  driven by every one of `bodygenericmale.anm`'s 455 scripts, and 59 of 59 on a head by
+  `facialmale.anm`'s 769. **A bone the script does not name stays at its joint's rest**, not at its
+  bind pose — mixing the two composes a posed skeleton in two spaces at once, which on a body is the
+  0.828-mean displacement above.
+- **Which `.anm` a model takes is not in the model.** `Skeleton/Name` names the `.cmp` the model was
+  authored against — `Head02.cmp` ×104, `AutoHeaderNode.cmp` ×87, `L Palm.cmp` and `R Palm.cmp` ×6
+  each, `torture_root.cmp` ×1 — and never an animation file. The eleven `.anm` files under
+  `CHARACTERS/ANIMATIONS` are bound to models by `bodyparts.ini`'s `[Skeleton]` groups, so the
+  association is the load-order layer's rather than the format's. Each file covers a **category** and
+  not a model: `handmale.anm` carries both hands, so 26 of its 54 scripts drive a right hand and 28
+  drive none of it.
+- **`Root height` places the character in a room, not the skeleton in the model.** On all 455 body
+  scripts and no facial or hand one; Librelancer applies it to the world object beside a floor height
+  a THN event sets. A renderer with no room applies nothing — see [ANIMATION.md](ANIMATION.md).
 - The eleven `UV_*` files on `Mesh0` of 104 heads slide eye and mouth patches across a sprite sheet
   driven by a bone's translation — a UV offset, clamped, applied to a listed subset of coordinates.
   Skippable for a first renderer; the face will simply not blink.
