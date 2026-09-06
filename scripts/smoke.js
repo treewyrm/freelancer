@@ -28,9 +28,27 @@ import { fileURLToPath } from 'node:url'
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
+/**
+ * The environment for a nested npm, with the parent's `--dry-run` stripped.
+ *
+ * npm exports every option it was given to its lifecycle scripts as `npm_config_*`, so under
+ * `npm publish --dry-run` the `prepublishOnly` chain reaches this script with
+ * `npm_config_dry_run=true` set, and the `npm pack` below inherits it: it prints the tarball name
+ * and exits 0 having written no file, after which the install fails on a path that is not there.
+ * The gate is a local check either way — there is nothing for it to send — so it runs for real
+ * whether or not the publish it is gating is a rehearsal.
+ */
+const environment = { ...process.env }
+delete environment.npm_config_dry_run
+
 /** Runs npm, letting its stderr through so a failure explains itself. */
 const run = (args, cwd) =>
-  execFileSync(npm, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] })
+  execFileSync(npm, args, {
+    cwd,
+    encoding: 'utf8',
+    env: environment,
+    stdio: ['ignore', 'pipe', 'inherit'],
+  })
 
 /** Every file under a directory, recursively, as paths relative to it. */
 function* walk(directory, prefix = '') {
@@ -51,6 +69,11 @@ try {
   const tarball = packed.split('\n').at(-1)
   if (!tarball) throw new Error('npm pack produced no tarball name')
 
+  // Named but not written is what a dry run leaves behind, so check rather than let the install
+  // fail on the missing path several lines later.
+  if (!existsSync(join(work, tarball)))
+    throw new Error(`npm pack named ${tarball} but wrote no file to ${work}`)
+
   console.log(`packed ${tarball}`)
 
   writeFileSync(
@@ -58,8 +81,9 @@ try {
     `${JSON.stringify({ name: 'freelancer-smoke', private: true, type: 'module' }, null, 2)}\n`,
   )
 
-  // Zero runtime dependencies, so this touches only the local file.
-  run(['install', '--no-audit', '--no-fund', '--silent', join(work, tarball)], work)
+  // Zero runtime dependencies, so this touches only the local file. Not `--silent`: its stdout is
+  // captured and nothing here parses it, and silencing npm takes the error text with it.
+  run(['install', '--no-audit', '--no-fund', join(work, tarball)], work)
 
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
   const installed = join(work, 'node_modules', ...manifest.name.split('/'))
