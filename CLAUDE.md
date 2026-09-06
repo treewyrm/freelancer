@@ -106,7 +106,7 @@ Every format is read in the same three steps, and each step is usable on its own
 | `.` (default) | `src/index.ts` | Hashing: `getResourceId`, `getObjectId`, and the lookups built on them |
 | `./utf` | `src/utf/index.ts` | The UTF container: `Directory`, `File` |
 | `./utility` | `src/utility/index.ts` | `BufferView`, windows-1252, `Tree`, timestamp, number and name helpers |
-| `./math` | `src/math/index.ts` | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Matrix4`, `Transform`, scalar math |
+| `./math` | `src/math/index.ts` | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Matrix4`, `Transform`, scalar math, `generateConvexHull` |
 | `./alchemy` | `src/alchemy/index.ts` | Alchemy particle effects (node library + effect library) |
 | `./vmesh` | `src/vmesh/index.ts` | VMesh geometry part/library serialization |
 | `./compound` | `src/compound/index.ts` | The `Cmpnd` hierarchy: parts, constraints, joints, hardpoints |
@@ -226,7 +226,9 @@ format tables do.
   `pierce` and `rotationInertia` are the two that retail does not fully reproduce, and both say why.
   **`rotationInertia` is read** — debris tumbles by it — so it is derived rather than defaulted, and
   retail's residual disagreement is decimation, not a wrong algorithm.
-  **Convexity, decimation and convex decomposition stay the consumer's** — they are budgets, not facts.
+  **Decimation and convex decomposition stay the consumer's** — they are budgets, not facts. The
+  convex hull of a point set is not, so `generateConvexHull` lives on `./math` and `createHullGeometry`
+  bridges it to `createPart`; both are pinned by rebuilding the corpus's own 5,234 usable hulls.
 - **[TEXTURE.md](docs/TEXTURE.md)** (`src/texture/`) — `Texture library` entries in four forms: a DDS
   in `MIPS`, a Targa chain in `MIP0..n`, an animation over sibling atlas entries, or a `CUBE` cubemap.
   All four read and write. `TextureStorage` says which form an entry uses, because the pixel format

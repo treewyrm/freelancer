@@ -5,6 +5,8 @@ import { describe, it } from 'node:test'
 import { raw, root as dataRoot, skip } from '#/corpus.js'
 import Directory from '#/utf/directory.js'
 import { getResourceId } from '#/hash.js'
+import { generateConvexHull } from '#/math/convexhull.js'
+import Vector3 from '#/math/vector3.js'
 import { readHardpoints } from '#/compound/hardpoint.js'
 import BufferView from '#/utility/bufferview.js'
 import { createHull, getIndices, HullType } from './hull.js'
@@ -632,6 +634,111 @@ describe('retail asset corpus', { skip }, () => {
 
       strictEqual(total, 9111)
       strictEqual(boxes, 9110)
+    })
+
+    /**
+     * Retail hulls are the adversarial case for a hull generator. They are already decimated, so
+     * they carry near-coplanar faces in quantity, and each one is a convex polyhedron given as
+     * exactly its own vertices — which makes rebuilding one from those vertices a fixed point the
+     * algorithm either reaches or visibly misses.
+     */
+    it('rebuilds every hull that holds a tetrahedron, 5,234 of 9,111', () => {
+      let few = 0
+      let flat = 0
+      let rebuilt = 0
+      let convex = 0
+      let contains = 0
+
+      for (const { part, hull } of hullsInParts()) {
+        if (hull.type !== HullType.Enabled) continue
+
+        const points = [...getIndices(hull.faces)].map((index) => part.points[index]!)
+
+        let result
+
+        try {
+          result = generateConvexHull(points)
+        } catch (error) {
+          if (/at least four/.test(String(error))) few++
+          else flat++
+
+          continue
+        }
+
+        rebuilt++
+
+        // The tolerance is relative because a hull sits wherever its model does, and the corpus
+        // spans four orders of magnitude in size.
+        let scale = 0
+        for (const { x, y, z } of points)
+          scale = Math.max(scale, Math.abs(x), Math.abs(y), Math.abs(z))
+
+        const tolerance = Math.max(scale, 1) * 1e-5
+
+        let own = -Infinity
+        let all = -Infinity
+
+        for (const [x, y, z] of result.triangles) {
+          const a = result.points[x]!
+
+          const normal = Vector3.normalize(
+            Vector3.cross(
+              Vector3.subtract(result.points[y]!, a),
+              Vector3.subtract(result.points[z]!, a),
+            ),
+          )
+
+          for (const point of result.points)
+            own = Math.max(own, Vector3.dot(normal, Vector3.subtract(point, a)))
+
+          for (const point of points)
+            all = Math.max(all, Vector3.dot(normal, Vector3.subtract(point, a)))
+        }
+
+        if (own <= tolerance) convex++
+        if (all <= tolerance) contains++
+      }
+
+      strictEqual(few, 3843, 'hulls of fewer than four points, which have no tetrahedron in them')
+      strictEqual(flat, 34, 'hulls whose points share one plane')
+      strictEqual(rebuilt, 5234)
+
+      // Both are the whole of `rebuilt`: no hull comes back dented, and none loses a point it was
+      // given. A generator that drifts fails here long before it fails `createFaces`.
+      strictEqual(convex, 5234, 'every rebuilt hull is convex')
+      strictEqual(contains, 5234, 'every rebuilt hull contains the points it was built from')
+    })
+
+    it('reproduces the exact vertex count of 4,925 of them, and never exceeds one', () => {
+      let same = 0
+      let fewer = 0
+      let more = 0
+
+      for (const { part, hull } of hullsInParts()) {
+        if (hull.type !== HullType.Enabled) continue
+
+        const points = [...getIndices(hull.faces)].map((index) => part.points[index]!)
+
+        let result
+
+        try {
+          result = generateConvexHull(points)
+        } catch {
+          continue
+        }
+
+        if (result.points.length === points.length) same++
+        else if (result.points.length < points.length) fewer++
+        else more++
+      }
+
+      strictEqual(same, 4925)
+
+      // Retail keeps vertices that lie on the plane of a face they do not corner; this drops them,
+      // so the hulls that differ are always the smaller. None is ever larger, which would mean a
+      // point invented or an interior one kept.
+      strictEqual(fewer, 309)
+      strictEqual(more, 0)
     })
   })
 

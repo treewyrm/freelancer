@@ -17,7 +17,7 @@ import {
   writeSurface,
   type Surface,
 } from './surface.js'
-import { createPart, readPart, writePart, type Part } from './part.js'
+import { createHullGeometry, createPart, readPart, writePart, type Part } from './part.js'
 import type { Node } from './node.js'
 import { createFaces, type Face, type TriangleIndices } from './face.js'
 
@@ -819,5 +819,74 @@ describe('createPart', () => {
           ok(point.z >= minimum.z - 1e-6 && point.z <= maximum.z + 1e-6)
         }
     }
+  })
+})
+
+describe('createHullGeometry', () => {
+  /** A cube's eight corners, each repeated per face meeting there, the way a mesh carries them. */
+  const seams = (size: number): Vector3[] => {
+    const points: Vector3[] = []
+
+    for (const x of [-size, size])
+      for (const y of [-size, size])
+        for (const z of [-size, size]) points.push({ x, y, z }, { x, y, z }, { x, y, z })
+
+    return points
+  }
+
+  it('hands createFaces something it accepts, which is the whole point of it', () => {
+    const { points, triangles } = createHullGeometry(1, seams(1))
+
+    strictEqual(points.length, 8)
+    strictEqual(createFaces(points, [...triangles]).length, 12)
+  })
+
+  it('stamps the hull id on every point, which is retail’s convention', () => {
+    const { points } = createHullGeometry(0x1234, seams(1))
+
+    for (const point of points) strictEqual(point.clientData, 0x1234)
+    for (const point of createHullGeometry(0x1234, seams(1), { clientData: 0 }).points)
+      strictEqual(point.clientData, 0)
+  })
+
+  it('leaves a part holding only the hull, not the cloud it came from', () => {
+    // A solid cloud whose shell is a cube: the interior must not reach the part's point list.
+    const points = [...seams(1)]
+
+    for (let i = -8; i <= 8; i++)
+      for (let j = -8; j <= 8; j++) points.push({ x: i / 10, y: j / 10, z: (i * j) / 100 })
+
+    const part = createPart(1, [createHullGeometry(1, points)])
+
+    strictEqual(part.points.length, 8, 'the eight corners, and a single hull needs no box')
+
+    const used = new Set([...getHulls(part.root)].flatMap(({ faces }) => getIndices(faces)))
+    strictEqual(used.size, part.points.length)
+  })
+
+  it('builds a part from a point cloud that survives the library round trip', () => {
+    const parts = [createPart(9, [createHullGeometry(9, seams(2))])]
+
+    const first = BufferView.from(writeSurfaceLibrary(parts))
+    const back = readSurfaceLibrary(first)
+    const second = BufferView.from(writeSurfaceLibrary(back))
+
+    deepStrictEqual([...second.bytes], [...first.bytes])
+
+    const [part] = back
+    ok(part)
+    strictEqual(part.points.length, 8)
+    strictEqual(part.root.hull?.id, 9)
+    deepStrictEqual(part.minimum, { x: -2, y: -2, z: -2 })
+    deepStrictEqual(part.maximum, { x: 2, y: 2, z: 2 })
+  })
+
+  it('holds the hull inside what a hull can address, however large the cloud', () => {
+    // A hull's face index is twelve bits, so 4,096 faces and 2,050 points is the ceiling. The
+    // cloud here is well under it; what matters is that the budget is capped rather than open.
+    const { points, triangles } = createHullGeometry(1, seams(1), { maxPoints: 1e6 })
+
+    ok(points.length <= 2050)
+    ok([...triangles].length <= 4096)
   })
 })

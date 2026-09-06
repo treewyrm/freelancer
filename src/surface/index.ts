@@ -18,5 +18,12 @@ export {
   getMassProperties,
   getNodes,
 } from './surface.js'
-export { type HullGeometry, type Part, type PartOptions, createPart } from './part.js'
+export {
+  type HullGeometry,
+  type HullGeometryOptions,
+  type Part,
+  type PartOptions,
+  createHullGeometry,
+  createPart,
+} from './part.js'
 export { readSurfaceLibrary, writeSurfaceLibrary } from './library.js'

@@ -1,7 +1,7 @@
 # API
 
 Every name reachable from a subpath export, listed once, so nothing useful stays hidden behind a
-barrel that never re-exported it. **489 exports across 22 entry points.** The format documents say
+barrel that never re-exported it. **494 exports across 22 entry points.** The format documents say
 what the bytes mean; this one says what you can import.
 
 Resolved from `src/` with the TypeScript checker rather than transcribed from the barrels, because
@@ -15,14 +15,14 @@ fails when this document and the barrels disagree in either direction, so it can
 | ---------------- | ------- | ------------------------------------------------------------------------- |
 | `.`              | 12      | hashing and name resolution — the one thing every module shares           |
 | `./utility`      | 30      | `BufferView`, windows-1252, C-style number parsing, tree walks            |
-| `./math`         | 28      | vectors, quaternions, `Matrix3`/`Matrix4`, `Transform`, scalar and keyframe helpers |
+| `./math`         | 31      | vectors, quaternions, `Matrix3`/`Matrix4`, `Transform`, convex hulls, scalar and keyframe helpers |
 | `./utf`          | 4       | the UTF container: `Directory`, `File`                                    |
 | `./alchemy`      | 51      | `.ale` node and effect libraries, and the animation evaluators            |
 | `./animation`    | 36      | joint and object animation scripts                                        |
 | `./vmesh`        | 32      | geometry: `VMeshData`, `VMeshRef`, LOD ranges, wireframes                 |
 | `./compound`     | 14      | `Cmpnd` hierarchy, constraints, hardpoints                                |
 | `./rigid`        | 24      | `.3db`/`.cmp` parts, cameras, spheres, material animations                |
-| `./surface`      | 30      | `.sur` collision hulls, and the layer that builds one                     |
+| `./surface`      | 32      | `.sur` collision hulls, and the layer that builds one                     |
 | `./texture`      | 40      | `.txm` libraries, DDS, Targa, DXT and 16-bit expansion                    |
 | `./material`     | 13      | `Material library` entries and the shader-name tables                     |
 | `./deformable`   | 22      | `.dfm` character models                                                   |
@@ -125,8 +125,11 @@ Cursor state — `offset`, `byteRemain`, `bytes`, `littleEndian`, `rewind()`, `s
 | `at`             | function  | `<T extends Keyframe>(keyframes, key): AnimationRange<T>`                  |
 | `AxisAngle`      | interface | `{ axis: Vector3, angle: number }`                                         |
 | `clamp`          | function  | `(a, min?, max?): number`                                                  |
+| `ConvexHull`     | interface | A convex hull, holding only the points that are on it.                     |
+| `ConvexHullOptions` | interface | What a caller decides about a hull: a point budget and a tolerance.      |
 | `equal`          | function  | `(a, b, epsilon?): boolean`                                                |
 | `fract`          | function  | `(a): number`                                                              |
+| `generateConvexHull` | function | Convex hull of a point set, wound counter-clockwise seen from outside.  |
 | `hermite`        | function  | `(p0, m0, p1, m1, t): number`                                              |
 | `Keyframe`       | interface | `{ key: number }` — the base every keyframe list is ordered by.            |
 | `lerp`           | function  | `(p0, p1, t): number`                                                      |
@@ -402,6 +405,7 @@ The narrowest entry point in the package, and the one where the most is left beh
 | `createFaces`         | function  | Face list of one hull, deriving the half-edge adjacency and pierce indices.        |
 | `createHierarchy`     | function  | Folds leaf nodes into the binary tree the format wants, tightest bounds first.     |
 | `createHull`          | function  | Builds one convex hull from triangles indexing the part's shared point list.       |
+| `createHullGeometry`  | function  | Convex hull of a point cloud, as one `HullGeometry` — the bridge into `createPart`. |
 | `createNode`          | function  | Leaf node bounding one terminal hull, from the points its faces index.             |
 | `createPart`          | function  | Builds a part from convex hulls — geometry to something `writeSurfaceLibrary` takes. |
 | `createSurface`       | function  | Builds a surface block around a hierarchy, deriving its `MassProperties`.          |
@@ -416,6 +420,7 @@ The narrowest entry point in the package, and the one where the most is left beh
 | `getNormal`           | function  | Unnormalized outward normal — IVP's `hesse` vector, `(b - a) x (c - a)`.           |
 | `Hull`                | interface | One convex hull: `id`, `type`, its faces, and a reserved word.                     |
 | `HullGeometry`        | interface | One hull as a caller has it: its own points, and triangles indexing them.          |
+| `HullGeometryOptions` | interface | What `createHullGeometry` decides beyond the hull itself.                          |
 | `HullType`            | enum      | Two packed flags in IVP, not an enum: `has_children` and `is_compact`.             |
 | `MassProperties`      | type      | What a `Surface` records about its geometry beyond the geometry itself.            |
 | `mergeNodes`          | function  | Inner node bounding two children, unioning their **quantised** boxes.              |

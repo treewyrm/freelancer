@@ -453,10 +453,14 @@ What happens, in order:
 ### `bounds`
 
 Retail always puts a hull on the root: a terminal one when the part is a single convex shape,
-otherwise a `Skip` hull bounding everything below, carrying real convex geometry. **Generating a
-convex hull of a subtree is an algorithm this library does not own**, so `bounds: 'box'` hangs the box
-the node already bounds on it instead — a valid convex bound, eight more points and twelve more faces
-per inner node, and the same shape retail has.
+otherwise a `Skip` hull bounding everything below, carrying real convex geometry. `bounds: 'box'`
+hangs the box the node already bounds on it instead — a valid convex bound, eight more points and
+twelve more faces per inner node, and the same shape retail has.
+
+**`generateConvexHull` is not the missing piece here**, now that it exists. What an inner node has to
+contain is not its subtree's geometry but its children's **quantized** boxes, and quantization only
+ever steps outward — so a hull over the points below would be the wrong shape, smaller than the thing
+it is supposed to bound. There is no `bounds: 'hull'` for that reason, not for want of an algorithm.
 
 The box used is the union of the children's boxes *before* it was quantized, which is exactly the box
 the node's sphere circumscribes. Taking the quantized box back would put its corners outside that
@@ -470,8 +474,9 @@ hull-less node either way. It has not been observed in game.
 
 None of it is measurable from the bytes:
 
-- **Convexity.** Nothing here checks it, and IVP's whole layout assumes it — `V = 2 + F / 2` is
-  enforced, which a non-convex closed mesh will usually fail, but not always.
+- **Convexity of geometry handed straight to `createPart`.** Nothing there checks it, and IVP's whole
+  layout assumes it — `V = 2 + F / 2` is enforced, which a non-convex closed mesh will usually fail,
+  but not always. [`createHullGeometry`](#convex-hull) is the way not to have the problem.
 - **Decimation.** How many faces a collision hull should have is a budget, not a fact.
 - **Splitting a concave shape into convex hulls.** Retail parts carry up to hundreds of them.
 - **`Point.clientData`.** The owning hull's id — see [Point](#point). `createPart` carries through
@@ -481,6 +486,77 @@ None of it is measurable from the bytes:
 A part built this way is a fixed point: write it, read it back, write it again, and the bytes match.
 
 ---
+
+## Convex hull
+
+`createHullGeometry(id, points, options?)` turns a point cloud into one `HullGeometry`, which is the
+whole distance from a mesh to something `createPart` takes:
+
+```ts
+const part = createPart(getResourceId('Root'), [
+  createHullGeometry(getResourceId('Root'), hullPoints),
+  createHullGeometry(getResourceId('wing_lt'), wingPoints),
+])
+```
+
+The algorithm itself is `generateConvexHull`, on [`./math`](API.md#math) rather than here — it knows
+nothing about Freelancer, and a hull is a fact about a point set rather than a decision about a file.
+It is an incremental QuickHull ported from MAXLancer's `GenerateConvexHullQH`, which extends the
+stock algorithm in the two places boxy, CAD-like geometry breaks it:
+
+- **Coplanar tie-clusters.** When three or more points tie for farthest from a face's plane, stock
+  QuickHull takes whichever the index order offers. A cube whose faces carry any interior detail ties
+  constantly, so that choice is not a tie-break but a coin flip. A nested 2D QuickHull over the
+  cluster settles which of them is actually on the boundary.
+- **The tolerance.** It is not a constant. The extreme-point search derives one float32 ULP at the
+  data's own magnitude — its distance from the origin, not its size — which is the right scale
+  because a `.sur` stores points as float32, so two points closer than that are the same point once
+  written. A fixed tolerance either swallows a small part or fails to close a distant one.
+
+What comes back holds **only the points on the hull**. Coordinate duplicates go first — a mesh
+repeats a position once per seam meeting there, so a cube arrives as 24 points and three coincident
+points in one tied cluster leave the 2D pass with nothing to build on. Interior points, and points
+within tolerance of one already taken, go during the loop. `ConvexHull.indices` says where each
+survivor came from, for carrying attributes across.
+
+That culling is not tidiness. `createPart` folds every point of a `HullGeometry` into the part's
+shared list, so an uncompacted hull writes a mesh's whole interior into `surf`, in a format where the
+point count is the size driver.
+
+| Option       | Default | Effect                                                          |
+| ------------ | ------- | --------------------------------------------------------------- |
+| `maxPoints`  | `2050`  | Stop once the hull reaches this many points                     |
+| `epsilon`    | derived | Only seeds the extreme search; the derived tolerance replaces it |
+| `clientData` | `id`    | Written onto every point — retail's convention, see [Point](#point) |
+
+**`maxPoints` defaults to what a hull can address, not to the size of the cloud.** A hull's face
+index is twelve bits, so 4,096 faces, and Euler's `V = 2 + F / 2` makes that 2,050 points; past it
+`writeHull` masks the index and emits a file that reads back as something else. Raising the budget is
+a way to produce one. Lowering it is decimation, and a crude form — the budget stops the hull early
+rather than choosing what detail to lose, so the result is the hull of the points taken so far and
+geometry outside it is geometry the collision shape does not cover.
+
+`generateConvexHull` throws a `RangeError` rather than returning a hull it does not believe in: on
+fewer than four distinct points, on a coordinate that is not finite, and on a point set with no
+tetrahedron in it — every point on one plane, one line or one spot. The last is the case a caller
+meets in practice, and it is why 3,843 of retail's own hulls cannot be rebuilt at all: they hold
+three points or fewer.
+
+### Two fixes to the original
+
+Neither is a porting slip; both are recorded because the next reader will check.
+
+`GetFacePoints` compares a *negative* distance against a non-negative running maximum, so every point
+below the plane passes the test and it keeps the last one in index order rather than the farthest.
+This compares magnitudes.
+
+More consequentially, the original decides which faces a new point can see by walking `activeFaces`
+— the faces that still have a candidate above them. A face drops out of that set once nothing
+remains above it, which says nothing about where a *later* point will land. Skipping it there leaves
+the new point sitting outside a face that stays, and that dent compounds: on the corpus it put 68 of
+5,234 rebuilt hulls visibly out of convexity, one of them by 192% of its own size. Visibility is
+tested here against every face still standing, and against the plane directly rather than through the
+tolerance-widened `above` set, which would let an all-but-coplanar face cut the visible region in two.
 
 ## Corpus
 
@@ -538,6 +614,27 @@ The `pierce` residue is ties on symmetric hulls, where two faces are equally opp
 records the one this module cannot know it picked. The 16 `surfaceDeviation` misses sit on a step and
 the truncation falls the other side of it. `rotationInertia` is the one real disagreement — see
 [TODO](#todo).
+
+### Regenerating the corpus's own hulls
+
+Every terminal hull is a convex polyhedron given as exactly its own vertices, which makes rebuilding
+one from those vertices a fixed point [the generator](#convex-hull) either reaches or visibly misses.
+They are also the adversarial case: already decimated, so near-coplanar faces come in quantity.
+
+| | Count |
+| --- | --- |
+| Terminal hulls | 9,111 |
+| — of three points or fewer, so holding no tetrahedron | 3,843 |
+| — flat: every point on one plane | 34 |
+| — rebuilt | **5,234** |
+| Rebuilt hulls that are convex | **5,234 of 5,234** |
+| Rebuilt hulls containing every point they were built from | **5,234 of 5,234** |
+| Rebuilt hulls with retail's exact vertex count | 4,925 |
+| — with fewer | 309 |
+| — with more | **0** |
+
+The 309 are retail keeping a vertex that lies on the plane of a face it does not corner; this drops
+it. None is ever larger, which would mean a point invented or an interior one kept.
 
 ### Round-trip
 

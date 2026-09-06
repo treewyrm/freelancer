@@ -205,6 +205,8 @@ Each of these decided a design position. The position is in the linked document;
 | — the same, on parts whose hull encloses no volume                 | **84 of 84**, uniform across the axes     | The degenerate fallback is exactly right; 92 retail parts ship a uniform inertia and the game takes it — same               |
 | — derived against MAXLancer's `0.2 × radius²`, per component       | 3,590 of 4,095 closer / retail's own mean ratio **0.137** | A constant wrong by 46% at the median ships in working mods, which bounds how much the residual gap matters — same |
 | Leaf node sphere and box derived from the hull                     | 9,111 of 9,111 / 9,110 box triples        | Truncate-then-step-past, and the union of children's *quantized* boxes — [SURFACE.md](SURFACE.md#what-the-derivations-reproduce) |
+| Retail hulls rebuilt from their own vertices, and convex            | 5,234 of 5,234 rebuildable                | Visibility must be tested against every standing face, not the active ones — [SURFACE.md](SURFACE.md#regenerating-the-corpuss-own-hulls) |
+| — holding three points or fewer, so no tetrahedron exists           | 3,843 of 9,111                            | A hull generator cannot make retail's flattest hulls, and says so rather than guessing — same |
 | Alchemy `TransformFlags` words in retail                           | 2, across all 5,590 transforms            | The low bits cannot be a channel selector — [ALCHEMY.md](ALCHEMY.md#transformflags-never-varies)                             |
 | Alchemy keyframe intervals that are not 1 wide                     | 9,322 of 9,324                            | Hermite tangents are per unit of key and must be scaled — [ALCHEMY.md](ALCHEMY.md#tangent-intervals)                         |
 

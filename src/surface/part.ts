@@ -1,4 +1,5 @@
 import BufferView from '#/utility/bufferview.js'
+import { generateConvexHull, type ConvexHullOptions } from '#/math/convexhull.js'
 import type Vector3 from '#/math/vector3.js'
 import { createBox, getExtent, readExtent, writeExtent, type Extent } from './extent.js'
 import type { TriangleIndices } from './face.js'
@@ -49,6 +50,48 @@ export interface HullGeometry {
 
   /** Triangles indexing {@link points}, wound counter-clockwise seen from outside. */
   triangles: Iterable<TriangleIndices>
+}
+
+/**
+ * A hull's face index is twelve bits wide in `writeHull`, so a hull holds at most 4,096 faces, and
+ * Euler's `V = 2 + F / 2` turns that into 2,050 points. Past it the writer masks the index and
+ * emits a file that reads back as something else.
+ */
+const POINT_LIMIT = 2050
+
+/** What {@link createHullGeometry} decides beyond the hull itself. */
+export interface HullGeometryOptions extends ConvexHullOptions {
+  /**
+   * Written onto every point. Defaults to `id`, which is retail's convention — `clientData` is the
+   * owning hull's id on every point of 9,085 of the 9,111 terminal hulls. Pass 0 to opt out.
+   */
+  clientData?: number
+}
+
+/**
+ * Convex hull of a point cloud, as one {@link HullGeometry} — the bridge from a mesh's points to
+ * something {@link createPart} takes.
+ *
+ * `maxPoints` defaults to what a hull can address rather than to the whole cloud, because a hull
+ * past that limit cannot be written. Raising it is a way to produce a corrupt file; lowering it is
+ * decimation, which stays the caller's, and a crude form of it — the budget stops the hull early
+ * rather than choosing which detail to lose.
+ * @throws RangeError by way of `generateConvexHull` on fewer than four distinct points, a
+ * non-finite coordinate, or a point set with no tetrahedron in it.
+ */
+export function createHullGeometry(
+  id: number,
+  points: readonly Vector3[],
+  options: HullGeometryOptions = {},
+): HullGeometry {
+  const { clientData = id, maxPoints = POINT_LIMIT, ...rest } = options
+  const hull = generateConvexHull(points, { ...rest, maxPoints: Math.min(maxPoints, POINT_LIMIT) })
+
+  return {
+    id,
+    points: hull.points.map(({ x, y, z }) => ({ x, y, z, clientData })),
+    triangles: hull.triangles,
+  }
 }
 
 /**
