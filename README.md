@@ -101,7 +101,7 @@ import { readFileSync } from 'node:fs'
 const root = Directory.read(readFileSync('ship.3db'))
 
 root.getDirectory('MultiLevel', 'Level0', 'VMeshPart')
-root.getFile('MultiLevel', 'Level0', 'VMeshPart', 'VMeshData')
+root.getFile('MultiLevel', 'Level0', 'VMeshPart', 'VMeshRef')
 ```
 
 Building one by hand and writing it out is the same object graph in reverse:
