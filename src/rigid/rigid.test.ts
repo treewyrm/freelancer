@@ -70,15 +70,15 @@ const revoluteHardpoint = (name: string): Hardpoint => ({
 })
 
 /**
- * Shaped the way `readRigid` returns a part: `part` and `wireframe` are present as keys holding
- * `undefined` when the fragment has neither. See the invariant-4 test at the foot of this file —
- * the fixture matches what the reader does, not what the invariant asks for.
+ * Shaped the way `readRigid` returns a part: a piece the fragment does not carry is a missing key,
+ * not a key holding `undefined`, so a round trip compares equal under `deepStrictEqual`. See the
+ * invariant-4 test at the foot of this file.
  */
 const rigid = ({ hardpoints = [], part, wireframe }: Partial<Rigid> = {}): Rigid => ({
   type: 'rigid',
   hardpoints,
-  part,
-  wireframe,
+  ...(part ? { part } : {}),
+  ...(wireframe ? { wireframe } : {}),
 })
 
 const camera = (): Camera => ({ type: 'camera', fovX: 0.75, fovY: 0.5, zNear: 0.25, zFar: 1000 })
@@ -300,24 +300,31 @@ describe('a compound document, the shape a .cmp has', () => {
 })
 
 describe('the shape a part is read into', () => {
-  // Both are declared optional, and both come back as own keys holding undefined when the
-  // fragment has neither. Nothing downstream reads them differently — `writeRigid` switches on
-  // `part?.type` and skips an absent wireframe either way — so this is invisible to a consumer
-  // until it compares two parts or enumerates keys.
-  it('carries part and wireframe as keys even when the fragment has neither', () => {
+  // Invariant 4: absence is a missing key, never a key holding undefined. Types do not catch a
+  // violation — `part?: MeshSource` accepts both — and the difference is invisible to a consumer
+  // until it enumerates keys or compares two parts, which is what a round-trip assertion does.
+  it('leaves an absent piece out entirely, as invariant 4 asks', () => {
     const part = readRigidModel(new Directory('\\'))
 
-    deepStrictEqual(Object.keys(part), ['type', 'hardpoints', 'part', 'wireframe'])
-    strictEqual(part.type === 'rigid' && part.part, undefined)
+    deepStrictEqual(Object.keys(part), ['type', 'hardpoints'])
   })
 
-  it(
-    'should leave an absent piece out entirely, as invariant 4 asks',
-    { todo: 'readRigid returns part and wireframe as undefined-valued keys' },
-    () => {
-      const part = readRigidModel(new Directory('\\'))
+  // The pieces that are there keep their place, so key order stays the order the fragment is read
+  // in rather than varying with what a part happens to carry.
+  it('keeps present pieces in read order', () => {
+    const directory = writeRigidModel(
+      rigid({
+        hardpoints: [fixedHardpoint('HpMount')],
+        part: vmeshPart('crate'),
+        wireframe: wireframe('crate'),
+      }),
+    )
 
-      deepStrictEqual(Object.keys(part), ['type', 'hardpoints'])
-    },
-  )
+    deepStrictEqual(Object.keys(readRigidModel(directory)), [
+      'type',
+      'hardpoints',
+      'part',
+      'wireframe',
+    ])
+  })
 })

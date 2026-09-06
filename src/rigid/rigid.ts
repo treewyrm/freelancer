@@ -38,13 +38,20 @@ export type RigidModel = Model<RigidPart> | RigidPart
  * A part need not have geometry — `part` is absent for the group nodes a hierarchy hangs children
  * off — so nothing here throws on an empty fragment. Detail levels win over a bare reference where
  * both somehow appear.
+ *
+ * A piece the fragment does not carry leaves its key off the record rather than setting it to
+ * undefined, so the keys a part has are exactly the pieces it was stored with.
  */
 function readRigid(parent: Directory): Rigid {
-  const hardpoints = [...readHardpoints(parent)]
+  const rigid: Rigid = { type: 'rigid', hardpoints: [...readHardpoints(parent)] }
+
   const part = readMultiLevel(parent) ?? readVMeshPart(parent)
   const wire = readVMeshWire(parent)
 
-  return { type: 'rigid', hardpoints, part, wireframe: wire }
+  if (part) rigid.part = part
+  if (wire) rigid.wireframe = wire
+
+  return rigid
 }
 
 /**
