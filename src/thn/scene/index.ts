@@ -4,7 +4,7 @@
  * Sits on top of [`../index.ts`](../index.ts), which reads either encoding into an interim
  * `Globals`. Take those here to get structures with real types, and hand them back to write
  * them. The vocabulary and the evidence behind every value are in
- * [THORN.md](../../../docs/THORN.md).
+ * [THORN.md](../../../docs/refs/THORN.md).
  *
  * ```ts
  * import * as thn from '@treewyrm/freelancer/thn'

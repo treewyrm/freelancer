@@ -5,7 +5,7 @@
  * The tables below are written for both directions even though only the reader exists: the opcode
  * list is the source of the index → name lookup a reader needs and the name → index lookup a writer
  * would need, and a writer would otherwise start by re-deriving all of it. See
- * [THN.md](../../../docs/THN.md) for what a writer is still missing.
+ * [THN.md](../../../docs/modules/THN.md) for what a writer is still missing.
  */
 
 /** `ESC` `L` `u` `a`, then the version byte. Retail carries only `0x32`, and THORN embeds Lua 3.2. */

@@ -1,17 +1,12 @@
 # THORN — the scene vocabulary
 
-[THN.md](THN.md) describes the *container*: a compiled Lua 3.2 chunk holding `duration`, `entities` and
-`events` over numbers, strings, identifiers and tables. That is everything needed to read a script and
-write it back, and it is deliberately all the interim layer knows.
+[THN.md](../modules/THN.md) describes the container. This document is the layer above: what the identifiers
+mean, what the keys are, and which the engine reads. It is the reference the typed layer at
+[`./thn/scene`](../modules/THN.md#thnscene) is built from.
 
-This document is the layer above: **what the identifiers mean, what the keys are, and which of them the
-engine actually reads.** It is the reference the typed layer at [`./thn/scene`](#the-typed-layer) is
-built from; its export names are in [API.md](API.md#thnscene).
+## Provenance
 
-## Three sources, and why the distinction is kept
-
-Every row here carries a **provenance** mark, because the three sources disagree and the disagreements
-are the interesting part:
+Every row carries a provenance mark, because the sources disagree.
 
 | Mark       | Source                                        | What it can establish                                                               |
 | ---------- | --------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -20,21 +15,17 @@ are the interesting part:
 | **corpus** | the 1,506 retail scripts                      | that a name is *used*, how, and — against the numeric export form — what it *equals* |
 | **guide**  | the author's *Freelancer THN Scripting Guide* | what a thing is *for*; explicitly part guesswork                                      |
 
-**dll and binary are the same file and are not the same claim.** The string table proves a name was
-compiled in; the registration routine proves what THORN pushes when a script reads it. A name can appear
-in the string table and never be registered, and — the case that matters — **a name can be registered
-twice, in which case only the last write survives.**
+dll and binary are the same file and not the same claim: the string table proves a name was compiled
+in, the registration routine proves what THORN pushes when a script reads it. A name can be
+registered twice, in which case only the last write survives.
 
-The rule that follows: **a value is recorded where the corpus measures it or the registration routine
-sets it, and the two are noted separately where both apply.** Where the guide and a measurement
-disagree, the measurement wins and the guide's reading is kept as a footnote rather than deleted,
-because it usually says what the field is *for*, which no measurement does.
+A value is recorded where the corpus measures it or the registration routine sets it, and the two are
+noted separately where both apply. Where the guide and a measurement disagree, the measurement wins.
 
 ### The registration routine
 
-`thorn.dll`'s init routine registers every THORN global in one pass, and it is plain enough to read off
-the bytes. Six array-driven loops and twenty-seven individual calls, all of the same shape — push the
-number, push the name, set the global:
+`thorn.dll`'s init routine registers every THORN global in one pass: six array-driven loops and
+twenty-seven individual calls, all push the number, push the name, set the global.
 
 | Loop at | Names         | Values           | Count | Registers           |
 | ------- | ------------- | ---------------- | ----- | ------------------- |
@@ -48,13 +39,8 @@ number, push the name, set the global:
 File offsets are also RVAs here — `thorn.dll`'s sections are laid out one-to-one — against image base
 `0x06f20000`.
 
-Two things fall out that address order could not have given:
-
-- **The name arrays are not in value order, and for events they are badly out of it.** Element 1 of the
-  event name array is `START_MOTION`, whose value is 10. **The parallel value array is what carries the
-  enum**; reading the names positionally is what produced the earlier partial result.
-- **`HARDPOINT` is registered twice.** The entity loop sets it to 8; the individual call at `4f2c` then
-  sets it to 1, and the second write is the one a script sees.
+The name arrays are **not** in value order, and nothing may be derived from position — see
+[Reading the arrays positionally](#reading-the-arrays-positionally).
 
 ## Entity types
 
@@ -70,17 +56,17 @@ Two things fall out that address order could not have given:
 | `LIGHT`          | 5     | corpus     | `lightprops`                      |
 | `SOUND`          | 6     | corpus     | `audioprops`                      |
 | `MARKER`         | 7     | corpus     | *none* — `spatialprops` only      |
-| `HARDPOINT`      | 8     | binary     | *unreachable — see below*         |
+| `HARDPOINT`      | 8     | binary     | *unreachable*                     |
 | `SCENE`          | 9     | corpus     | `up`/`front`/`ambient`            |
 | `SUB_SCENE`      | 10    | binary     | *unused in retail*                |
 | `MOTION_PATH`    | 11    | corpus     | `pathprops`                       |
 | `DELETED`        | 12    | binary     | *unused in retail*                |
 | `PSYS`           | 13    | corpus     | `psysprops`                       |
 
-> **The entity loop sets `HARDPOINT` = 8, and a later call in the same routine sets it to 1.** The last
-> write wins, so the Lua global holds 1 — which is exactly the `target_type` the corpus measures, and
-> means **no script can write `type = HARDPOINT` and get 8**. 8 is the C++ enum value and has no name a
-> script can reach. The typed layer therefore accepts only the ten measured types.
+The entity loop sets `HARDPOINT` = 8 and a later call in the same routine sets it to 1. The last
+write wins, so the Lua global holds 1 — exactly the `target_type` the corpus measures. No script can
+write `type = HARDPOINT` and get 8; 8 is the C++ enum value and has no name a script can reach. The
+typed layer accepts only the ten measured types.
 
 ## Event types
 
@@ -109,26 +95,17 @@ Two things fall out that address order could not have given:
 | `START_FLR_HEIGHT_ANIM`   | 18    | corpus     | character, marker |
 | `SUBTITLE`                | 19    | binary     | *unused*          |
 
-**Position in the name array is not the value here, and the two names it would have swapped are the two
-that were unplaced.** The array runs `UNDEFINED_EVENT`, `START_MOTION`, `START_SOUND`, `START_IK`, … —
-element 1 is `START_MOTION`, which is 10. Taking the array positionally would have put `START_SUB_SCENE`
-at 1 and `USER_EVENT` at 12; the value array has them the other way round. Only the tail, 13 through 19,
-happens to be in order.
-
-This is why the entity result is a fact about that one table rather than a general rule: **both enums
-are registered the same way, and only one of them has its names stored in value order.**
-
-`thorn.dll` also carries an **older event vocabulary** (**dll**), unused by any retail script and kept,
-presumably, so older scripts still parsed: `SET_MONITOR`, `CONNECT_ENTITY`, `START_PATH_MOTION`, `USER`,
-`UNDEFINED`, and `START_{FOG,AUDIO,PSYS,SPATIAL,CAMERA,LIGHT}_PROPERTY_ANIM` — the same names with
-`PROPERTY` spelled out where the current ones say `PROP`.
+`thorn.dll` also carries an older event vocabulary (**dll**), unused by any retail script:
+`SET_MONITOR`, `CONNECT_ENTITY`, `START_PATH_MOTION`, `USER`, `UNDEFINED`, and
+`START_{FOG,AUDIO,PSYS,SPATIAL,CAMERA,LIGHT}_PROPERTY_ANIM` — the same names with `PROPERTY` spelled
+out where the current ones say `PROP`.
 
 ## The other enums
 
-All **corpus**-measured and all confirmed value-for-value by the registration routine (**binary**) —
-`ROOT` = 0, `PART` = 2 and `HARDPOINT` = 1 are set by three consecutive individual calls at `4f03`,
-`4f17` and `4f2c`; the axes come out of the loop at `4d77` from the loop index itself; the light and fog
-enums out of the loops at `5000` and `4fd0`.
+All corpus-measured and all confirmed value-for-value by the registration routine. `ROOT` = 0,
+`PART` = 2 and `HARDPOINT` = 1 are set by three consecutive calls at `4f03`, `4f17` and `4f2c`; the
+axes come out of the loop at `4d77` from the loop index; the light and fog enums out of the loops at
+`5000` and `4fd0`.
 
 | Axis         | Value |     | Target      | Value |     | Light `type` | Value |     | `fogmode`  | Value |
 | ------------ | ----- | --- | ----------- | ----- | --- | ------------ | ----- | --- | ---------- | ----- |
@@ -139,21 +116,20 @@ enums out of the loops at `5000` and `4fd0`.
 | `NEG_Y_AXIS` | 4     |     |             |       |     |              |       |     |            |       |
 | `NEG_Z_AXIS` | 5     |     |             |       |     |              |       |     |            |       |
 
-**Two of the enums are Direct3D's.** `L_POINT`/`L_SPOT`/`L_DIRECT` come out 1/2/3, which is
-`D3DLIGHTTYPE`; `F_NONE`/`F_EXP`/`F_EXP2`/`F_LINEAR` come out 0/1/2/3, which is `D3DFOGMODE`. THORN
-passes them straight through.
+Two of the enums are Direct3D's. `L_POINT`/`L_SPOT`/`L_DIRECT` are 1/2/3, which is `D3DLIGHTTYPE`;
+`F_NONE`/`F_EXP`/`F_EXP2`/`F_LINEAR` are 0/1/2/3, which is `D3DFOGMODE`. THORN passes them through.
 
 `Y` = 1 and `N` = 0 are the last two globals the routine registers, at `5028` and `503d`. They remain
-identifiers and **must not be written back as `true` and `false`**, which THORN does not define; see
-[THN.md](THN.md#y-and-n-are-the-booleans).
+identifiers and must not be written back as `true`/`false` — see
+[THN.md](../modules/THN.md#y-and-n-are-the-booleans).
 
 ### Flags
 
-Flags are a bitfield, and **the same bit means different things in different places** — THORN's globals
-are not one namespace. Bit 2 is `SPATIAL` on a sound and `LIT_AMBIENT` on anything that renders; bit 8
-is `LOOP` on a `START_SOUND` and `LOOK_AT` on an `ATTACH_ENTITY`.
+Flags are a bitfield, and the same bit means different things in different places — THORN's globals
+are not one namespace. Bit 2 is `SPATIAL` on a sound and `LIT_AMBIENT` on anything that renders; bit
+8 is `LOOP` on a `START_SOUND` and `LOOK_AT` on an `ATTACH_ENTITY`.
 
-**Entity `flags`** (**corpus**, every bit also **binary**):
+**Entity `flags`** (corpus, every bit also binary):
 
 | Name                | Bit | Appears on                               |
 | ------------------- | --- | ---------------------------------------- |
@@ -167,10 +143,10 @@ is `LOOP` on a `START_SOUND` and `LOOK_AT` on an `ATTACH_ENTITY`.
 | `FOG_PROPS_REMOVED` | 32  | *unused in retail*                       |
 
 The `SPATIAL` / `LIT_AMBIENT` collision is decidable because the two never appear on the same entity
-type, so **decoding a numeric entity flag is the one place the typed layer has to consult the entity's
-`type`.**
+type, so decoding a numeric entity flag is the one place the typed layer consults the entity's
+`type`.
 
-**`ATTACH_ENTITY` and `START_PATH_ANIMATION` `flags`** (**corpus**, every bit also **binary**):
+**`ATTACH_ENTITY` and `START_PATH_ANIMATION` `flags`** (corpus, every bit also binary):
 
 | Name                   | Bit | Guide's description              |
 | ---------------------- | --- | -------------------------------- |
@@ -182,31 +158,29 @@ type, so **decoding a numeric entity flag is the one place the typed layer has t
 | `PARENT_CHILD`         | 64  | —                                |
 | `ORIENTATION_RELATIVE` | 128 | —                                |
 
-`PARENT_CHILD` = 64 **contradicts the order `thorn.dll`'s flag printer emits**, which would put
-`ORIENTATION_RELATIVE` at 64. The printer's order is simply not the enum, and the same file's
-registration routine is what says so.
+`PARENT_CHILD` = 64 contradicts the order `thorn.dll`'s flag printer emits, which would put
+`ORIENTATION_RELATIVE` at 64. The printer's order is not the enum; the registration routine is.
 
 **`START_SOUND` `flags`**: `LOOP` = 8.
 
-**Registered but never used by any retail script** (**binary**), with their bits: `STREAM` = 4,
-`FOG_PROPS_REMOVED` = 32, `PATH_POSITION` = 2, `USE_SCRIPT_DURATION` = 1. Note that `PATH_POSITION`
-collides with `POSITION` and `STREAM` with `LIT_DYNAMIC` — **the namespaces really are separate**, and
-bit 16 stays unclaimed in the attach namespace with nothing left to claim it.
+**Registered but never used by any retail script** (binary): `STREAM` = 4, `FOG_PROPS_REMOVED` = 32,
+`PATH_POSITION` = 2, `USE_SCRIPT_DURATION` = 1. `PATH_POSITION` collides with `POSITION` and `STREAM`
+with `LIT_DYNAMIC` — the namespaces really are separate — and bit 16 stays unclaimed in the attach
+namespace.
 
 ## The registry is closed
 
-**THORN registers 73 globals. Retail reads 55 of them. Nothing retail reads is unregistered.** That last
-clause is the useful one: every identifier in all 1,506 scripts resolves against the routine, with no
-leftover, so **the vocabulary here is the whole vocabulary and a script using a name outside it is
-reading `nil`.**
+THORN registers 73 globals. Retail reads 55 of them. Nothing retail reads is unregistered: every
+identifier in all 1,506 scripts resolves against the routine, so the vocabulary here is the whole
+vocabulary and a script using a name outside it is reading `nil`.
 
 The eighteen registered-but-unused names, in registration order: `UNKNOWN_ENTITY`, `SUB_SCENE`,
 `DELETED`, `UNDEFINED_EVENT`, `USER_EVENT`, `START_SUB_SCENE`, `START_REVERB_PROP_ANIM`, `SUBTITLE`,
 `FOG_PROPS_REMOVED`, `STREAM`, `USE_SCRIPT_DURATION`, `PATH_POSITION`, `ADD_PATH`, `LOOKAT_ENTITY`,
 `STOP`, `STOP_IK`, `START`, `PROPERTY_ANIM`.
 
-Six of those appear nowhere else in this document because nothing in the corpus constrains what they are
-*for* — only what they hold (**binary**):
+Six appear nowhere else here because nothing in the corpus constrains what they are for — only what
+they hold (binary):
 
 | Name            | Value | Reading                                                                     |
 | --------------- | ----- | --------------------------------------------------------------------------- |
@@ -217,13 +191,12 @@ Six of those appear nowhere else in this document because nothing in the corpus 
 | `STOP_IK`       | 22    | not flags, and not in either enum's range. An event **sub**-action, perhaps |
 | `START`         | 23    | but nothing measures it                                                     |
 
-`STOP`/`STOP_IK`/`START` = 21/22/23 are the interesting leftover. They are the only registered values
-that fit no table here, and 21 through 23 sits just past the event enum's 0–19. **Do not read that as
-"events 21–23"** — the gap at 20 says the guess is unforced, and no script exercises any of them.
+21 through 23 sits just past the event enum's 0–19. Do not read that as "events 21–23" — the gap at
+20 says the guess is unforced, and no script exercises any of them. See [TODO](#todo).
 
 ## Properties
 
-`—` in a value column means the key exists in `thorn.dll` and **no retail script sets it**.
+`—` in a value column means the key exists in `thorn.dll` and no retail script sets it.
 
 ### Common to every entity
 
@@ -240,7 +213,7 @@ that fit no table here, and 21 through 23 sits just past the event enum's 0–19
 | `archetype`     | —       | dll                |                                                           |
 
 `template_id` is set by the numeric-form exporter, is `0` in all 284 occurrences, and the string does
-not appear in `thorn.dll`, `common.dll` or `Freelancer.exe`. **Nothing reads it.**
+not appear in `thorn.dll`, `common.dll` or `Freelancer.exe`. Nothing reads it.
 
 ### `spatialprops` — every entity but `MONITOR`
 
@@ -252,8 +225,7 @@ not appear in `thorn.dll`, `common.dll` or `Freelancer.exe`. **Nothing reads it.
 | `axisrot`     | {float, axis} | dll, corpus, guide | likewise animation-only                                                      |
 | `orientation` | —             | dll                |                                                                              |
 
-The guide's advice — `orient` to place, `q_orient` to animate — is exactly what the corpus does:
-entities carry `pos` and `orient` and nothing else, animations carry `pos`, `q_orient` or `axisrot`.
+Entities carry `pos` and `orient` and nothing else; animations carry `pos`, `q_orient` or `axisrot`.
 
 ### The typed blocks
 
@@ -270,21 +242,16 @@ entities carry `pos` and `orient` and nothing else, animations carry `pos`, `q_o
 | `reverbprops`   | —                        |                                                                                                           | `decay`, `vol`, `env`      |
 | `param_curve`   | most animations          | `CLSID`, `points`                                                                                         |                            |
 
-Three things the guide does not have, all **corpus**:
-
-- **The animating camera block is a different block.** An entity says `hvaspect`, `nearplane`,
+- The animating camera block is a different block. An entity says `hvaspect`, `nearplane`,
   `farplane`; a `START_CAMERA_PROP_ANIM` says `aspect`, `near`, `far`. Both spellings are in
-  `thorn.dll`, and only `fovh` is shared.
-- **`SCENE` carries the fog keys inline, not in a `fogprops` block.** The block form is the event's.
-- **`path_type` is `CV_CROrientationSplinePath`** in almost every use. `thorn.dll` also carries
-  `CV_CRSplinePath`, which nothing uses — so the guide's "only one path type is available" is right
-  about the corpus and understates the binary by one.
+  `thorn.dll`; only `fovh` is shared.
+- `SCENE` carries the fog keys inline, not in a `fogprops` block. The block form is the event's.
 
 ### `pathprops`
 
-`path_type` names the spline class; **`path_data` is a string, not a table.** `thorn.dll` writes the
-pair as `path_type = "%s"` and `path_data = "%s"`, and the string it fills the second one from is built
-out of four format strings that sit together in the binary:
+`path_type` names the spline class; `path_data` is a string, not a table. `thorn.dll` writes the pair
+as `path_type = "%s"` and `path_data = "%s"`, and the string it fills the second from is built out of
+four format strings sitting together in the binary:
 
 ```
 {%f,%f,%f},
@@ -294,9 +261,9 @@ CLOSED
 CV_CROrientationSplinePath
 ```
 
-So `path_data` is a flag token and then a run of braced tuples — and **the trailing `, ` after the last
-tuple belongs to the tuple, not between tuples**, which is why every retail string ends with a separator
-that looks stray. `%f` is six decimals.
+So `path_data` is a flag token then a run of braced tuples — and the trailing `, ` after the last
+tuple belongs to the tuple, not between tuples, which is why every retail string ends with a
+separator that looks stray. `%f` is six decimals.
 
 | `path_type`                  | After the flag                                                                        |
 | ---------------------------- | ------------------------------------------------------------------------------------- |
@@ -307,24 +274,22 @@ that looks stray. `%f` is six decimals.
 The flag is `OPEN` or `CLOSED`: whether the Catmull-Rom spline runs end to end or closes into a loop.
 Both are in `thorn.dll`.
 
-`NULL` is not a class the binary names anywhere. It is what the exporter writes where the class name
-would go for a `MOTION_PATH` that has no path on it, and those entities carry nothing else.
+`NULL` is not a class the binary names anywhere. It is what the exporter writes for a `MOTION_PATH`
+with no path on it, and those entities carry nothing else.
 
-**This is the one block whose keys are not independent** — `path_type` decides how `path_data` reads —
-so the typed layer models `pathprops` as a discriminated union rather than the usual bag of optionals,
-and `pathprops` with no `path_type` is an error rather than an empty block.
+This is the one block whose keys are not independent — `path_type` decides how `path_data` reads — so
+the typed layer models `pathprops` as a discriminated union, and `pathprops` with no `path_type` is
+an error rather than an empty block.
 
 ### `param_curve`
 
 `CLSID` names a component `thorn.dll` registers, and `points` is a list of 4-tuples.
 
-Eleven curve types are registered; retail uses **two**. The other nine are **dll** only:
-`BumpInPCurve`, `BumpOutPCurve`, `RampDownPCurve`, `RampUpPCurve`, `StepPCurve`, `SmoothPCurve`,
-`ThornLPCurve`, `LinearPCurve`, `ThornParamCurve`. The guide lists ten of the eleven and misses
-`ThornParamCurve`.
+Eleven curve types are registered; retail uses two. The other nine are dll only: `BumpInPCurve`,
+`BumpOutPCurve`, `RampDownPCurve`, `RampUpPCurve`, `StepPCurve`, `SmoothPCurve`, `ThornLPCurve`,
+`LinearPCurve`, `ThornParamCurve`.
 
-`pcurve_period` is milliseconds, and **negative means "match the event duration"** — which is the
-guide's reading and is consistent with any negative sentinel.
+`pcurve_period` is milliseconds, and negative means "match the event duration".
 
 ### Event properties
 
@@ -346,14 +311,11 @@ guide's reading and is consistent with any negative sentinel.
 | `strid`, `user_event_string`                                                             | —                    | `SUBTITLE`, `USER_EVENT`                                                        | dll                |
 | `percent1`, `percent2`, `loop`, `ik_id`                                                  | —                    |                                                                                 | dll                |
 
-`START_IK` is the event the guide leaves blank, and it is the third most common in retail. Its whole
-property set is in the table above.
-
 ## `userprops` is not THORN's
 
-**The one block THORN passes through untouched.** Searching the binaries settles who reads what: the
-keys below are in `common.dll` and `Freelancer.exe`, **and none of them is in `thorn.dll`.** So
-`userprops` is Freelancer's extension point, and a THORN-only reading of a script cannot interpret it.
+The one block THORN passes through untouched: the keys below are in `common.dll` and
+`Freelancer.exe`, none in `thorn.dll` — so `userprops` is Freelancer's extension point, and a
+THORN-only reading of a script cannot interpret it.
 
 | Key                        | Values                                                                                                | Read by                        |
 | -------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------ |
@@ -368,21 +330,41 @@ keys below are in `common.dll` and `Freelancer.exe`, **and none of them is in `t
 | `Priority`                 | `Steps_4`, `Room_Prop_1`, `Equip_1`, … 27 distinct                                                    | **nothing**                    |
 | `No_Fog`                   | `Y`                                                                                                   | **nothing**                    |
 
-**The last two rows are the point of the table.** `Priority` appears in no game binary in any casing —
-it is authoring metadata that ships in the data and does nothing. `No_Fog` is the same mistake in
-miniature: `nofog` is read, `No_Fog` is not.
+`Priority` appears in no game binary in any casing — authoring metadata that ships in the data and
+does nothing. `No_Fog` is the same in miniature: `nofog` is read, `No_Fog` is not. The names as the
+binaries hold them are lowercase while scripts author them in mixed case, so the lookup is presumably
+case-folding; `No_Fog` matches nothing under either casing.
 
-The names as the binaries hold them are lowercase while the scripts author them in mixed case, so the
-lookup is presumably case-folding as it is everywhere else in Freelancer. `No_Fog` matches nothing under
-either casing, which is why it is called dead rather than miscased.
+`TextStart` and `TextString` hold IDS ids as decimal strings (`259608.00000`). Text on screen is a
+`userprops` entry read by the game, not a THORN event.
 
-`TextStart` and `TextString` hold IDS ids as decimal strings (`259608.00000`). That is the mechanism the
-guide looks for and does not find under `SET_SUBTITLE` — **text on screen is a `userprops` entry read by
-the game, not a THORN event.**
+## The typed layer
 
-## Names the guide has that the binary does not
+`./thn/scene` turns an interim `Globals` into these structures and back.
 
-Corrections, not criticisms — the guide predates any of this being measurable.
+- **It folds the two export forms.** The interim layer keeps `type = SCENE` and `type = 9` apart
+  because they are different bytecode; the typed layer reads both as `'SCENE'`. Writing back always
+  emits the symbolic form, so `interim → typed → interim` normalises and only
+  `typed → interim → typed` is an identity.
+- **It refuses what it has not measured.** An unknown entity type, event action, enum value or flag
+  bit is an error naming the value, not a silent pass-through.
+
+## Notes
+
+### Reading the arrays positionally
+
+The name arrays parallel to the value arrays are not in value order, and for events they are badly
+out of it. Element 1 of the event name array is `START_MOTION`, whose value is 10. Taking the array
+positionally puts `START_SUB_SCENE` at 1 and `USER_EVENT` at 12; the value array has them the other
+way round. Only the tail, 13 through 19, happens to be in order.
+
+The parallel value array is what carries the enum. The entity result is a fact about that one table
+rather than a general rule: both enums are registered the same way, and only one has its names stored
+in value order.
+
+### Names the guide has that the binary does not
+
+The guide predates any of this being measurable.
 
 | Guide                                           | Actual                                            | Evidence                                                     |
 | ----------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------ |
@@ -393,37 +375,21 @@ Corrections, not criticisms — the guide predates any of this being measurable.
 | ten param-curve types                           | eleven                                            | `ThornParamCurve` is registered too                          |
 | `color` under `lightprops` marked "Unused"      | set in every light                                | corpus — though "set" is not "read"                          |
 
-And two the guide gets right against expectation, worth recording because they look like errors:
-`hvaspect` really is spelled that way on an entity, and `usr_flg = 1` really does look like a static
-background layer.
+Two the guide gets right against expectation: `hvaspect` really is spelled that way on an entity, and
+`usr_flg = 1` really does look like a static background layer.
 
 > **Author's note.** There is also a `usr_flg` value which I think disables depth write. Not used in
 > retail data; found by messing around with values.
 
-## The typed layer
-
-`./thn/scene` turns an interim `Globals` into these structures and back. Two consequences of the above
-shape it:
-
-- **It folds the two export forms.** The interim layer keeps `type = SCENE` and `type = 9` apart because
-  they are different bytecode; the typed layer reads both as `'SCENE'`, which is only possible because
-  the enums above are measured rather than assumed. **Writing back always emits the symbolic form** — so
-  `interim → typed → interim` normalises, and only `typed → interim → typed` is an identity. A typed
-  layer over INI would carry the same fixed-point caveat, arriving there for a different reason.
-- **It refuses what it has not measured.** An unknown entity type, event action, enum value or flag bit
-  is an error naming the value, not a silent pass-through — because every alternative is a guess, and
-  every retail entity and event resolves without one.
-
----
-
 ## Corpus
 
-Measured over the 1,506 retail scripts. **All 41,250 entities and all 50,785 events resolve** — there is
-no leftover number in either enum, and no identifier that is not registered.
+Measured over the 1,506 retail scripts. All 41,250 entities and all 50,785 events resolve — no
+leftover number in either enum, no identifier that is not registered.
 
-Values were obtained from [the numeric export form](THN.md#two-export-forms), and confirmed twice over:
-the registration routine reproduces **all twenty-five** measured values exactly and was decoded after
-the corpus measurement rather than fitted to it, and two of the enums turn out to be Direct3D's.
+Values were obtained from [the numeric export form](../modules/THN.md#two-export-forms) and confirmed twice
+over: the registration routine reproduces all twenty-five measured values exactly and was decoded
+after the corpus measurement rather than fitted to it, and two of the enums turn out to be
+Direct3D's.
 
 ### Entity type usage
 
@@ -440,9 +406,8 @@ the corpus measurement rather than fitted to it, and two of the enums turn out t
 | `MONITOR`     | 4     | 1,071  | 980      | 91      |
 | `MOTION_PATH` | 11    | 939    | 733      | 206     |
 
-There is exactly one script with **no** `SCENE` entity —
-`SCRIPTS/BASES/st_03b_cityscape_hardpoint_01.thn` — and none with two, so "every scene has one scene
-descriptor" is very nearly, but not quite, an invariant.
+Exactly one script has no `SCENE` entity —
+`SCRIPTS/BASES/st_03b_cityscape_hardpoint_01.thn` — and none has two.
 
 ### Event action usage
 
@@ -468,90 +433,86 @@ descriptor" is very nearly, but not quite, an invariant.
 
 - **`target_type`** was settled by what `target_part` holds beside it, not by frequency: numeric `1`
   carries an `Hp…` name 519 times, numeric `2` carries a part name, numeric `0` carries `""`.
-- **`Y` and `N`**: `on = Y` against `on = 1` (1,747 / 1,190) and `on = N` against `on = 0` (621 / 573),
-  with `fogon` and `fogtable` agreeing.
+- **`Y` and `N`**: `on = Y` against `on = 1` (1,747 / 1,190) and `on = N` against `on = 0`
+  (621 / 573), with `fogon` and `fogtable` agreeing.
 - **Entity flags**: cameras, numeric `16`/`1`/`17` against symbolic `HIDDEN`/`REFERENCE`/
   `REFERENCE+HIDDEN` in matching proportions; sounds, numeric `2`/`1`/`3` against
-  `SPATIAL`/`REFERENCE`/`REFERENCE+SPATIAL`. The `SPATIAL`/`LIT_AMBIENT` collision never occurs on the
-  same entity type in 41,250 entities.
+  `SPATIAL`/`REFERENCE`/`REFERENCE+SPATIAL`. The `SPATIAL`/`LIT_AMBIENT` collision never occurs on
+  the same entity type in 41,250 entities.
 - **`PARENT_CHILD` = 64** rested on one direct match — an attach with the same targets, `target_part`
   and `offset` appearing as numeric `70` in one script and as `POSITION+ORIENTATION+PARENT_CHILD` in
-  another — corroborated by frequency, numeric `70` × 76 against symbolic × 70. The registration routine
-  then set it outright.
+  another — corroborated by frequency, numeric `70` × 76 against symbolic × 70. The registration
+  routine then set it outright.
 - **`LOOP` = 8**, from numeric `8` × 234 against symbolic `LOOP` × 512.
 
 ### Property usage
 
-| Key | Uses |
-| --- | --- |
-| `animation` (`START_MOTION`) | 13,543 |
-| `trans_time` | 8,615 |
-| `event_flags` | 5,533 |
-| `start_percent` / `stop_percent` | 1,794 |
-| `start_time` | 1,257 |
-| `hardpoint` / `parent_hardpoint` | 112 |
-| `floor_height` (event) | 97 |
-| `trans_scale` | 57 |
-| `locked_bone` | 56 |
-| `template_id` | 284, all `0` |
-| `axisrot` | 181 |
+| Key                              | Uses         |
+| -------------------------------- | ------------ |
+| `animation` (`START_MOTION`)     | 13,543       |
+| `trans_time`                     | 8,615        |
+| `event_flags`                    | 5,533        |
+| `start_percent` / `stop_percent` | 1,794        |
+| `start_time`                     | 1,257        |
+| `hardpoint` / `parent_hardpoint` | 112          |
+| `floor_height` (event)           | 97           |
+| `trans_scale`                    | 57           |
+| `locked_bone`                    | 56           |
+| `template_id`                    | 284, all `0` |
+| `axisrot`                        | 181          |
 
 `lt_grp` takes 19 distinct values, 0 in 36,561 of them. `usr_flg = 1` occurs on 233 entities, 231 of
-which also carry a negative `srt_grp` — the draw-first ordering the guide describes.
+which also carry a negative `srt_grp`.
 
-**`event_flags` takes five values across 5,533 uses** — `128` × 4,071, `2` × 1,424, `130` × 22, `1` × 12,
-`3` × 4 — so it is a bitfield with bits 1, 2 and 128 in use. The guide's reading ("2 is a loop, 3 is play
-once?") is marked as a guess there and no measurement here supports or refutes it; what the corpus adds
-is that the dominant value is 128, which the guide does not mention at all.
+`event_flags` takes five values across 5,533 uses — `128` × 4,071, `2` × 1,424, `130` × 22, `1` × 12,
+`3` × 4 — so it is a bitfield with bits 1, 2 and 128 in use.
 
 ### `pathprops`
 
-`path_type` is `CV_CROrientationSplinePath` in **936 of the 939** uses that set it; 3 say `NULL`.
+`path_type` is `CV_CROrientationSplinePath` in 936 of the 939 uses that set it; 3 say `NULL`.
 
-Measured over the 936: every one alternates strictly and has an even number of tuples, so a keyframe is
-always a pair — **3,151 keyframes in all, 2 to 25 per path**, and 457 paths (nearly half) have the
-minimum of two. No tuple is any width but 3 or 4, nothing but commas and spaces sits between them, and
-every component carries six decimals. The corpus suite pins all 936 strings re-emitting byte for byte,
+Measured over the 936: every one alternates strictly and has an even number of tuples, so a keyframe
+is always a pair — 3,151 keyframes in all, 2 to 25 per path, and 457 paths have the minimum of two.
+No tuple is any width but 3 or 4, nothing but commas and spaces sits between them, and every
+component carries six decimals. The corpus suite pins all 936 strings re-emitting byte for byte,
 including the five components written `-0.000000`, whose sign `Number.prototype.toFixed` drops.
 
 ### `param_curve`
 
-**4,845 curves holding 13,297 rows, every one of them exactly four numbers.** Retail uses two of the
-eleven registered types: `FreeFormPCurve` (4,802) and `CatmullRomPCurve` (43).
+4,845 curves holding 13,297 rows, every one exactly four numbers. Retail uses two of the eleven
+registered types: `FreeFormPCurve` (4,802) and `CatmullRomPCurve` (43).
 
 `pcurve_period` takes 94 distinct values; `-1000` × 3,410 and `-1` × 973 are nine tenths of all uses.
 
 ### `userprops` usage
 
-| Key | Uses |
-| --- | --- |
-| `category` | 10,496 |
-| `Priority` | 3,426 — **read by nothing** |
-| `actor` / `Actor` | 1,840 |
-| `speaker` / `Speaker` | 633 |
-| `nofog` / `NoFog` | 313 |
-| `running_lights` | 127 |
-| `main_object` | 67 |
-| `loadout` / `Loadout` | 52 |
+| Key                        | Uses                         |
+| -------------------------- | ---------------------------- |
+| `category`                 | 10,496                       |
+| `Priority`                 | 3,426 — **read by nothing**  |
+| `actor` / `Actor`          | 1,840                        |
+| `speaker` / `Speaker`      | 633                          |
+| `nofog` / `NoFog`          | 313                          |
+| `running_lights`           | 127                          |
+| `main_object`              | 67                           |
+| `loadout` / `Loadout`      | 52                           |
 | `TextStart` / `TextString` | 46, on `SCENE` in 23 scripts |
-| `No_Fog` | 22 — **read by nothing** |
-
----
+| `No_Fog`                   | 22 — **read by nothing**     |
 
 ## TODO
 
-Pending *observation in the running game*, in the sense [THN.md](THN.md#todo) sets out.
+Pending observation in the running game.
 
-- **What does `event_flags` mean?** Bits 1, 2 and 128, with 128 dominant on both `START_MOTION` and
-  `START_IK`. The corpus never varies anything else while varying this. The experiment is to flip a bit
-  on a `START_MOTION` in a scene that plays and watch the animation. **Note this is not the same question
-  as the flag *values***, which the registration routine settles — it is what the engine does with them.
-- **What are `STOP` = 21, `STOP_IK` = 22 and `START` = 23 for?** Registered, never used, and fitting none
-  of the tables above. The experiment is to issue one as an `action` and see whether anything happens; a
-  `nil` result would say they are vestigial.
-- **Do `PROPERTY_ANIM`, `ADD_PATH` and `LOOKAT_ENTITY` do anything?** Same shape of question, same
+- **What `event_flags` means.** Bits 1, 2 and 128, with 128 dominant on both `START_MOTION` and
+  `START_IK`. The corpus never varies anything else while varying this. *Experiment*: flip a bit on a
+  `START_MOTION` in a scene that plays and watch the animation. Not the same question as the flag
+  *values*, which the registration routine settles — this is what the engine does with them.
+- **What `STOP` = 21, `STOP_IK` = 22 and `START` = 23 are for.** Registered, never used, fitting none
+  of the tables above. *Experiment*: issue one as an `action`; a `nil` result would say they are
+  vestigial.
+- **Whether `PROPERTY_ANIM`, `ADD_PATH` and `LOOKAT_ENTITY` do anything.** Same shape, same
   experiment.
 
 ---
 
-[THN.md](THN.md) · [INI.md](INI.md) · [RETAIL.md](RETAIL.md)
+[THN.md](../modules/THN.md) · [INI.md](../modules/INI.md) · [RETAIL.md](RETAIL.md)

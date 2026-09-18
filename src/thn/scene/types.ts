@@ -5,7 +5,7 @@
  * is that this layer **folds the two export forms together**: the interim layer keeps `type = SCENE`
  * and `type = 9` apart because they are different bytecode, and here they are both `'SCENE'`, which
  * is only possible because the enums in [`data.ts`](data.ts) are measured rather than assumed. See
- * [THORN.md](../../../docs/THORN.md).
+ * [THORN.md](../../../docs/refs/THORN.md).
  *
  * Consequences worth knowing before using it:
  *

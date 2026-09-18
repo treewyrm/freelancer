@@ -1,39 +1,35 @@
 # SECTIONS — every section and property the game reads
 
-A reference table: **every section name and every property in it, whether or not retail data uses
-it.** [ENGINE.md](ENGINE.md) explains where the vocabulary lives in the binaries and how it was
-recovered; this is the enumeration.
+Every section name and every property in it, whether or not retail data uses it.
+[ENGINE.md](ENGINE.md) explains where the vocabulary lives in the binaries and how it was recovered;
+this is the enumeration.
 
-Like [ENGINE.md](ENGINE.md) and [RDL.md](RDL.md) it has **no module and will not get one**. To this
-library `[Solar]` is a section name and `type` is a property name — see the scope rule in
-[README.md](../README.md#three-layers). The table exists so a consumer that *does* interpret them
-can be written against something measured.
+No module, and there will not be one. To this library `[Solar]` is a section name and `type` is a
+property name — see the scope rule in [ARCHITECTURE.md](ARCHITECTURE.md#invariants).
 
 ## Where each row comes from
 
-A property reaches this table by one of two routes, and they carry different weight:
+Two routes, carrying different weight:
 
 - **Observed in retail data** — from reading all 1,257 retail INI files (`DATA/**/*.ini`,
-  `EXE/*.ini` and the two `.fl` saves) through this library's own reader and recording which
-  properties occur in which section.
-- **Recovered from the binaries** — a property the engine reads in that section that **no retail
-  file sets there**. `dispersion_angle` on `[Gun]` is the example that motivated this: it works in
-  game, and a table built only from the data would not have it.
+  `EXE/*.ini` and the two `.fl` saves) through this library's own reader.
+- **Recovered from the binaries** — a property the engine reads in that section that no retail file
+  sets there. `dispersion_angle` on `[Gun]` is the case that forced them in.
 
 The read/unread mark comes from the binaries either way, by the two methods in
 [ENGINE.md](ENGINE.md#property-names).
 
 ### The three placement rules, and what each is worth
 
-| Rule | How a property is placed | Corroboration |
-| --- | --- | --- |
-| **A** | Address order **inside one function** — an `is_header` match opens a group, following `is_value` matches join it | **93%** (248/268) |
-| **B** | The exported symbol names the block — `RoomData::read_Hotspot_block` → `[Hotspot]` | **88%** (52/59) |
-| **C** | The section's **archetype class chain**, recovered from the call graph | not measurable — see below |
+| Rule  | How a property is placed                                                                                         | Corroboration              |
+| ----- | ---------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| **A** | Address order **inside one function** — an `is_header` match opens a group, following `is_value` matches join it | **93%** (248/268)          |
+| **B** | The exported symbol names the block — `RoomData::read_Hotspot_block` → `[Hotspot]`                               | **88%** (52/59)            |
+| **C** | The section's **archetype class chain**, recovered from the call graph                                           | not measurable — see below |
 
 Corroboration is the share of placements whose property retail *does* set in that section, so it is
-only a meaningful test for A and B. **Rule C cannot be scored that way, because its entire purpose is
-to add properties retail never sets there.** It rests on something firmer instead.
+only a meaningful test for A and B. Rule C cannot be scored that way, because its purpose is to add
+properties retail never sets there; it rests on the call graph instead.
 
 ### The archetype hierarchy is exact, not inferred
 
@@ -79,42 +75,42 @@ and **corrected two**: `[LootCrate]` was fitted to `Root` on thin evidence and t
 `ShieldBattery` — the constructor call reaching `Root` settles that its chain runs through
 `Equipment`. Both corrections are applied below.
 
-| Section | Class | Chain | Dispatch evidence |
-| --- | --- | --- | --- |
-| `[Armor]` | `Armor` | `Armor` → `Equipment` → `Root` | `Equipment` constructor, its base |
-| `[asteroid]` | `Asteroid` | `Asteroid` → `Root` | `Root` constructor, its base |
-| `[AsteroidMine]` | `Asteroid` | `Asteroid` → `Root` | `Root` constructor, its base |
-| `[AttachedFX]` | `Root` | `Root` | **direct** — `Load*` calls `Root`'s own constructor |
-| `[CargoPod]` | `AttachedEquipment` | `AttachedEquipment` → `Equipment` → `Root` | **direct** — `Load*` calls `AttachedEquipment`'s own constructor |
-| `[CloakingDevice]` | `CloakingDevice` | `CloakingDevice` → `AttachedEquipment` → `Equipment` → `Root` | `AttachedEquipment` constructor, its base |
-| `[CollisionGroup]` | `AttachedEquipment` | `AttachedEquipment` → `Equipment` → `Root` | — no constructor in the dispatch block |
-| `[Commodity]` | `Commodity` | `Commodity` → `Equipment` → `Root` | `Equipment` constructor, its base |
-| `[CounterMeasure]` | `CounterMeasure` | `CounterMeasure` → `Projectile` → `Equipment` → `Root` | `Projectile` constructor, its base |
-| `[CounterMeasureDropper]` | `CounterMeasureDropper` | `CounterMeasureDropper` → `Launcher` → `AttachedEquipment` → `Equipment` → `Root` | `Launcher` constructor, its base |
-| `[DynamicAsteroid]` | `Root` | `Root` | **direct** — `Load*` calls `Root`'s own constructor |
-| `[Engine]` | `Engine` | `Engine` → `Equipment` → `Root` | `Equipment` constructor, its base |
-| `[explosion]` | `Explosion` | `Explosion` | **direct** — `Load*` calls `Explosion`'s own constructor |
-| `[Gun]` | `Gun` | `Gun` → `Launcher` → `AttachedEquipment` → `Equipment` → `Root` | `Launcher` constructor, its base |
-| `[InternalFX]` | `InternalFXEquip` | `InternalFXEquip` → `Equipment` → `Root` | `Root` constructor, its base |
-| `[Light]` | `Light` | `Light` → `Equipment` → `Root` | `Root` constructor, its base |
-| `[LootCrate]` | `Equipment` | `Equipment` → `Root` | **direct** — `Load*` calls `Equipment`'s own constructor |
-| `[Mine]` | `Mine` | `Mine` → `Projectile` → `Equipment` → `Root` | `Equipment` constructor, its base |
-| `[MineDropper]` | `Launcher` | `Launcher` → `AttachedEquipment` → `Equipment` → `Root` | **direct** — `Load*` calls `Launcher`'s own constructor |
-| `[Motor]` | `Projectile` | `Projectile` → `Equipment` → `Root` | — no constructor in the dispatch block |
-| `[Munition]` | `Munition` | `Munition` → `Projectile` → `Equipment` → `Root` | `Equipment` constructor, its base |
-| `[Power]` | `Power` | `Power` → `Equipment` → `Root` | `Equipment` constructor, its base |
-| `[repairdroid]` | `RepairDroid` | `RepairDroid` → `Equipment` → `Root` | `Root` constructor, its base |
-| `[RepairKit]` | `RepairKit` | `RepairKit` → `Equipment` → `Root` | `Root` constructor, its base |
-| `[Scanner]` | `Scanner` | `Scanner` → `Equipment` → `Root` | `Root` constructor, its base |
-| `[Shield]` | `AttachedEquipment` | `AttachedEquipment` → `Equipment` → `Root` | **direct** — `Load*` calls `AttachedEquipment`'s own constructor |
-| `[ShieldBattery]` | `Equipment` | `Equipment` → `Root` | **direct** — `Load*` calls `Equipment`'s own constructor |
-| `[ShieldGenerator]` | `ShieldGenerator` | `ShieldGenerator` → `AttachedEquipment` → `Equipment` → `Root` | `AttachedEquipment` constructor, its base |
-| `[ship]` | `Ship` | `Ship` → `EqObj` → `Root` | **direct** — `Load*` calls `Ship`'s own constructor |
-| `[Simple]` | `Root` | `Root` | **direct** — `Load*` calls `Root`'s own constructor |
-| `[Solar]` | `Solar` | `Solar` → `EqObj` → `Root` | `EqObj` constructor, its base |
-| `[Thruster]` | `Thruster` | `Thruster` → `AttachedEquipment` → `Equipment` → `Root` | `AttachedEquipment` constructor, its base |
-| `[Tractor]` | `Tractor` | `Tractor` → `Equipment` → `Root` | `Equipment` constructor, its base |
-| `[TradeLane]` | `Root` | `Root` | **direct** — `Load*` calls `Root`'s own constructor |
+| Section                   | Class                   | Chain                                                                             | Dispatch evidence                                                |
+| ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `[Armor]`                 | `Armor`                 | `Armor` → `Equipment` → `Root`                                                    | `Equipment` constructor, its base                                |
+| `[asteroid]`              | `Asteroid`              | `Asteroid` → `Root`                                                               | `Root` constructor, its base                                     |
+| `[AsteroidMine]`          | `Asteroid`              | `Asteroid` → `Root`                                                               | `Root` constructor, its base                                     |
+| `[AttachedFX]`            | `Root`                  | `Root`                                                                            | **direct** — `Load*` calls `Root`'s own constructor              |
+| `[CargoPod]`              | `AttachedEquipment`     | `AttachedEquipment` → `Equipment` → `Root`                                        | **direct** — `Load*` calls `AttachedEquipment`'s own constructor |
+| `[CloakingDevice]`        | `CloakingDevice`        | `CloakingDevice` → `AttachedEquipment` → `Equipment` → `Root`                     | `AttachedEquipment` constructor, its base                        |
+| `[CollisionGroup]`        | `AttachedEquipment`     | `AttachedEquipment` → `Equipment` → `Root`                                        | — no constructor in the dispatch block                           |
+| `[Commodity]`             | `Commodity`             | `Commodity` → `Equipment` → `Root`                                                | `Equipment` constructor, its base                                |
+| `[CounterMeasure]`        | `CounterMeasure`        | `CounterMeasure` → `Projectile` → `Equipment` → `Root`                            | `Projectile` constructor, its base                               |
+| `[CounterMeasureDropper]` | `CounterMeasureDropper` | `CounterMeasureDropper` → `Launcher` → `AttachedEquipment` → `Equipment` → `Root` | `Launcher` constructor, its base                                 |
+| `[DynamicAsteroid]`       | `Root`                  | `Root`                                                                            | **direct** — `Load*` calls `Root`'s own constructor              |
+| `[Engine]`                | `Engine`                | `Engine` → `Equipment` → `Root`                                                   | `Equipment` constructor, its base                                |
+| `[explosion]`             | `Explosion`             | `Explosion`                                                                       | **direct** — `Load*` calls `Explosion`'s own constructor         |
+| `[Gun]`                   | `Gun`                   | `Gun` → `Launcher` → `AttachedEquipment` → `Equipment` → `Root`                   | `Launcher` constructor, its base                                 |
+| `[InternalFX]`            | `InternalFXEquip`       | `InternalFXEquip` → `Equipment` → `Root`                                          | `Root` constructor, its base                                     |
+| `[Light]`                 | `Light`                 | `Light` → `Equipment` → `Root`                                                    | `Root` constructor, its base                                     |
+| `[LootCrate]`             | `Equipment`             | `Equipment` → `Root`                                                              | **direct** — `Load*` calls `Equipment`'s own constructor         |
+| `[Mine]`                  | `Mine`                  | `Mine` → `Projectile` → `Equipment` → `Root`                                      | `Equipment` constructor, its base                                |
+| `[MineDropper]`           | `Launcher`              | `Launcher` → `AttachedEquipment` → `Equipment` → `Root`                           | **direct** — `Load*` calls `Launcher`'s own constructor          |
+| `[Motor]`                 | `Projectile`            | `Projectile` → `Equipment` → `Root`                                               | — no constructor in the dispatch block                           |
+| `[Munition]`              | `Munition`              | `Munition` → `Projectile` → `Equipment` → `Root`                                  | `Equipment` constructor, its base                                |
+| `[Power]`                 | `Power`                 | `Power` → `Equipment` → `Root`                                                    | `Equipment` constructor, its base                                |
+| `[repairdroid]`           | `RepairDroid`           | `RepairDroid` → `Equipment` → `Root`                                              | `Root` constructor, its base                                     |
+| `[RepairKit]`             | `RepairKit`             | `RepairKit` → `Equipment` → `Root`                                                | `Root` constructor, its base                                     |
+| `[Scanner]`               | `Scanner`               | `Scanner` → `Equipment` → `Root`                                                  | `Root` constructor, its base                                     |
+| `[Shield]`                | `AttachedEquipment`     | `AttachedEquipment` → `Equipment` → `Root`                                        | **direct** — `Load*` calls `AttachedEquipment`'s own constructor |
+| `[ShieldBattery]`         | `Equipment`             | `Equipment` → `Root`                                                              | **direct** — `Load*` calls `Equipment`'s own constructor         |
+| `[ShieldGenerator]`       | `ShieldGenerator`       | `ShieldGenerator` → `AttachedEquipment` → `Equipment` → `Root`                    | `AttachedEquipment` constructor, its base                        |
+| `[ship]`                  | `Ship`                  | `Ship` → `EqObj` → `Root`                                                         | **direct** — `Load*` calls `Ship`'s own constructor              |
+| `[Simple]`                | `Root`                  | `Root`                                                                            | **direct** — `Load*` calls `Root`'s own constructor              |
+| `[Solar]`                 | `Solar`                 | `Solar` → `EqObj` → `Root`                                                        | `EqObj` constructor, its base                                    |
+| `[Thruster]`              | `Thruster`              | `Thruster` → `AttachedEquipment` → `Equipment` → `Root`                           | `AttachedEquipment` constructor, its base                        |
+| `[Tractor]`               | `Tractor`               | `Tractor` → `Equipment` → `Root`                                                  | `Equipment` constructor, its base                                |
+| `[TradeLane]`             | `Root`                  | `Root`                                                                            | **direct** — `Load*` calls `Root`'s own constructor              |
 
 A section whose class column is a base — `[Shield]` on `AttachedEquipment`, `[MineDropper]` on
 `Launcher`, `[CargoPod]` on `AttachedEquipment` — has **no class of its own**: the engine reuses the
@@ -281,21 +277,20 @@ gave `[NewsItem]` 134 mission-script keys and `[LOD]` 100 — 31% corroboration.
 **Every address that a direct `call` targets is a function start.** Collecting those gives boundaries
 in any binary regardless of what it exports, and it is what lifts `content.dll` from 31% to **94%**:
 
-| Binary | Call targets | Groups | Corroboration |
-| --- | --- | --- | --- |
-| `common.dll` | 3,307 | 78 | 94% |
-| `content.dll` | 2,561 | 63 | **94%** |
-| `Freelancer.exe` | 4,003 | 60 | 88% |
-| `server.dll` | 1,132 | 12 | 100% (n=1) |
+| Binary           | Call targets | Groups | Corroboration |
+| ---------------- | ------------ | ------ | ------------- |
+| `common.dll`     | 3,307        | 78     | 94%           |
+| `content.dll`    | 2,561        | 63     | **94%**       |
+| `Freelancer.exe` | 4,003        | 60     | 88%           |
+| `server.dll`     | 1,132        | 12     | 100% (n=1)    |
 
-**One thing was tried, rejected, and then replaced.** Following the call that a header match
-dispatches to, so a helper's `is_value` calls attach to the section that selected it, corroborates at
-only 74% and fails systematically — an unbounded forward scan crosses into the next `if`, handing
-`[AvailableShip]` the whole of `[Hotspot]`. Bounding the scan properly — take the `test al,al` and
-its `jz` that follow the header call, and stop at the jump target or at any unconditional `jmp` —
-fixes it, and is what established that ten of those sections are obsolete rather than unread. Without
-the `jmp` terminator `[Lighting]` still picked up eighteen properties belonging to the block after
-it.
+Following the call a header match dispatches to, so a helper's `is_value` calls attach to the section
+that selected it, corroborates at only 74% and fails systematically — an unbounded forward scan
+crosses into the next `if`, handing `[AvailableShip]` the whole of `[Hotspot]`. Bound the scan: take
+the `test al,al` and its `jz` that follow the header call, and stop at the jump target or at any
+unconditional `jmp`. That is what established that ten of those sections are obsolete rather than
+unread; without the `jmp` terminator `[Lighting]` picks up eighteen properties belonging to the block
+after it.
 
 ### One consequence worth being clear about
 
@@ -306,13 +301,13 @@ matches this name); plain is the weak one.
 
 ## Legend
 
-| Mark | Meaning |
-| --- | --- |
-| `name` | In retail data here; passed to `INI_Reader::is_value` — **proven read** |
-| `name`* | In retail data here; a literal exists but at no resolved call site |
-| ~~`name`~~ | In retail data here; **no literal in any binary** — nothing matches this name |
-| **`name`⁺** | **Not in retail data here** — the engine reads it in this section anyway |
-| `[Section]` ‡ | The section header itself is never matched by `is_header`/`find_header` |
+| Mark          | Meaning                                                                       |
+| ------------- | ----------------------------------------------------------------------------- |
+| `name`        | In retail data here; passed to `INI_Reader::is_value` — **proven read**       |
+| `name`*       | In retail data here; a literal exists but at no resolved call site            |
+| ~~`name`~~    | In retail data here; **no literal in any binary** — nothing matches this name |
+| **`name`⁺**   | **Not in retail data here** — the engine reads it in this section anyway      |
+| `[Section]` ‡ | The section header itself is never matched by `is_header`/`find_header`       |
 
 Retail-observed properties come first, most-frequent first; engine-only ones follow, alphabetically.
 Spelling is retail's **most common** for that name — **76 names are written more than one way**
@@ -321,38 +316,37 @@ makes folds case, so the variants are one key and the choice here is cosmetic.
 
 ## Totals
 
-| | |
-| --- | --- |
-| Sections | 289 |
-| — in retail data | 280 |
-| — engine-only, with properties recovered | 9 |
-| — engine-only, obsolete (no property read, by design) | 10 |
-| — engine-only, read positionally (no property names exist) | 15 |
-| — engine-only, fuse action | 1 |
-| Section/property pairs from the data | 2,222 |
-| Section/property pairs added from the binaries | **543** |
-| Distinct property names in the data | 1,375 |
-| — proven read | 619 |
-| — literal only | 651 |
-| — **no literal anywhere** | **105** |
-| Property names read but never set anywhere in retail | 180 |
-| — placed into a section | 101 |
-| — section undetermined | 79 |
+|                                                            |         |
+| ---------------------------------------------------------- | ------- |
+| Sections                                                   | 289     |
+| — in retail data                                           | 280     |
+| — engine-only, with properties recovered                   | 9       |
+| — engine-only, obsolete (no property read, by design)      | 10      |
+| — engine-only, read positionally (no property names exist) | 15      |
+| — engine-only, fuse action                                 | 1       |
+| Section/property pairs from the data                       | 2,222   |
+| Section/property pairs added from the binaries             | **543** |
+| Distinct property names in the data                        | 1,375   |
+| — proven read                                              | 619     |
+| — literal only                                             | 651     |
+| — **no literal anywhere**                                  | **105** |
+| Property names read but never set anywhere in retail       | 180     |
+| — placed into a section                                    | 101     |
+| — section undetermined                                     | 79      |
 
-**280 against [RETAIL.md](RETAIL.md#what-is-in-it)'s 256 is a sweep difference, not drift.** That
-figure counts the 1,251 BINI files alone; this one adds `initialworld.ini`, the three plain-text INIs
-under `EXE` and the two `.fl` saves, which contribute the save-game and configuration sections.
+280 against [RETAIL.md](RETAIL.md#what-is-in-it)'s 256 is a sweep difference: that figure counts the
+1,251 BINI files alone; this one adds `initialworld.ini`, the three plain-text INIs under `EXE` and
+the two `.fl` saves, which contribute the save-game and configuration sections.
 
 ## Sections the engine matches that retail never contains
 
 35 of them, recovered from `is_header`/`find_header` call sites — a string handed to a header matcher
-is a section name whatever function it sits in. **For 26 of the 35, "what are its properties?" has no
-answer, and in two different ways that are both findings rather than gaps.**
+is a section name whatever function it sits in. For 26 of the 35, "what are its properties?" has no
+answer, in two different ways.
 
 **Ten are obsolete.** The header is matched only to emit a diagnostic — `*** WARNING: [Cloud] is
-obsolete in %s` at `RoomData.cpp:2046`, and the same shape for the rest — and then the section is
-skipped. **No property is read, by design.** Nine come from `RoomData.cpp` and one from
-`GoodList.cpp`:
+obsolete in %s` at `RoomData.cpp:2046` — and then skipped. No property is read, by design. Nine come
+from `RoomData.cpp` and one from `GoodList.cpp`:
 
 `[AvailableShip]`, `[Billboard]`, `[Cloud]`, `[GoodsCartPlacement]`, `[GoodsPilePlacement]`,
 `[GoodType]`, `[Lighting]`, `[MonitorPlacement]`, `[RepairRobotPlacement]`, `[ShipPlacement]`
@@ -417,7 +411,7 @@ What the engine asks each property to be, from the accessor it calls after match
 [ENGINE.md](ENGINE.md#value-shapes) sets out.
 
 **Declared is what the engine coerces to; recorded is what the file holds**, and they differ freely
-because [INI.md](INI.md#how-the-game-reads-a-value)'s reader converts — a `color` of `255, 255, 255`
+because [INI.md](../modules/INI.md#how-the-game-reads-a-value)'s reader converts — a `color` of `255, 255, 255`
 is integer-typed in the file and read as three floats. Of the 495 positions where both are known, 315
 match exactly, 176 are compatible under coercion, and 4 are neither.
 
@@ -437,550 +431,550 @@ see [The same name is not always read the same way](#the-same-name-is-not-always
 
 Recorded types are the commonest per position, one letter each, up to six positions.
 
-| Property | Declared | Retail arity | Recorded |
-| --- | --- | --- | --- |
-| `accel` | `f` | 1×76 | `f` |
-| `acceleration` | `f` | 1×10 | `i` |
-| `accessory` | `s` | 1×232 | `s` |
-| `action` | `s` | 1×43 | `s` |
-| `activation_type` | `f f f f +s` | 3×6, 5×1 | `siiii` |
-| `active_effect` | `s` | — | `—` |
-| `addon` | `s s i s?` | 3×507 | `ssi` |
-| `ai_range` | `f` | 1×3 | `i` |
-| `always_on` | `b` | 1×2 | `s` |
-| `ambient` | `s s?` | 1×436, 3×64, 2×2 | `sii` |
-| `angular_drag` | `f f f` | 3×110 | `fff` |
-| `angular_velocity` | `f f f` | — | `—` |
-| `anim` | `s` | 1×28, 3×19 | `sii` |
-| `animated_textures` | `b` | 1×1 | `s` |
-| `animation` | `s` | 1×162, 0×2 | `s` |
-| `animation_oneshot` | `s` | — | `—` |
-| `anom_limits_max_angular_velocity_per_psi` | `f` | — | `—` |
-| `anom_limits_max_velocity` | `f` | — | `—` |
-| `archetype` | `s` | 1×4563 | `s` |
-| `asteroid` | `f f f +s` | 7×740, 1×145, 8×70 | `sfffii` |
-| `asteroids` | `s` | 1×1 | `s` |
-| `at_t` | `f f?` | 1×1907, 2×17 | `ff` |
-| `atmosphere_range` | `f` | 1×127 | `i` |
-| `attached` | `b` | 1×938 | `s` |
-| `attachment_archetype` | `s` | — | `—` |
-| `attacker_rep` | `i` | — | `—` |
-| `attacker_rep_name` | `s` | 1×7 | `s` |
-| `auto_turret` | `b` | 1×513 | `s` |
-| `autosave_forbidden` | `b` | 1×4 | `s` |
-| `back_hp` | `s` | — | `—` |
-| `back_mesh` | `s` | — | `—` |
-| `back_mouse` | `f f` | — | `—` |
-| `back_no_mesh_render` | `f` | — | `—` |
-| `back_offset` | `f f` | — | `—` |
-| `backdrop` | `s` | 1×1 | `s` |
-| `bad_buy_price` | `f` | 1×40 | `f` |
-| `bad_sell_price` | `f` | 1×40 | `f` |
-| `base` | `s` | 1×5741 | `s` |
-| `bay_door_anim` | `s` | 1×44 | `s` |
-| `behavior` | `s` | 1×5346, 0×1 | `s` |
-| `bgcs_base_run_by` | `s` | 1×169 | `s` |
-| `billboard_count` | `f` | 1×2 | `i` |
-| `blink` | `f` | 1×857 | `f` |
-| `body` | `s` | 1×1728 | `s` |
-| `body.anim` | `s` | 1×1 | `s` |
-| `body_hardpoint` | `s` | 1×106 | `s` |
-| `bodyparts` | `s` | 1×1 | `s` |
-| `bold` | `b` | 1×15 | `s` |
-| `bonuslootdropchance` | `f` | 1×1 | `f` |
-| `can_dock` | `b` | — | `—` |
-| `can_jettison` | `b` | 1×4 | `s` |
-| `can_tl` | `b` | — | `—` |
-| `capacity` | `f` | 1×164 | `i` |
-| `cargo_scan_range` | `f` | 1×2 | `i` |
-| `category` | `s` | 1×1258 | `s` |
-| `charge_rate` | `f` | 1×164 | `i` |
-| `chatter_max_dist` | `f` | 1×1 | `f` |
-| `chatter_max_dist_atten` | `f` | 1×1 | `f` |
-| `chatter_start_atten` | `f` | 1×1 | `f` |
-| `child_impulse` | `f` | 1×1146 | `i` |
-| `child_node` | `i` | 1×309 | `i` |
-| `cloakin_fx` | `s` | 1×9 | `s` |
-| `cloakin_time` | `f` | 1×9 | `i` |
-| `cloakout_fx` | `s` | 1×9 | `s` |
-| `cloakout_time` | `f` | 1×9 | `i` |
-| `close_sound` | `s` | 1×36 | `s` |
-| `cnd_npcsystementer` | `—` | 2×7, 3×5, 6×5 | `ssssss` |
-| `cnd_npcsystemexit` | `s` | — | `—` |
-| `collision_damage_factor` | `f` | 1×1 | `f` |
-| `color` | `f f f` | 3×443, 4×6 | `iiii` |
-| `combinable` | `b` | 1×792 | `s` |
-| `comm` | `s` | 1×1 | `s` |
-| `comm.anim` | `s` | 2×1 | `ss` |
-| `comm_appr` | `s` | — | `—` |
-| `comm_conflict_priority_cutoff` | `f` | 1×1 | `i` |
-| `comm_player_far_dist` | `f` | 1×1 | `f` |
-| `comm_player_far_dist_atten` | `f` | 1×1 | `f` |
-| `const_effect` | `s` | 1×526 | `s` |
-| `const_effect_delay` | `f` | — | `—` |
-| `constant_power_draw` | `f` | 1×126 | `i` |
-| `constants` | `s` | 1×1 | `s` |
-| `content.dll` | `i` | — | `—` |
-| `costumes` | `s` | 1×1 | `s` |
-| `count` | `f` | 1×244 | `i` |
-| `cruise_accel_time` | `f` | — | `—` |
-| `cruise_atten_mod_range` | `f` | 1×1 | `f` |
-| `cruise_charge_time` | `f` | 1×60 | `i` |
-| `cruise_disrupt_time` | `f` | 1×1 | `i` |
-| `cruise_disruptor` | `b` | 1×3 | `s` |
-| `cruise_drag` | `f` | — | `—` |
-| `cruise_power_usage` | `f` | 1×60 | `i` |
-| `cruise_steady_time` | `f` | 1×1 | `f` |
-| `cruising_speed` | `f` | — | `—` |
-| `cutoff_shadow_z` | `f` | — | `—` |
-| `damage` | `s f` | 1×185 | `i` |
-| `damage_per_fire` | `f` | 1×523 | `i` |
-| `death_fuse` | `b` | 1×105 | `s` |
-| `debris_impulse` | `f` | 1×49 | `i` |
-| `debris_type` | `s i?` | 1×1156, 2×133 | `sf` |
-| `decay_per_second` | `f` | 1×105 | `i` |
-| `default_angular_damping` | `f` | 3×1 | `fff` |
-| `default_linear_damping` | `f` | 1×1 | `f` |
-| `delay` | `f` | 1×165 | `i` |
-| `delta_cruise_atten_mod_steady` | `f` | 1×1 | `f` |
-| `delta_throttle_atten_mod_changing` | `f` | 1×1 | `f` |
-| `delta_throttle_atten_mod_steady` | `f` | 1×1 | `f` |
-| `descrip_strid` | `i` | — | `—` |
-| `destroy_parent` | `—` | — | `—` |
-| `destructible` | `b` | 1×77 | `s` |
-| `detect_radius` | `f` | 1×9 | `i` |
-| `detonation_dist` | `f` | 1×86 | `i` |
-| `diff2money` | `f` | 2×23 | `fi` |
-| `difficulty_range` | `f` | 2×143 | `ii` |
-| `dispersion_angle` | `f` | — | `—` |
-| `distance_render` | `f` | 1×4 | `i` |
-| `diversion_pctg` | `f` | 1×3 | `i` |
-| `dmg_obj` | `s` | 1×323 | `s` |
-| `dock_with` | `s` | 1×260 | `s` |
-| `docking_camera` | `b` | 1×44 | `i` |
-| `docking_light` | `b` | 1×2 | `s` |
-| `docking_sphere` | `s s f s?` | 3×162, 4×102 | `ssfs` |
-| `drag_modifier` | `f` | 1×1 | `f` |
-| `dry_fire_sound` | `s` | 1×29 | `s` |
-| `dynamic_loot_commodity` | `s` | 1×80 | `s` |
-| `dynamic_loot_container` | `s` | 1×80 | `s` |
-| `dynamic_loot_count` | `f f` | 2×80 | `ii` |
-| `dynamic_loot_difficulty` | `f` | 1×80 | `i` |
-| `edge_fraction` | `f` | 1×144 | `f` |
-| `effect` | `s f?` | 1×1447, 2×31 | `sf` |
-| `empty_cube_frequency` | `f` | 1×152 | `f` |
-| `encounter_type` | `s` | 1×7 | `s` |
-| `endpause` | `f` | 1×786 | `f` |
-| `energy_damage` | `f` | 1×523 | `i` |
-| `envmap_material` | `s` | 1×178 | `s` |
-| `equip_amount` | `i` | 1×4 | `i` |
-| `equipment` | `s` | 1×821 | `s` |
-| `exclude_billboards` | `f` | 1×165 | `i` |
-| `exclude_dynamic_asteroids` | `f` | 1×11 | `i` |
-| `exclusion` | `s` | 1×634 | `s` |
-| `exclusion_tint` | `f f f` | 3×43 | `iii` |
-| `explosion_arch` | `s` | 1×310 | `s` |
-| `explosion_offset` | `f` | 1×9 | `i` |
-| `explosion_resistance` | `f` | 1×655 | `f` |
-| `explosions` | `s` | 1×1 | `s` |
-| `exterior_sound_name` | `s` | — | `—` |
-| `extra_shadow_height_offset` | `f` | — | `—` |
-| `faction` | `s f` | 2×7156, 1×983, 17×43 | `sfssss` |
-| `female_speaker_offset` | `f f` | 3×1 | `iff` |
-| `file` | `s` | 1×3095 | `s` |
-| `fire_failed_delay` | `f` | — | `—` |
-| `fire_failed_sound` | `s` | — | `—` |
-| `flash_particle_name` | `s` | 1×445 | `s` |
-| `flash_radius` | `f` | 1×447 | `i` |
-| `flee_when_hull_damaged_percent` | `f` | 1×51 | `f` |
-| `fog_far` | `f` | 1×100 | `i` |
-| `font` | `s +i` | 1×36, 3×8 | `isi` |
-| `force_gun_ori` | `b` | 1×529 | `s` |
-| `formation` | `f f/s?` | 1×190, 2×158, 6×7 | `ssiisi` |
-| `formation_position` | `f` | — | `—` |
-| `fovx` | `f` | 1×4 | `i` |
-| `fps` | `f` | — | `—` |
-| `frame` | `f f f f f` | 5×72 | `fiiif` |
-| `free_ammo` | `s i` | 2×32 | `si` |
-| `fuse` | `s f f` | 3×553, 1×74 | `sfi` |
-| `fuses` | `s` | 1×16 | `s` |
-| `gap` | `f` | 1×226 | `f` |
-| `generic_priority` | `f` | 1×45 | `f` |
-| `golem_angular_damp_factor` | `f` | — | `—` |
-| `golem_child_angular_damp` | `f f` | — | `—` |
-| `golem_child_linear_damp` | `f` | — | `—` |
-| `golem_child_mass` | `f` | — | `—` |
-| `golem_damp_factor` | `f` | — | `—` |
-| `golem_delta_orientation` | `f` | — | `—` |
-| `golem_force_factor` | `f` | — | `—` |
-| `golem_max_delta_position` | `f` | — | `—` |
-| `golem_max_torque` | `f` | — | `—` |
-| `golem_max_translation_force` | `f f` | — | `—` |
-| `golem_torque_factor` | `f` | — | `—` |
-| `good_buy_price` | `f` | 1×40 | `f` |
-| `good_sell_price` | `f` | 1×40 | `f` |
-| `goods` | `s` | 1×5 | `s` |
-| `goodscart_script` | `s?` | 1×19 | `s` |
-| `goto` | `s s` | 3×239 | `sss` |
-| `group` | `s` | 1×55 | `s` |
-| `group_dmg_hp` | `s` | 1×46 | `s` |
-| `group_dmg_obj` | `s` | 1×46 | `s` |
-| `groups` | `s` | 1×1 | `s` |
-| `gun_azimuth` | `f f` | — | `—` |
-| `gun_elevation` | `f f` | — | `—` |
-| `hardpoint` | `s` | 1×7436, 0×14 | `s` |
-| `health` | `f` | 1×4 | `f` |
-| `hidden` | `b` | — | `—` |
-| `hit_pts` | `f/i` | 1×2219 | `i` |
-| `hit_pts_scale` | `f` | 1×24 | `f` |
-| `hold_size` | `f` | 1×69 | `i` |
-| `house` | `s +f` | 2×110 | `fs` |
-| `hp_bay_external` | `s` | 1×64 | `s` |
-| `hp_bay_surface` | `s` | 1×64 | `s` |
-| `hp_child` | `s` | 1×718 | `s` |
-| `hp_gun_type` | `s?` | 1×266 | `s` |
-| `hp_particles` | `s` | 1×6 | `s` |
-| `hp_shield_type` | `s?` | — | `—` |
-| `hp_tractor_source` | `s` | 1×68 | `s` |
-| `hp_trail_parent` | `s` | 1×76 | `s` |
-| `hp_type` | `s` | 1×636, 2×461, 7×101 | `ssssss` |
-| `hull` | `s` | 1×31 | `s` |
-| `hull_damage` | `f` | 1×530 | `f` |
-| `hull_damage_factor` | `f` | 1×1 | `f` |
-| `icolor` | `f f f` | 3×857 | `iii` |
-| `id` | `s` | 1×92 | `s` |
-| `ids_info` | `f/i` | 1×4994 | `i` |
-| `ids_info1` | `i` | 1×33 | `i` |
-| `ids_info2` | `i` | 1×33 | `i` |
-| `ids_info3` | `i` | 1×33 | `i` |
-| `ids_name` | `i` | 1×5094 | `i` |
-| `ids_short_name` | `f` | 1×55 | `i` |
-| `implemented` | `b` | 1×4 | `s` |
-| `impulse` | `f` | 1×86 | `i` |
-| `indestructible` | `b` | 1×60 | `s` |
-| `inherit` | `s` | 1×348 | `s` |
-| `initstate` | `s` | 1×16 | `s` |
-| `innards_debris_num` | `f` | 1×22 | `i` |
-| `innards_debris_object` | `s` | 1×109 | `s` |
-| `innards_debris_radius` | `f` | 1×22 | `i` |
-| `innards_debris_start_time` | `f` | 1×47 | `f` |
-| `inside_cone_angle` | `f` | — | `—` |
-| `inside_sound_cone` | `f` | 1×60 | `i` |
-| `intensity_fade_in` | `f` | 1×36 | `i` |
-| `intensity_fade_out` | `f` | 1×36 | `i` |
-| `interference` | `f` | 1×59 | `f` |
-| `interior_sound_name` | `s` | — | `—` |
-| `italic` | `b` | 1×15 | `s` |
-| `item_icon` | `s` | 1×762 | `s` |
-| `jettisoned_cargo_velocity` | `f` | — | `—` |
-| `jump_dist` | `i` | 1×40 | `i` |
-| `jump_out_hp` | `s` | 1×9 | `s` |
-| `justify` | `s` | 1×1 | `s` |
-| `key` | `s` | 1×225, 2×49 | `ss` |
-| `label` | `s` | 1×2165 | `s` |
-| `landing_script` | `s` | 1×29 | `s` |
-| `launching_script` | `s` | 1×29 | `s` |
-| `lens_flare` | `s` | 1×32 | `s` |
-| `lens_glow` | `s` | 1×34 | `s` |
-| `lifetime` | `f f?` | 1×834, 2×174 | `ff` |
-| `light_anim` | `s` | 1×457 | `s` |
-| `linear_drag` | `f` | 1×183 | `f` |
-| `linked_equip` | `s f` | — | `—` |
-| `loadout` | `s` | 1×2617 | `s` |
-| `loadouts` | `s` | 1×4 | `s` |
-| `local_faction` | `s` | 1×248 | `s` |
-| `location` | `i` | 2×68 | `ss` |
-| `log` | `s` | 2×7, 3×2 | `ssi` |
-| `loot_appearance` | `s` | 1×139 | `s` |
-| `loot_owner_safe_time` | `f` | — | `—` |
-| `loot_unseen_life_time` | `f` | — | `—` |
-| `loot_unseen_radius` | `f` | — | `—` |
-| `lootable` | `b` | 1×692 | `s` |
-| `male_speaker_offset` | `f f` | 3×1 | `iff` |
-| `maneuver` | `s` | 5×4 | `siiss` |
-| `map` | `f f f? f? f?` | 3×4752, 2×472 | `isi` |
-| `marketgood` | `f? f? i? i? i +s` | 7×12865, 8×1829, 3×626 | `siiiii` |
-| `markets` | `s` | 1×3 | `s` |
-| `mass` | `f` | 1×2422 | `i` |
-| `material_elasticity` | `f` | 1×1 | `f` |
-| `material_friction` | `f` | 1×1 | `f` |
-| `material_library` | `i/s?` | 1×2660 | `s` |
-| `max_alpha` | `f` | 1×94 | `f` |
-| `max_angular_velocity` | `f` | 1×216 | `f` |
-| `max_bank_angle` | `f` | 1×36 | `i` |
-| `max_capacity` | `f` | 1×126 | `i` |
-| `max_delta_fx_throttle` | `f` | 1×1 | `f` |
-| `max_engine_fx_throttle` | `f` | — | `—` |
-| `max_force` | `f` | 1×66 | `i` |
-| `max_impact_speed` | `f` | — | `—` |
-| `max_length` | `f` | 1×1 | `i` |
-| `max_player_ammo` | `f` | — | `—` |
-| `max_range` | `f` | — | `—` |
-| `max_spawned_mindist_count` | `f` | — | `—` |
-| `max_volume_force` | `f` | — | `—` |
-| `maximum_leader_target_distance` | `f` | 1×32 | `i` |
-| `mesh` | `s` | 1×355, 0×1 | `s` |
-| `min_range` | `f` | — | `—` |
-| `min_time_between_collisions` | `f` | — | `—` |
-| `min_volume_force` | `f` | — | `—` |
-| `mission_offer` | `i` | 1×4 | `i` |
-| `mission_property` | `s` | 1×65 | `s` |
-| `mission_title` | `i` | 1×4 | `i` |
-| `money` | `f` | 1×3 | `i` |
-| `motor` | `s` | 1×76 | `s` |
-| `msg_id_prefix` | `s` | 1×609 | `s` |
-| `munition_hit_effect` | `s` | 1×434 | `s` |
-| `music` | `s s?` | 1×341, 2×22 | `ss` |
-| `music_cross_fade_delay` | `f` | 1×1 | `f` |
-| `muzzle_cone_angle` | `f` | 1×1 | `i` |
-| `muzzle_velocity` | `f` | 1×526 | `i` |
-| `name` | `i +s` | 1×5050 | `s` |
-| `nanobot_limit` | `i` | 1×31 | `i` |
-| `navmapscale` | `f` | 1×37 | `i` |
-| `newchardb` | `s` | 1×1 | `s` |
-| `next_ring` | `s` | 1×925 | `s` |
-| `nextb_hp` | `s` | — | `—` |
-| `nextb_mesh` | `s` | — | `—` |
-| `nextb_mouse` | `f f` | — | `—` |
-| `nextb_no_mesh_render` | `f` | — | `—` |
-| `nextb_offset` | `f f` | — | `—` |
-| `nickname` | `f/s f f f f f` | 1×31412 | `s` |
-| `no_z_enable` | `f` | 1×13 | `i` |
-| `node_id` | `i` | 1×239 | `i` |
-| `nomad` | `b` | 1×4 | `s` |
-| `nooffer_text_id` | `i` | 1×10 | `i` |
-| `npc_class` | `—` | 3×254, 2×229, 1×35 | `ssssss` |
-| `npc_ship_file` | `s` | 1×14 | `s` |
-| `npcrank` | `f? +i` | 9×17, 2×6, 7×1 | `ifffff` |
-| `nudge_force` | `f` | 1×69 | `f` |
-| `num_child_pieces` | `f` | 1×24 | `i` |
-| `num_exhaust_nozzles` | `i` | 1×69 | `i` |
-| `num_to_drop` | `—` | 2×164, 1×103 | `ii` |
-| `numlights` | `f` | 1×49 | `i` |
-| `obj` | `s` | 1×872 | `s` |
-| `object` | `s` | 1×1 | `s` |
-| `object_pos` | `f f f` | — | `—` |
-| `object_ypr` | `f f f` | — | `—` |
-| `offline_rebuild_time` | `f` | 1×126 | `i` |
-| `offline_threshold` | `f` | 1×126 | `f` |
-| `offset` | `f f f` | 3×13 | `fff` |
-| `one_shot_sound` | `s` | 1×526 | `s` |
-| `open_anim` | `s` | 1×2 | `s` |
-| `open_sound` | `s` | 1×36 | `s` |
-| `operating_effect` | `s` | 1×1 | `s` |
-| `orientation` | `f f? f f` | 4×332 | `ffff` |
-| `outside_cone_angle` | `f` | — | `—` |
-| `outside_cone_attenuation` | `f` | 1×60 | `i` |
-| `outside_sound_cone` | `f` | 1×60 | `i` |
-| `owner_safe_time` | `f` | 1×13 | `i` |
-| `package` | `s` | 1×1 | `s` |
-| `page_size` | `f` | — | `—` |
-| `parent` | `s` | 1×269 | `s` |
-| `parent_impulse` | `f` | 1×1118 | `i` |
-| `particle_effect` | `s` | 1×3 | `s` |
-| `particles` | `s` | 1×61 | `s` |
-| `path` | `s?` | 8×924, 7×865, 9×846 | `ssssss` |
-| `pbubble` | `f f` | 2×45 | `ii` |
-| `permutation` | `s` | 2×54, 3×2 | `iii` |
-| `petaldb` | `s` | 1×1 | `s` |
-| `phantom_physics` | `b` | 1×10 | `s` |
-| `physical_sim_rate` | `f` | — | `—` |
-| `pilot` | `s` | 1×2208 | `s` |
-| `pilot_id` | `i` | — | `—` |
-| `player_attached_equip_hit_pts_scale` | `f` | 1×1 | `i` |
-| `player_collision_group_hit_pts_scale` | `f` | 1×1 | `i` |
-| `pod_appearance` | `s` | 1×102 | `s` |
-| `point` | `f f` | 2×56 | `ii` |
-| `pos` | `f f f?` | 3×10087, 9×71, 2×53 | `iiiifi` |
-| `pos_offset` | `f f f` | 3×990 | `iii` |
-| `position` | `f f f` | 3×520 | `iii` |
-| `power_usage` | `f` | 1×575 | `i` |
-| `preload` | `s` | — | `—` |
-| `prev_ring` | `s` | 1×925 | `s` |
-| `prevb_hp` | `s` | — | `—` |
-| `prevb_mesh` | `s` | — | `—` |
-| `prevb_mouse` | `f f` | — | `—` |
-| `prevb_no_mesh_render` | `f` | — | `—` |
-| `prevb_offset` | `f f` | — | `—` |
-| `price` | `i` | 1×824 | `i` |
-| `price_variance` | `f` | — | `—` |
-| `priority` | `f` | 1×17021 | `i` |
-| `process` | `s` | 1×156 | `s` |
-| `projectile_archetype` | `s` | 1×526 | `s` |
-| `property_flags` | `i` | 1×835 | `i` |
-| `property_fog_color` | `f f` | 3×182 | `fff` |
-| `radius` | `f` | 1×649 | `i` |
-| `range` | `f` | 2×369, 1×157 | `ii` |
-| `rank` | `i` | 2×403, 1×2 | `ss` |
-| `rank_diff` | `s` | 2×9 | `sf` |
-| `rc_max_delta_orientation` | `f` | — | `—` |
-| `rc_max_delta_position` | `f` | — | `—` |
-| `reach_speed` | `f` | 1×1 | `i` |
-| `real_pos` | `f f` | — | `—` |
-| `rebuild_power_draw` | `f` | 1×126 | `i` |
-| `recharge_time` | `f` | 1×13 | `f` |
-| `rect_color` | `f f f f` | — | `—` |
-| `refire_delay` | `f` | 1×526 | `f` |
-| `regeneration_rate` | `f` | 1×126 | `f` |
-| `rel_pos_obj` | `s` | 1×3 | `s` |
-| `rel_pos_offset` | `f f f` | 3×3 | `iii` |
-| `rep` | `s` | 2×3025 | `is` |
-| `rep_group` | `s` | 1×1 | `s` |
-| `repair_rate` | `f` | — | `—` |
-| `repeatable` | `b` | 1×35 | `s` |
-| `reputation` | `s` | 1×2124 | `s` |
-| `requires_ammo` | `b` | 1×526 | `s` |
-| `reverse_fraction` | `f` | 1×60 | `f` |
-| `reward` | `i` | 1×1 | `i` |
-| `rmgr_look_ahead_max_distance_intra` | `f` | — | `—` |
-| `rmgr_look_ahead_max_distance_world` | `f` | — | `—` |
-| `rmgr_look_ahead_max_radius_intra` | `f` | — | `—` |
-| `rmgr_look_ahead_max_radius_world` | `f` | — | `—` |
-| `rmgr_look_ahead_min_distance_intra` | `f` | — | `—` |
-| `rmgr_look_ahead_min_distance_world` | `f` | — | `—` |
-| `rmgr_look_ahead_min_seconds_intra` | `f` | — | `—` |
-| `rmgr_look_ahead_min_seconds_world` | `f` | — | `—` |
-| `rmgr_look_ahead_time_intra` | `f` | — | `—` |
-| `rmgr_look_ahead_time_world` | `f` | — | `—` |
-| `room_switch` | `s` | 1×1879 | `s` |
-| `root_health_proxy` | `b` | 1×329 | `s` |
-| `rot_speed` | `f f f` | — | `—` |
-| `rotate` | `f f f` | 3×6229 | `iii` |
-| `rotation_inertia` | `f f f` | 3×71 | `fff` |
-| `rpop_solar_detection` | `b` | 1×1 | `s` |
-| `rtcslider` | `s` | 1×1 | `s` |
-| `run_time` | `f` | 1×45 | `i` |
-| `scale` | `f` | 1×921 | `f` |
-| `seek_dist` | `f` | 1×10 | `i` |
-| `seeker` | `s` | 1×76 | `s` |
-| `seeker_fov_deg` | `f` | 1×71 | `i` |
-| `seeker_range` | `f` | 1×71 | `i` |
-| `separation_explosion` | `s` | 1×761 | `s` |
-| `set` | `s? f?` | 2×38 | `sf` |
-| `set_less` | `s? f?` | 2×4 | `sf` |
-| `set_script` | `s` | 1×443 | `s` |
-| `set_virtual_room` | `s` | 1×350 | `s` |
-| `setpoint` | `s` | — | `—` |
-| `sex` | `s` | 1×7 | `s` |
-| `shape` | `s` | 1×6270 | `s` |
-| `shape_name` | `s` | 1×362 | `s` |
-| `shell_scalar` | `f` | 1×25 | `f` |
-| `shield_battery_limit` | `i` | 1×31 | `i` |
-| `shield_collapse_particle` | `s` | 1×3 | `s` |
-| `shield_collapse_sound` | `s` | 1×126 | `s` |
-| `shield_hit_effects` | `f/s` | 2×372 | `is` |
-| `shield_link` | `s?` | 3×43 | `sss` |
-| `shield_mod` | `f +s` | 2×189 | `sf` |
-| `shield_rebuilt_sound` | `s` | 1×126 | `s` |
-| `shield_type` | `s` | 1×121 | `s` |
-| `ship` | `s` | 1×874 | `s` |
-| `ship_class` | `i` | 1×33 | `i` |
-| `ship_lrg_01` | `s` | — | `—` |
-| `ship_lrg_02` | `s` | — | `—` |
-| `ship_lrg_03` | `s` | — | `—` |
-| `ship_mdm_01` | `s` | — | `—` |
-| `ship_mdm_02` | `s` | — | `—` |
-| `ship_mdm_03` | `s` | — | `—` |
-| `ship_repair_cost` | `f` | — | `—` |
-| `ship_sml_01` | `s` | — | `—` |
-| `ship_sml_02` | `s` | — | `—` |
-| `ship_sml_03` | `s` | — | `—` |
-| `ships` | `s` | 1×2 | `s` |
-| `shop_archetype` | `s` | 1×727 | `s` |
-| `show_rect` | `f` | — | `—` |
-| `show_wireframe` | `f` | — | `—` |
-| `size` | `f?` | 2×3410, 1×1877, 3×593 | `iii` |
-| `sizex` | `f` | — | `—` |
-| `skipmachinewarnings` | `b` | — | `—` |
-| `slider_behavior` | `f` | — | `—` |
-| `snd_cargo_jettisoned` | `s` | — | `—` |
-| `solar` | `s` | 1×21 | `s` |
-| `solar_radius` | `f` | 1×316 | `i` |
-| `space` | `s` | 1×54 | `s` |
-| `space_costume` | `s?` | 3×699, 2×195 | `sss` |
-| `spacedust` | `s` | 1×324 | `s` |
-| `spacedust_maxparticles` | `i` | 1×262 | `i` |
-| `speaker_rotate` | `f f` | 3×1 | `iii` |
-| `spin` | `f f f` | 3×66, 1×10 | `iii` |
-| `spines` | `s` | 1×29 | `s` |
-| `star_glow` | `s` | 1×38 | `s` |
-| `start_room` | `s` | 1×215 | `s` |
-| `start_script` | `s` | 1×208 | `s` |
-| `state_read` | `f` | 1×961 | `i` |
-| `state_send` | `f` | 1×961 | `i` |
-| `steering_torque` | `f f f` | 3×69 | `fff` |
-| `strafe_force` | `f` | 1×34 | `i` |
-| `strafe_power_usage` | `f` | 1×34 | `i` |
-| `strid_desc` | `f` | 1×1 | `i` |
-| `strid_name` | `f/i` | 1×251 | `i` |
-| `string_id` | `i` | 1×242 | `i` |
-| `surface_hit_effects` | `s? +f` | 4×207, 2×53 | `isss` |
-| `switch` | `f f` | 2×42 | `if` |
-| `system` | `s` | 1×2436, 0×2 | `s` |
-| `target_ship_name` | `s` | 1×6 | `s` |
-| `target_tradelane` | `i` | — | `—` |
-| `target_tradelane_name` | `s` | — | `—` |
-| `terrain_dyna_01` | `s` | 1×32 | `s` |
-| `terrain_dyna_02` | `s` | 1×32 | `s` |
-| `terrain_lrg` | `s` | 1×51 | `s` |
-| `terrain_mdm` | `s` | 1×51 | `s` |
-| `terrain_sml` | `s` | 1×51 | `s` |
-| `terrain_tiny` | `s` | 1×51 | `s` |
-| `teststring` | `s` | — | `—` |
-| `testvalue` | `f` | — | `—` |
-| `throttle_atten_mod_range` | `f` | 1×1 | `f` |
-| `throttle_steady_time` | `f` | 1×1 | `f` |
-| `thrust_capacity` | `f` | 1×32 | `i` |
-| `thrust_charge_rate` | `f` | 1×32 | `i` |
-| `thumb` | `s` | 1×1 | `s` |
-| `thumb_hp0` | `s` | — | `—` |
-| `thumb_hp1` | `s` | — | `—` |
-| `thumb_mesh` | `s` | — | `—` |
-| `thumb_mouse` | `f f` | — | `—` |
-| `thumb_no_mesh_render` | `f` | — | `—` |
-| `thumb_offset0` | `f f` | — | `—` |
-| `thumb_offset1` | `f f` | — | `—` |
-| `time_to_lock` | `f` | 1×71 | `i` |
-| `tl_attack_chance_read_in` | `i` | — | `—` |
-| `tool_tip_id` | `f` | 1×1 | `i` |
-| `top_speed` | `f` | 1×10 | `i` |
-| `toughness` | `i` | 1×4452 | `i` |
-| `tractor_complete_snd` | `s` | 1×1 | `s` |
-| `tractored_explosion` | `s` | — | `—` |
-| `tradelane_space_name` | `i` | 1×271 | `i` |
-| `turn_rate` | `f` | 1×513 | `i` |
-| `turret_sound` | `s` | — | `—` |
-| `type` | `s` | 1×2041, 8×179, 2×116 | `ssiiii` |
-| `underline` | `b` | 1×15 | `s` |
-| `units_per_container` | `i` | 1×139 | `i` |
-| `universe` | `s` | 1×1 | `s` |
-| `use_animation` | `s` | 1×245 | `s` |
-| `use_count` | `b` | — | `—` |
-| `use_sound` | `s` | 1×27 | `s` |
-| `use_throttle` | `b` | 1×1 | `s` |
-| `velocity` | `f f f` | 3×4 | `iii` |
-| `version` | `f` | — | `—` |
-| `video_fovx` | `f` | 1×1 | `i` |
-| `view_position` | `f f` | 3×1 | `fff` |
-| `viewsize` | `f f f` | — | `—` |
-| `virtual_room` | `s` | 1×1137 | `s` |
-| `visit` | `i/s` | 1×1259, 2×25 | `ii` |
-| `voice` | `s` | 1×2370, 2×6 | `ss` |
-| `volume` | `f` | 1×1527 | `f` |
-| `walla_max_dist` | `f` | 1×1 | `f` |
-| `walla_max_dist_atten` | `f` | 1×1 | `f` |
-| `walla_priority_cutoff` | `f` | 1×1 | `i` |
-| `walla_start_atten` | `f` | 1×1 | `f` |
-| `weapon_type` | `s` | 1×229 | `s` |
-| `weaponmoddb` | `s` | 1×1 | `s` |
-| `wire_color` | `f f f f` | — | `—` |
-| `xaxis_rotation` | `f` | 4×21 | `iiii` |
-| `yaxis_rotation` | `f` | 4×21 | `iiii` |
-| `zaxis_rotation` | `f` | 4×21 | `iiii` |
-| `zone` | `s` | 1×291 | `s` |
-| `zone_occlusion_fade_in` | `f` | 1×36 | `f` |
-| `zone_occlusion_fade_out` | `f` | 1×36 | `f` |
-| `zone_shell` | `s` | 1×86 | `s` |
+| Property                                   | Declared           | Retail arity           | Recorded |
+| ------------------------------------------ | ------------------ | ---------------------- | -------- |
+| `accel`                                    | `f`                | 1×76                   | `f`      |
+| `acceleration`                             | `f`                | 1×10                   | `i`      |
+| `accessory`                                | `s`                | 1×232                  | `s`      |
+| `action`                                   | `s`                | 1×43                   | `s`      |
+| `activation_type`                          | `f f f f +s`       | 3×6, 5×1               | `siiii`  |
+| `active_effect`                            | `s`                | —                      | `—`      |
+| `addon`                                    | `s s i s?`         | 3×507                  | `ssi`    |
+| `ai_range`                                 | `f`                | 1×3                    | `i`      |
+| `always_on`                                | `b`                | 1×2                    | `s`      |
+| `ambient`                                  | `s s?`             | 1×436, 3×64, 2×2       | `sii`    |
+| `angular_drag`                             | `f f f`            | 3×110                  | `fff`    |
+| `angular_velocity`                         | `f f f`            | —                      | `—`      |
+| `anim`                                     | `s`                | 1×28, 3×19             | `sii`    |
+| `animated_textures`                        | `b`                | 1×1                    | `s`      |
+| `animation`                                | `s`                | 1×162, 0×2             | `s`      |
+| `animation_oneshot`                        | `s`                | —                      | `—`      |
+| `anom_limits_max_angular_velocity_per_psi` | `f`                | —                      | `—`      |
+| `anom_limits_max_velocity`                 | `f`                | —                      | `—`      |
+| `archetype`                                | `s`                | 1×4563                 | `s`      |
+| `asteroid`                                 | `f f f +s`         | 7×740, 1×145, 8×70     | `sfffii` |
+| `asteroids`                                | `s`                | 1×1                    | `s`      |
+| `at_t`                                     | `f f?`             | 1×1907, 2×17           | `ff`     |
+| `atmosphere_range`                         | `f`                | 1×127                  | `i`      |
+| `attached`                                 | `b`                | 1×938                  | `s`      |
+| `attachment_archetype`                     | `s`                | —                      | `—`      |
+| `attacker_rep`                             | `i`                | —                      | `—`      |
+| `attacker_rep_name`                        | `s`                | 1×7                    | `s`      |
+| `auto_turret`                              | `b`                | 1×513                  | `s`      |
+| `autosave_forbidden`                       | `b`                | 1×4                    | `s`      |
+| `back_hp`                                  | `s`                | —                      | `—`      |
+| `back_mesh`                                | `s`                | —                      | `—`      |
+| `back_mouse`                               | `f f`              | —                      | `—`      |
+| `back_no_mesh_render`                      | `f`                | —                      | `—`      |
+| `back_offset`                              | `f f`              | —                      | `—`      |
+| `backdrop`                                 | `s`                | 1×1                    | `s`      |
+| `bad_buy_price`                            | `f`                | 1×40                   | `f`      |
+| `bad_sell_price`                           | `f`                | 1×40                   | `f`      |
+| `base`                                     | `s`                | 1×5741                 | `s`      |
+| `bay_door_anim`                            | `s`                | 1×44                   | `s`      |
+| `behavior`                                 | `s`                | 1×5346, 0×1            | `s`      |
+| `bgcs_base_run_by`                         | `s`                | 1×169                  | `s`      |
+| `billboard_count`                          | `f`                | 1×2                    | `i`      |
+| `blink`                                    | `f`                | 1×857                  | `f`      |
+| `body`                                     | `s`                | 1×1728                 | `s`      |
+| `body.anim`                                | `s`                | 1×1                    | `s`      |
+| `body_hardpoint`                           | `s`                | 1×106                  | `s`      |
+| `bodyparts`                                | `s`                | 1×1                    | `s`      |
+| `bold`                                     | `b`                | 1×15                   | `s`      |
+| `bonuslootdropchance`                      | `f`                | 1×1                    | `f`      |
+| `can_dock`                                 | `b`                | —                      | `—`      |
+| `can_jettison`                             | `b`                | 1×4                    | `s`      |
+| `can_tl`                                   | `b`                | —                      | `—`      |
+| `capacity`                                 | `f`                | 1×164                  | `i`      |
+| `cargo_scan_range`                         | `f`                | 1×2                    | `i`      |
+| `category`                                 | `s`                | 1×1258                 | `s`      |
+| `charge_rate`                              | `f`                | 1×164                  | `i`      |
+| `chatter_max_dist`                         | `f`                | 1×1                    | `f`      |
+| `chatter_max_dist_atten`                   | `f`                | 1×1                    | `f`      |
+| `chatter_start_atten`                      | `f`                | 1×1                    | `f`      |
+| `child_impulse`                            | `f`                | 1×1146                 | `i`      |
+| `child_node`                               | `i`                | 1×309                  | `i`      |
+| `cloakin_fx`                               | `s`                | 1×9                    | `s`      |
+| `cloakin_time`                             | `f`                | 1×9                    | `i`      |
+| `cloakout_fx`                              | `s`                | 1×9                    | `s`      |
+| `cloakout_time`                            | `f`                | 1×9                    | `i`      |
+| `close_sound`                              | `s`                | 1×36                   | `s`      |
+| `cnd_npcsystementer`                       | `—`                | 2×7, 3×5, 6×5          | `ssssss` |
+| `cnd_npcsystemexit`                        | `s`                | —                      | `—`      |
+| `collision_damage_factor`                  | `f`                | 1×1                    | `f`      |
+| `color`                                    | `f f f`            | 3×443, 4×6             | `iiii`   |
+| `combinable`                               | `b`                | 1×792                  | `s`      |
+| `comm`                                     | `s`                | 1×1                    | `s`      |
+| `comm.anim`                                | `s`                | 2×1                    | `ss`     |
+| `comm_appr`                                | `s`                | —                      | `—`      |
+| `comm_conflict_priority_cutoff`            | `f`                | 1×1                    | `i`      |
+| `comm_player_far_dist`                     | `f`                | 1×1                    | `f`      |
+| `comm_player_far_dist_atten`               | `f`                | 1×1                    | `f`      |
+| `const_effect`                             | `s`                | 1×526                  | `s`      |
+| `const_effect_delay`                       | `f`                | —                      | `—`      |
+| `constant_power_draw`                      | `f`                | 1×126                  | `i`      |
+| `constants`                                | `s`                | 1×1                    | `s`      |
+| `content.dll`                              | `i`                | —                      | `—`      |
+| `costumes`                                 | `s`                | 1×1                    | `s`      |
+| `count`                                    | `f`                | 1×244                  | `i`      |
+| `cruise_accel_time`                        | `f`                | —                      | `—`      |
+| `cruise_atten_mod_range`                   | `f`                | 1×1                    | `f`      |
+| `cruise_charge_time`                       | `f`                | 1×60                   | `i`      |
+| `cruise_disrupt_time`                      | `f`                | 1×1                    | `i`      |
+| `cruise_disruptor`                         | `b`                | 1×3                    | `s`      |
+| `cruise_drag`                              | `f`                | —                      | `—`      |
+| `cruise_power_usage`                       | `f`                | 1×60                   | `i`      |
+| `cruise_steady_time`                       | `f`                | 1×1                    | `f`      |
+| `cruising_speed`                           | `f`                | —                      | `—`      |
+| `cutoff_shadow_z`                          | `f`                | —                      | `—`      |
+| `damage`                                   | `s f`              | 1×185                  | `i`      |
+| `damage_per_fire`                          | `f`                | 1×523                  | `i`      |
+| `death_fuse`                               | `b`                | 1×105                  | `s`      |
+| `debris_impulse`                           | `f`                | 1×49                   | `i`      |
+| `debris_type`                              | `s i?`             | 1×1156, 2×133          | `sf`     |
+| `decay_per_second`                         | `f`                | 1×105                  | `i`      |
+| `default_angular_damping`                  | `f`                | 3×1                    | `fff`    |
+| `default_linear_damping`                   | `f`                | 1×1                    | `f`      |
+| `delay`                                    | `f`                | 1×165                  | `i`      |
+| `delta_cruise_atten_mod_steady`            | `f`                | 1×1                    | `f`      |
+| `delta_throttle_atten_mod_changing`        | `f`                | 1×1                    | `f`      |
+| `delta_throttle_atten_mod_steady`          | `f`                | 1×1                    | `f`      |
+| `descrip_strid`                            | `i`                | —                      | `—`      |
+| `destroy_parent`                           | `—`                | —                      | `—`      |
+| `destructible`                             | `b`                | 1×77                   | `s`      |
+| `detect_radius`                            | `f`                | 1×9                    | `i`      |
+| `detonation_dist`                          | `f`                | 1×86                   | `i`      |
+| `diff2money`                               | `f`                | 2×23                   | `fi`     |
+| `difficulty_range`                         | `f`                | 2×143                  | `ii`     |
+| `dispersion_angle`                         | `f`                | —                      | `—`      |
+| `distance_render`                          | `f`                | 1×4                    | `i`      |
+| `diversion_pctg`                           | `f`                | 1×3                    | `i`      |
+| `dmg_obj`                                  | `s`                | 1×323                  | `s`      |
+| `dock_with`                                | `s`                | 1×260                  | `s`      |
+| `docking_camera`                           | `b`                | 1×44                   | `i`      |
+| `docking_light`                            | `b`                | 1×2                    | `s`      |
+| `docking_sphere`                           | `s s f s?`         | 3×162, 4×102           | `ssfs`   |
+| `drag_modifier`                            | `f`                | 1×1                    | `f`      |
+| `dry_fire_sound`                           | `s`                | 1×29                   | `s`      |
+| `dynamic_loot_commodity`                   | `s`                | 1×80                   | `s`      |
+| `dynamic_loot_container`                   | `s`                | 1×80                   | `s`      |
+| `dynamic_loot_count`                       | `f f`              | 2×80                   | `ii`     |
+| `dynamic_loot_difficulty`                  | `f`                | 1×80                   | `i`      |
+| `edge_fraction`                            | `f`                | 1×144                  | `f`      |
+| `effect`                                   | `s f?`             | 1×1447, 2×31           | `sf`     |
+| `empty_cube_frequency`                     | `f`                | 1×152                  | `f`      |
+| `encounter_type`                           | `s`                | 1×7                    | `s`      |
+| `endpause`                                 | `f`                | 1×786                  | `f`      |
+| `energy_damage`                            | `f`                | 1×523                  | `i`      |
+| `envmap_material`                          | `s`                | 1×178                  | `s`      |
+| `equip_amount`                             | `i`                | 1×4                    | `i`      |
+| `equipment`                                | `s`                | 1×821                  | `s`      |
+| `exclude_billboards`                       | `f`                | 1×165                  | `i`      |
+| `exclude_dynamic_asteroids`                | `f`                | 1×11                   | `i`      |
+| `exclusion`                                | `s`                | 1×634                  | `s`      |
+| `exclusion_tint`                           | `f f f`            | 3×43                   | `iii`    |
+| `explosion_arch`                           | `s`                | 1×310                  | `s`      |
+| `explosion_offset`                         | `f`                | 1×9                    | `i`      |
+| `explosion_resistance`                     | `f`                | 1×655                  | `f`      |
+| `explosions`                               | `s`                | 1×1                    | `s`      |
+| `exterior_sound_name`                      | `s`                | —                      | `—`      |
+| `extra_shadow_height_offset`               | `f`                | —                      | `—`      |
+| `faction`                                  | `s f`              | 2×7156, 1×983, 17×43   | `sfssss` |
+| `female_speaker_offset`                    | `f f`              | 3×1                    | `iff`    |
+| `file`                                     | `s`                | 1×3095                 | `s`      |
+| `fire_failed_delay`                        | `f`                | —                      | `—`      |
+| `fire_failed_sound`                        | `s`                | —                      | `—`      |
+| `flash_particle_name`                      | `s`                | 1×445                  | `s`      |
+| `flash_radius`                             | `f`                | 1×447                  | `i`      |
+| `flee_when_hull_damaged_percent`           | `f`                | 1×51                   | `f`      |
+| `fog_far`                                  | `f`                | 1×100                  | `i`      |
+| `font`                                     | `s +i`             | 1×36, 3×8              | `isi`    |
+| `force_gun_ori`                            | `b`                | 1×529                  | `s`      |
+| `formation`                                | `f f/s?`           | 1×190, 2×158, 6×7      | `ssiisi` |
+| `formation_position`                       | `f`                | —                      | `—`      |
+| `fovx`                                     | `f`                | 1×4                    | `i`      |
+| `fps`                                      | `f`                | —                      | `—`      |
+| `frame`                                    | `f f f f f`        | 5×72                   | `fiiif`  |
+| `free_ammo`                                | `s i`              | 2×32                   | `si`     |
+| `fuse`                                     | `s f f`            | 3×553, 1×74            | `sfi`    |
+| `fuses`                                    | `s`                | 1×16                   | `s`      |
+| `gap`                                      | `f`                | 1×226                  | `f`      |
+| `generic_priority`                         | `f`                | 1×45                   | `f`      |
+| `golem_angular_damp_factor`                | `f`                | —                      | `—`      |
+| `golem_child_angular_damp`                 | `f f`              | —                      | `—`      |
+| `golem_child_linear_damp`                  | `f`                | —                      | `—`      |
+| `golem_child_mass`                         | `f`                | —                      | `—`      |
+| `golem_damp_factor`                        | `f`                | —                      | `—`      |
+| `golem_delta_orientation`                  | `f`                | —                      | `—`      |
+| `golem_force_factor`                       | `f`                | —                      | `—`      |
+| `golem_max_delta_position`                 | `f`                | —                      | `—`      |
+| `golem_max_torque`                         | `f`                | —                      | `—`      |
+| `golem_max_translation_force`              | `f f`              | —                      | `—`      |
+| `golem_torque_factor`                      | `f`                | —                      | `—`      |
+| `good_buy_price`                           | `f`                | 1×40                   | `f`      |
+| `good_sell_price`                          | `f`                | 1×40                   | `f`      |
+| `goods`                                    | `s`                | 1×5                    | `s`      |
+| `goodscart_script`                         | `s?`               | 1×19                   | `s`      |
+| `goto`                                     | `s s`              | 3×239                  | `sss`    |
+| `group`                                    | `s`                | 1×55                   | `s`      |
+| `group_dmg_hp`                             | `s`                | 1×46                   | `s`      |
+| `group_dmg_obj`                            | `s`                | 1×46                   | `s`      |
+| `groups`                                   | `s`                | 1×1                    | `s`      |
+| `gun_azimuth`                              | `f f`              | —                      | `—`      |
+| `gun_elevation`                            | `f f`              | —                      | `—`      |
+| `hardpoint`                                | `s`                | 1×7436, 0×14           | `s`      |
+| `health`                                   | `f`                | 1×4                    | `f`      |
+| `hidden`                                   | `b`                | —                      | `—`      |
+| `hit_pts`                                  | `f/i`              | 1×2219                 | `i`      |
+| `hit_pts_scale`                            | `f`                | 1×24                   | `f`      |
+| `hold_size`                                | `f`                | 1×69                   | `i`      |
+| `house`                                    | `s +f`             | 2×110                  | `fs`     |
+| `hp_bay_external`                          | `s`                | 1×64                   | `s`      |
+| `hp_bay_surface`                           | `s`                | 1×64                   | `s`      |
+| `hp_child`                                 | `s`                | 1×718                  | `s`      |
+| `hp_gun_type`                              | `s?`               | 1×266                  | `s`      |
+| `hp_particles`                             | `s`                | 1×6                    | `s`      |
+| `hp_shield_type`                           | `s?`               | —                      | `—`      |
+| `hp_tractor_source`                        | `s`                | 1×68                   | `s`      |
+| `hp_trail_parent`                          | `s`                | 1×76                   | `s`      |
+| `hp_type`                                  | `s`                | 1×636, 2×461, 7×101    | `ssssss` |
+| `hull`                                     | `s`                | 1×31                   | `s`      |
+| `hull_damage`                              | `f`                | 1×530                  | `f`      |
+| `hull_damage_factor`                       | `f`                | 1×1                    | `f`      |
+| `icolor`                                   | `f f f`            | 3×857                  | `iii`    |
+| `id`                                       | `s`                | 1×92                   | `s`      |
+| `ids_info`                                 | `f/i`              | 1×4994                 | `i`      |
+| `ids_info1`                                | `i`                | 1×33                   | `i`      |
+| `ids_info2`                                | `i`                | 1×33                   | `i`      |
+| `ids_info3`                                | `i`                | 1×33                   | `i`      |
+| `ids_name`                                 | `i`                | 1×5094                 | `i`      |
+| `ids_short_name`                           | `f`                | 1×55                   | `i`      |
+| `implemented`                              | `b`                | 1×4                    | `s`      |
+| `impulse`                                  | `f`                | 1×86                   | `i`      |
+| `indestructible`                           | `b`                | 1×60                   | `s`      |
+| `inherit`                                  | `s`                | 1×348                  | `s`      |
+| `initstate`                                | `s`                | 1×16                   | `s`      |
+| `innards_debris_num`                       | `f`                | 1×22                   | `i`      |
+| `innards_debris_object`                    | `s`                | 1×109                  | `s`      |
+| `innards_debris_radius`                    | `f`                | 1×22                   | `i`      |
+| `innards_debris_start_time`                | `f`                | 1×47                   | `f`      |
+| `inside_cone_angle`                        | `f`                | —                      | `—`      |
+| `inside_sound_cone`                        | `f`                | 1×60                   | `i`      |
+| `intensity_fade_in`                        | `f`                | 1×36                   | `i`      |
+| `intensity_fade_out`                       | `f`                | 1×36                   | `i`      |
+| `interference`                             | `f`                | 1×59                   | `f`      |
+| `interior_sound_name`                      | `s`                | —                      | `—`      |
+| `italic`                                   | `b`                | 1×15                   | `s`      |
+| `item_icon`                                | `s`                | 1×762                  | `s`      |
+| `jettisoned_cargo_velocity`                | `f`                | —                      | `—`      |
+| `jump_dist`                                | `i`                | 1×40                   | `i`      |
+| `jump_out_hp`                              | `s`                | 1×9                    | `s`      |
+| `justify`                                  | `s`                | 1×1                    | `s`      |
+| `key`                                      | `s`                | 1×225, 2×49            | `ss`     |
+| `label`                                    | `s`                | 1×2165                 | `s`      |
+| `landing_script`                           | `s`                | 1×29                   | `s`      |
+| `launching_script`                         | `s`                | 1×29                   | `s`      |
+| `lens_flare`                               | `s`                | 1×32                   | `s`      |
+| `lens_glow`                                | `s`                | 1×34                   | `s`      |
+| `lifetime`                                 | `f f?`             | 1×834, 2×174           | `ff`     |
+| `light_anim`                               | `s`                | 1×457                  | `s`      |
+| `linear_drag`                              | `f`                | 1×183                  | `f`      |
+| `linked_equip`                             | `s f`              | —                      | `—`      |
+| `loadout`                                  | `s`                | 1×2617                 | `s`      |
+| `loadouts`                                 | `s`                | 1×4                    | `s`      |
+| `local_faction`                            | `s`                | 1×248                  | `s`      |
+| `location`                                 | `i`                | 2×68                   | `ss`     |
+| `log`                                      | `s`                | 2×7, 3×2               | `ssi`    |
+| `loot_appearance`                          | `s`                | 1×139                  | `s`      |
+| `loot_owner_safe_time`                     | `f`                | —                      | `—`      |
+| `loot_unseen_life_time`                    | `f`                | —                      | `—`      |
+| `loot_unseen_radius`                       | `f`                | —                      | `—`      |
+| `lootable`                                 | `b`                | 1×692                  | `s`      |
+| `male_speaker_offset`                      | `f f`              | 3×1                    | `iff`    |
+| `maneuver`                                 | `s`                | 5×4                    | `siiss`  |
+| `map`                                      | `f f f? f? f?`     | 3×4752, 2×472          | `isi`    |
+| `marketgood`                               | `f? f? i? i? i +s` | 7×12865, 8×1829, 3×626 | `siiiii` |
+| `markets`                                  | `s`                | 1×3                    | `s`      |
+| `mass`                                     | `f`                | 1×2422                 | `i`      |
+| `material_elasticity`                      | `f`                | 1×1                    | `f`      |
+| `material_friction`                        | `f`                | 1×1                    | `f`      |
+| `material_library`                         | `i/s?`             | 1×2660                 | `s`      |
+| `max_alpha`                                | `f`                | 1×94                   | `f`      |
+| `max_angular_velocity`                     | `f`                | 1×216                  | `f`      |
+| `max_bank_angle`                           | `f`                | 1×36                   | `i`      |
+| `max_capacity`                             | `f`                | 1×126                  | `i`      |
+| `max_delta_fx_throttle`                    | `f`                | 1×1                    | `f`      |
+| `max_engine_fx_throttle`                   | `f`                | —                      | `—`      |
+| `max_force`                                | `f`                | 1×66                   | `i`      |
+| `max_impact_speed`                         | `f`                | —                      | `—`      |
+| `max_length`                               | `f`                | 1×1                    | `i`      |
+| `max_player_ammo`                          | `f`                | —                      | `—`      |
+| `max_range`                                | `f`                | —                      | `—`      |
+| `max_spawned_mindist_count`                | `f`                | —                      | `—`      |
+| `max_volume_force`                         | `f`                | —                      | `—`      |
+| `maximum_leader_target_distance`           | `f`                | 1×32                   | `i`      |
+| `mesh`                                     | `s`                | 1×355, 0×1             | `s`      |
+| `min_range`                                | `f`                | —                      | `—`      |
+| `min_time_between_collisions`              | `f`                | —                      | `—`      |
+| `min_volume_force`                         | `f`                | —                      | `—`      |
+| `mission_offer`                            | `i`                | 1×4                    | `i`      |
+| `mission_property`                         | `s`                | 1×65                   | `s`      |
+| `mission_title`                            | `i`                | 1×4                    | `i`      |
+| `money`                                    | `f`                | 1×3                    | `i`      |
+| `motor`                                    | `s`                | 1×76                   | `s`      |
+| `msg_id_prefix`                            | `s`                | 1×609                  | `s`      |
+| `munition_hit_effect`                      | `s`                | 1×434                  | `s`      |
+| `music`                                    | `s s?`             | 1×341, 2×22            | `ss`     |
+| `music_cross_fade_delay`                   | `f`                | 1×1                    | `f`      |
+| `muzzle_cone_angle`                        | `f`                | 1×1                    | `i`      |
+| `muzzle_velocity`                          | `f`                | 1×526                  | `i`      |
+| `name`                                     | `i +s`             | 1×5050                 | `s`      |
+| `nanobot_limit`                            | `i`                | 1×31                   | `i`      |
+| `navmapscale`                              | `f`                | 1×37                   | `i`      |
+| `newchardb`                                | `s`                | 1×1                    | `s`      |
+| `next_ring`                                | `s`                | 1×925                  | `s`      |
+| `nextb_hp`                                 | `s`                | —                      | `—`      |
+| `nextb_mesh`                               | `s`                | —                      | `—`      |
+| `nextb_mouse`                              | `f f`              | —                      | `—`      |
+| `nextb_no_mesh_render`                     | `f`                | —                      | `—`      |
+| `nextb_offset`                             | `f f`              | —                      | `—`      |
+| `nickname`                                 | `f/s f f f f f`    | 1×31412                | `s`      |
+| `no_z_enable`                              | `f`                | 1×13                   | `i`      |
+| `node_id`                                  | `i`                | 1×239                  | `i`      |
+| `nomad`                                    | `b`                | 1×4                    | `s`      |
+| `nooffer_text_id`                          | `i`                | 1×10                   | `i`      |
+| `npc_class`                                | `—`                | 3×254, 2×229, 1×35     | `ssssss` |
+| `npc_ship_file`                            | `s`                | 1×14                   | `s`      |
+| `npcrank`                                  | `f? +i`            | 9×17, 2×6, 7×1         | `ifffff` |
+| `nudge_force`                              | `f`                | 1×69                   | `f`      |
+| `num_child_pieces`                         | `f`                | 1×24                   | `i`      |
+| `num_exhaust_nozzles`                      | `i`                | 1×69                   | `i`      |
+| `num_to_drop`                              | `—`                | 2×164, 1×103           | `ii`     |
+| `numlights`                                | `f`                | 1×49                   | `i`      |
+| `obj`                                      | `s`                | 1×872                  | `s`      |
+| `object`                                   | `s`                | 1×1                    | `s`      |
+| `object_pos`                               | `f f f`            | —                      | `—`      |
+| `object_ypr`                               | `f f f`            | —                      | `—`      |
+| `offline_rebuild_time`                     | `f`                | 1×126                  | `i`      |
+| `offline_threshold`                        | `f`                | 1×126                  | `f`      |
+| `offset`                                   | `f f f`            | 3×13                   | `fff`    |
+| `one_shot_sound`                           | `s`                | 1×526                  | `s`      |
+| `open_anim`                                | `s`                | 1×2                    | `s`      |
+| `open_sound`                               | `s`                | 1×36                   | `s`      |
+| `operating_effect`                         | `s`                | 1×1                    | `s`      |
+| `orientation`                              | `f f? f f`         | 4×332                  | `ffff`   |
+| `outside_cone_angle`                       | `f`                | —                      | `—`      |
+| `outside_cone_attenuation`                 | `f`                | 1×60                   | `i`      |
+| `outside_sound_cone`                       | `f`                | 1×60                   | `i`      |
+| `owner_safe_time`                          | `f`                | 1×13                   | `i`      |
+| `package`                                  | `s`                | 1×1                    | `s`      |
+| `page_size`                                | `f`                | —                      | `—`      |
+| `parent`                                   | `s`                | 1×269                  | `s`      |
+| `parent_impulse`                           | `f`                | 1×1118                 | `i`      |
+| `particle_effect`                          | `s`                | 1×3                    | `s`      |
+| `particles`                                | `s`                | 1×61                   | `s`      |
+| `path`                                     | `s?`               | 8×924, 7×865, 9×846    | `ssssss` |
+| `pbubble`                                  | `f f`              | 2×45                   | `ii`     |
+| `permutation`                              | `s`                | 2×54, 3×2              | `iii`    |
+| `petaldb`                                  | `s`                | 1×1                    | `s`      |
+| `phantom_physics`                          | `b`                | 1×10                   | `s`      |
+| `physical_sim_rate`                        | `f`                | —                      | `—`      |
+| `pilot`                                    | `s`                | 1×2208                 | `s`      |
+| `pilot_id`                                 | `i`                | —                      | `—`      |
+| `player_attached_equip_hit_pts_scale`      | `f`                | 1×1                    | `i`      |
+| `player_collision_group_hit_pts_scale`     | `f`                | 1×1                    | `i`      |
+| `pod_appearance`                           | `s`                | 1×102                  | `s`      |
+| `point`                                    | `f f`              | 2×56                   | `ii`     |
+| `pos`                                      | `f f f?`           | 3×10087, 9×71, 2×53    | `iiiifi` |
+| `pos_offset`                               | `f f f`            | 3×990                  | `iii`    |
+| `position`                                 | `f f f`            | 3×520                  | `iii`    |
+| `power_usage`                              | `f`                | 1×575                  | `i`      |
+| `preload`                                  | `s`                | —                      | `—`      |
+| `prev_ring`                                | `s`                | 1×925                  | `s`      |
+| `prevb_hp`                                 | `s`                | —                      | `—`      |
+| `prevb_mesh`                               | `s`                | —                      | `—`      |
+| `prevb_mouse`                              | `f f`              | —                      | `—`      |
+| `prevb_no_mesh_render`                     | `f`                | —                      | `—`      |
+| `prevb_offset`                             | `f f`              | —                      | `—`      |
+| `price`                                    | `i`                | 1×824                  | `i`      |
+| `price_variance`                           | `f`                | —                      | `—`      |
+| `priority`                                 | `f`                | 1×17021                | `i`      |
+| `process`                                  | `s`                | 1×156                  | `s`      |
+| `projectile_archetype`                     | `s`                | 1×526                  | `s`      |
+| `property_flags`                           | `i`                | 1×835                  | `i`      |
+| `property_fog_color`                       | `f f`              | 3×182                  | `fff`    |
+| `radius`                                   | `f`                | 1×649                  | `i`      |
+| `range`                                    | `f`                | 2×369, 1×157           | `ii`     |
+| `rank`                                     | `i`                | 2×403, 1×2             | `ss`     |
+| `rank_diff`                                | `s`                | 2×9                    | `sf`     |
+| `rc_max_delta_orientation`                 | `f`                | —                      | `—`      |
+| `rc_max_delta_position`                    | `f`                | —                      | `—`      |
+| `reach_speed`                              | `f`                | 1×1                    | `i`      |
+| `real_pos`                                 | `f f`              | —                      | `—`      |
+| `rebuild_power_draw`                       | `f`                | 1×126                  | `i`      |
+| `recharge_time`                            | `f`                | 1×13                   | `f`      |
+| `rect_color`                               | `f f f f`          | —                      | `—`      |
+| `refire_delay`                             | `f`                | 1×526                  | `f`      |
+| `regeneration_rate`                        | `f`                | 1×126                  | `f`      |
+| `rel_pos_obj`                              | `s`                | 1×3                    | `s`      |
+| `rel_pos_offset`                           | `f f f`            | 3×3                    | `iii`    |
+| `rep`                                      | `s`                | 2×3025                 | `is`     |
+| `rep_group`                                | `s`                | 1×1                    | `s`      |
+| `repair_rate`                              | `f`                | —                      | `—`      |
+| `repeatable`                               | `b`                | 1×35                   | `s`      |
+| `reputation`                               | `s`                | 1×2124                 | `s`      |
+| `requires_ammo`                            | `b`                | 1×526                  | `s`      |
+| `reverse_fraction`                         | `f`                | 1×60                   | `f`      |
+| `reward`                                   | `i`                | 1×1                    | `i`      |
+| `rmgr_look_ahead_max_distance_intra`       | `f`                | —                      | `—`      |
+| `rmgr_look_ahead_max_distance_world`       | `f`                | —                      | `—`      |
+| `rmgr_look_ahead_max_radius_intra`         | `f`                | —                      | `—`      |
+| `rmgr_look_ahead_max_radius_world`         | `f`                | —                      | `—`      |
+| `rmgr_look_ahead_min_distance_intra`       | `f`                | —                      | `—`      |
+| `rmgr_look_ahead_min_distance_world`       | `f`                | —                      | `—`      |
+| `rmgr_look_ahead_min_seconds_intra`        | `f`                | —                      | `—`      |
+| `rmgr_look_ahead_min_seconds_world`        | `f`                | —                      | `—`      |
+| `rmgr_look_ahead_time_intra`               | `f`                | —                      | `—`      |
+| `rmgr_look_ahead_time_world`               | `f`                | —                      | `—`      |
+| `room_switch`                              | `s`                | 1×1879                 | `s`      |
+| `root_health_proxy`                        | `b`                | 1×329                  | `s`      |
+| `rot_speed`                                | `f f f`            | —                      | `—`      |
+| `rotate`                                   | `f f f`            | 3×6229                 | `iii`    |
+| `rotation_inertia`                         | `f f f`            | 3×71                   | `fff`    |
+| `rpop_solar_detection`                     | `b`                | 1×1                    | `s`      |
+| `rtcslider`                                | `s`                | 1×1                    | `s`      |
+| `run_time`                                 | `f`                | 1×45                   | `i`      |
+| `scale`                                    | `f`                | 1×921                  | `f`      |
+| `seek_dist`                                | `f`                | 1×10                   | `i`      |
+| `seeker`                                   | `s`                | 1×76                   | `s`      |
+| `seeker_fov_deg`                           | `f`                | 1×71                   | `i`      |
+| `seeker_range`                             | `f`                | 1×71                   | `i`      |
+| `separation_explosion`                     | `s`                | 1×761                  | `s`      |
+| `set`                                      | `s? f?`            | 2×38                   | `sf`     |
+| `set_less`                                 | `s? f?`            | 2×4                    | `sf`     |
+| `set_script`                               | `s`                | 1×443                  | `s`      |
+| `set_virtual_room`                         | `s`                | 1×350                  | `s`      |
+| `setpoint`                                 | `s`                | —                      | `—`      |
+| `sex`                                      | `s`                | 1×7                    | `s`      |
+| `shape`                                    | `s`                | 1×6270                 | `s`      |
+| `shape_name`                               | `s`                | 1×362                  | `s`      |
+| `shell_scalar`                             | `f`                | 1×25                   | `f`      |
+| `shield_battery_limit`                     | `i`                | 1×31                   | `i`      |
+| `shield_collapse_particle`                 | `s`                | 1×3                    | `s`      |
+| `shield_collapse_sound`                    | `s`                | 1×126                  | `s`      |
+| `shield_hit_effects`                       | `f/s`              | 2×372                  | `is`     |
+| `shield_link`                              | `s?`               | 3×43                   | `sss`    |
+| `shield_mod`                               | `f +s`             | 2×189                  | `sf`     |
+| `shield_rebuilt_sound`                     | `s`                | 1×126                  | `s`      |
+| `shield_type`                              | `s`                | 1×121                  | `s`      |
+| `ship`                                     | `s`                | 1×874                  | `s`      |
+| `ship_class`                               | `i`                | 1×33                   | `i`      |
+| `ship_lrg_01`                              | `s`                | —                      | `—`      |
+| `ship_lrg_02`                              | `s`                | —                      | `—`      |
+| `ship_lrg_03`                              | `s`                | —                      | `—`      |
+| `ship_mdm_01`                              | `s`                | —                      | `—`      |
+| `ship_mdm_02`                              | `s`                | —                      | `—`      |
+| `ship_mdm_03`                              | `s`                | —                      | `—`      |
+| `ship_repair_cost`                         | `f`                | —                      | `—`      |
+| `ship_sml_01`                              | `s`                | —                      | `—`      |
+| `ship_sml_02`                              | `s`                | —                      | `—`      |
+| `ship_sml_03`                              | `s`                | —                      | `—`      |
+| `ships`                                    | `s`                | 1×2                    | `s`      |
+| `shop_archetype`                           | `s`                | 1×727                  | `s`      |
+| `show_rect`                                | `f`                | —                      | `—`      |
+| `show_wireframe`                           | `f`                | —                      | `—`      |
+| `size`                                     | `f?`               | 2×3410, 1×1877, 3×593  | `iii`    |
+| `sizex`                                    | `f`                | —                      | `—`      |
+| `skipmachinewarnings`                      | `b`                | —                      | `—`      |
+| `slider_behavior`                          | `f`                | —                      | `—`      |
+| `snd_cargo_jettisoned`                     | `s`                | —                      | `—`      |
+| `solar`                                    | `s`                | 1×21                   | `s`      |
+| `solar_radius`                             | `f`                | 1×316                  | `i`      |
+| `space`                                    | `s`                | 1×54                   | `s`      |
+| `space_costume`                            | `s?`               | 3×699, 2×195           | `sss`    |
+| `spacedust`                                | `s`                | 1×324                  | `s`      |
+| `spacedust_maxparticles`                   | `i`                | 1×262                  | `i`      |
+| `speaker_rotate`                           | `f f`              | 3×1                    | `iii`    |
+| `spin`                                     | `f f f`            | 3×66, 1×10             | `iii`    |
+| `spines`                                   | `s`                | 1×29                   | `s`      |
+| `star_glow`                                | `s`                | 1×38                   | `s`      |
+| `start_room`                               | `s`                | 1×215                  | `s`      |
+| `start_script`                             | `s`                | 1×208                  | `s`      |
+| `state_read`                               | `f`                | 1×961                  | `i`      |
+| `state_send`                               | `f`                | 1×961                  | `i`      |
+| `steering_torque`                          | `f f f`            | 3×69                   | `fff`    |
+| `strafe_force`                             | `f`                | 1×34                   | `i`      |
+| `strafe_power_usage`                       | `f`                | 1×34                   | `i`      |
+| `strid_desc`                               | `f`                | 1×1                    | `i`      |
+| `strid_name`                               | `f/i`              | 1×251                  | `i`      |
+| `string_id`                                | `i`                | 1×242                  | `i`      |
+| `surface_hit_effects`                      | `s? +f`            | 4×207, 2×53            | `isss`   |
+| `switch`                                   | `f f`              | 2×42                   | `if`     |
+| `system`                                   | `s`                | 1×2436, 0×2            | `s`      |
+| `target_ship_name`                         | `s`                | 1×6                    | `s`      |
+| `target_tradelane`                         | `i`                | —                      | `—`      |
+| `target_tradelane_name`                    | `s`                | —                      | `—`      |
+| `terrain_dyna_01`                          | `s`                | 1×32                   | `s`      |
+| `terrain_dyna_02`                          | `s`                | 1×32                   | `s`      |
+| `terrain_lrg`                              | `s`                | 1×51                   | `s`      |
+| `terrain_mdm`                              | `s`                | 1×51                   | `s`      |
+| `terrain_sml`                              | `s`                | 1×51                   | `s`      |
+| `terrain_tiny`                             | `s`                | 1×51                   | `s`      |
+| `teststring`                               | `s`                | —                      | `—`      |
+| `testvalue`                                | `f`                | —                      | `—`      |
+| `throttle_atten_mod_range`                 | `f`                | 1×1                    | `f`      |
+| `throttle_steady_time`                     | `f`                | 1×1                    | `f`      |
+| `thrust_capacity`                          | `f`                | 1×32                   | `i`      |
+| `thrust_charge_rate`                       | `f`                | 1×32                   | `i`      |
+| `thumb`                                    | `s`                | 1×1                    | `s`      |
+| `thumb_hp0`                                | `s`                | —                      | `—`      |
+| `thumb_hp1`                                | `s`                | —                      | `—`      |
+| `thumb_mesh`                               | `s`                | —                      | `—`      |
+| `thumb_mouse`                              | `f f`              | —                      | `—`      |
+| `thumb_no_mesh_render`                     | `f`                | —                      | `—`      |
+| `thumb_offset0`                            | `f f`              | —                      | `—`      |
+| `thumb_offset1`                            | `f f`              | —                      | `—`      |
+| `time_to_lock`                             | `f`                | 1×71                   | `i`      |
+| `tl_attack_chance_read_in`                 | `i`                | —                      | `—`      |
+| `tool_tip_id`                              | `f`                | 1×1                    | `i`      |
+| `top_speed`                                | `f`                | 1×10                   | `i`      |
+| `toughness`                                | `i`                | 1×4452                 | `i`      |
+| `tractor_complete_snd`                     | `s`                | 1×1                    | `s`      |
+| `tractored_explosion`                      | `s`                | —                      | `—`      |
+| `tradelane_space_name`                     | `i`                | 1×271                  | `i`      |
+| `turn_rate`                                | `f`                | 1×513                  | `i`      |
+| `turret_sound`                             | `s`                | —                      | `—`      |
+| `type`                                     | `s`                | 1×2041, 8×179, 2×116   | `ssiiii` |
+| `underline`                                | `b`                | 1×15                   | `s`      |
+| `units_per_container`                      | `i`                | 1×139                  | `i`      |
+| `universe`                                 | `s`                | 1×1                    | `s`      |
+| `use_animation`                            | `s`                | 1×245                  | `s`      |
+| `use_count`                                | `b`                | —                      | `—`      |
+| `use_sound`                                | `s`                | 1×27                   | `s`      |
+| `use_throttle`                             | `b`                | 1×1                    | `s`      |
+| `velocity`                                 | `f f f`            | 3×4                    | `iii`    |
+| `version`                                  | `f`                | —                      | `—`      |
+| `video_fovx`                               | `f`                | 1×1                    | `i`      |
+| `view_position`                            | `f f`              | 3×1                    | `fff`    |
+| `viewsize`                                 | `f f f`            | —                      | `—`      |
+| `virtual_room`                             | `s`                | 1×1137                 | `s`      |
+| `visit`                                    | `i/s`              | 1×1259, 2×25           | `ii`     |
+| `voice`                                    | `s`                | 1×2370, 2×6            | `ss`     |
+| `volume`                                   | `f`                | 1×1527                 | `f`      |
+| `walla_max_dist`                           | `f`                | 1×1                    | `f`      |
+| `walla_max_dist_atten`                     | `f`                | 1×1                    | `f`      |
+| `walla_priority_cutoff`                    | `f`                | 1×1                    | `i`      |
+| `walla_start_atten`                        | `f`                | 1×1                    | `f`      |
+| `weapon_type`                              | `s`                | 1×229                  | `s`      |
+| `weaponmoddb`                              | `s`                | 1×1                    | `s`      |
+| `wire_color`                               | `f f f f`          | —                      | `—`      |
+| `xaxis_rotation`                           | `f`                | 4×21                   | `iiii`   |
+| `yaxis_rotation`                           | `f`                | 4×21                   | `iiii`   |
+| `zaxis_rotation`                           | `f`                | 4×21                   | `iiii`   |
+| `zone`                                     | `s`                | 1×291                  | `s`      |
+| `zone_occlusion_fade_in`                   | `f`                | 1×36                   | `f`      |
+| `zone_occlusion_fade_out`                  | `f`                | 1×36                   | `f`      |
+| `zone_shell`                               | `s`                | 1×86                   | `s`      |
 
 ### The same name is not always read the same way
 
@@ -993,32 +987,32 @@ So the table above is **per name, and a name is occasionally per section**. Wher
 is the list; rows marked ⚠ are ones where at least one variant still looks like residual overrun
 rather than a real reading (a `[lens_flare] nickname` is not six floats).
 
-| Property | Shape | Where |
-| --- | --- | --- |
-| `damage` | `f` | `[zone]` |
-|  | `s f` | `[collisionconsts]` |
-| `faction` | `f` | `[zone]` |
-|  | `s f` | `DestroyInstance` |
-| `font` ⚠ | `i` | `??4MD5Hash@@QAEAAV0@ABV0@@Z` |
-|  | `s` | `??4MD5Hash@@QAEAAV0@ABV0@@Z` |
-| `formation` ⚠ | `f f/s?` | `??1IDLL@@UAE@XZ` |
-|  | `f s?` | `??1IDLL@@UAE@XZ` |
-| `hit_pts` | `f` | `Archetype::Equipment::read`, `Archetype::Root::read` |
-|  | `i` | `??1CollisionGroup@Archetype@@Q` |
-| `ids_info` | `f` | `[group]`, `[missioncreatedsolar]` |
-|  | `i` | `Archetype::Root::read`, `[object]`, `[zone]` |
-| `material_library` | `i/s?` | `IDPMsgHandler::OnDisconnect` |
-|  | `s` | `CostumeDescriptions::load_accessory`, `GoodInfoList::read_Good_block` |
-| `name` | `i` | `[key]` |
-|  | `s` | `??4MD5Hash@@QAEAAV0@ABV0@@Z`, `Fuse::ReadFuseValues`, `RoomData::read_Camera_block` … |
-| `nickname` ⚠ | `f f f f f f` | `[lens_flare]` |
-|  | `s` | `??1IDLL@@UAE@XZ`, `??4CDPClient@@QAEAAV0@ABV0@@Z`, `??4MD5Hash@@QAEAAV0@ABV0@@Z` … |
-| `strid_name` | `f` | `[package]` |
-|  | `i` | `[base]`, `[object]` |
-| `visit` | `i` | `CSolar::ReadObj`, `HardpointSummary::expire_instance`, `[object]` … |
-|  | `s` | `[msnsolar]` |
+| Property           | Shape         | Where                                                                                  |
+| ------------------ | ------------- | -------------------------------------------------------------------------------------- |
+| `damage`           | `f`           | `[zone]`                                                                               |
+|                    | `s f`         | `[collisionconsts]`                                                                    |
+| `faction`          | `f`           | `[zone]`                                                                               |
+|                    | `s f`         | `DestroyInstance`                                                                      |
+| `font` ⚠           | `i`           | `??4MD5Hash@@QAEAAV0@ABV0@@Z`                                                          |
+|                    | `s`           | `??4MD5Hash@@QAEAAV0@ABV0@@Z`                                                          |
+| `formation` ⚠      | `f f/s?`      | `??1IDLL@@UAE@XZ`                                                                      |
+|                    | `f s?`        | `??1IDLL@@UAE@XZ`                                                                      |
+| `hit_pts`          | `f`           | `Archetype::Equipment::read`, `Archetype::Root::read`                                  |
+|                    | `i`           | `??1CollisionGroup@Archetype@@Q`                                                       |
+| `ids_info`         | `f`           | `[group]`, `[missioncreatedsolar]`                                                     |
+|                    | `i`           | `Archetype::Root::read`, `[object]`, `[zone]`                                          |
+| `material_library` | `i/s?`        | `IDPMsgHandler::OnDisconnect`                                                          |
+|                    | `s`           | `CostumeDescriptions::load_accessory`, `GoodInfoList::read_Good_block`                 |
+| `name`             | `i`           | `[key]`                                                                                |
+|                    | `s`           | `??4MD5Hash@@QAEAAV0@ABV0@@Z`, `Fuse::ReadFuseValues`, `RoomData::read_Camera_block` … |
+| `nickname` ⚠       | `f f f f f f` | `[lens_flare]`                                                                         |
+|                    | `s`           | `??1IDLL@@UAE@XZ`, `??4CDPClient@@QAEAAV0@ABV0@@Z`, `??4MD5Hash@@QAEAAV0@ABV0@@Z` …    |
+| `strid_name`       | `f`           | `[package]`                                                                            |
+|                    | `i`           | `[base]`, `[object]`                                                                   |
+| `visit`            | `i`           | `CSolar::ReadObj`, `HardpointSummary::expire_instance`, `[object]` …                   |
+|                    | `s`           | `[msnsolar]`                                                                           |
 
-The clearest of these are not type slips but different fields wearing the same name: `[CollisionConsts]
+The clearest of these are different fields wearing the same name: `[CollisionConsts]
 damage` takes a name and an amount where `[Zone] damage` takes a number; `[Zone] faction` is a weight
 where `content.dll`'s is a name and a weight; `[MsnSolar] visit` is a string where every `common.dll`
 reader treats `visit` as an int.
@@ -3193,18 +3187,15 @@ Archetype chain: `Root`.
 
 ### `[AvailableShip]`
 
-**Not in retail data, and obsolete.** The header is matched only to emit
-`*** WARNING: [AvailableShip] is obsolete`, `RoomData.cpp` — no property is read.
+**Not in retail data, obsolete.** `*** WARNING: [AvailableShip] is obsolete`, `RoomData.cpp`.
 
 ### `[Billboard]`
 
-**Not in retail data, and obsolete.** The header is matched only to emit
-`*** WARNING: [Billboard] is obsolete`, `RoomData.cpp:2115` — no property is read.
+**Not in retail data, obsolete.** `*** WARNING: [Billboard] is obsolete`, `RoomData.cpp:2115`.
 
 ### `[Cloud]`
 
-**Not in retail data, and obsolete.** The header is matched only to emit
-`*** WARNING: [Cloud] is obsolete`, `RoomData.cpp:2046` — no property is read.
+**Not in retail data, obsolete.** `*** WARNING: [Cloud] is obsolete`, `RoomData.cpp:2046`.
 
 ### `[CollisionConsts]`
 
@@ -3214,15 +3205,12 @@ Archetype chain: `Root`.
 
 ### `[damage_hp_attachment]`
 
-**Not in retail data.** A fuse action: `server.dll` dispatches it alongside the eleven
-other action blocks and constructs a 52-byte `FuseAction`. `at_t` applies, being read for
-every action by `FuseAction::ReadFuseActionValue`; its remaining properties are matched by
-nothing — as are its siblings' `fate`, `hardpoint`, `group_name`, `hitpoints`.
+**Not in retail data.** The [fuse action](#sections-the-engine-matches-that-retail-never-contains)
+`server.dll` never writes; constructs a 52-byte `FuseAction`. Only `at_t` is matched by name.
 
 ### `[Decloaked]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 50 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
 
 ### `[Display]`
 
@@ -3232,43 +3220,35 @@ nothing — as are its siblings' `fate`, `hardpoint`, `group_name`, `hitpoints`.
 
 ### `[DynBaseInfo]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 1 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 1 indexed `get_value_*` call, no `is_value`.
 
 ### `[DynSysInfo]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 1 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 1 indexed `get_value_*` call, no `is_value`.
 
 ### `[GoodsCartPlacement]`
 
-**Not in retail data, and obsolete.** The header is matched only to emit
-`*** WARNING: [GoodsCartPlacement] is obsolete`, `RoomData.cpp` — no property is read.
+**Not in retail data, obsolete.** `*** WARNING: [GoodsCartPlacement] is obsolete`, `RoomData.cpp`.
 
 ### `[GoodsPilePlacement]`
 
-**Not in retail data, and obsolete.** The header is matched only to emit
-`*** WARNING: [GoodsPilePlacement] is obsolete`, `RoomData.cpp` — no property is read.
+**Not in retail data, obsolete.** `*** WARNING: [GoodsPilePlacement] is obsolete`, `RoomData.cpp`.
 
 ### `[GoodType]`
 
-**Not in retail data, and obsolete.** The header is matched only to emit
-`*** WARNING: [GoodType] is obsolete`, `GoodList.cpp` — no property is read.
+**Not in retail data, obsolete.** `*** WARNING: [GoodType] is obsolete`, `GoodList.cpp`.
 
 ### `[Invulnerables]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 50 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
 
 ### `[Lighting]`
 
-**Not in retail data, and obsolete.** The header is matched only to emit
-`*** WARNING: [Lighting] is obsolete`, `RoomData.cpp:2123` — no property is read.
+**Not in retail data, obsolete.** `*** WARNING: [Lighting] is obsolete`, `RoomData.cpp:2123`.
 
 ### `[MarkObj]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 50 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
 
 ### `[Mission01aSave]`
 
@@ -3284,38 +3264,31 @@ nothing — as are its siblings' `fate`, `hardpoint`, `group_name`, `hitpoints`.
 
 ### `[MObjective]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 50 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
 
 ### `[MonitorPlacement]`
 
-**Not in retail data, and obsolete.** The header is matched only to emit
-`*** WARNING: [MonitorPlacement] is obsolete`, `RoomData.cpp` — no property is read.
+**Not in retail data, obsolete.** `*** WARNING: [MonitorPlacement] is obsolete`, `RoomData.cpp`.
 
 ### `[MsnRandEncSave]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 50 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
 
 ### `[MsnShipSave]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 50 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
 
 ### `[MsnSolarSave]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 50 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
 
 ### `[MsnVibeInfo]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 50 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
 
 ### `[MsnWingSave]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 50 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
 
 ### `[PerfCount]`
 
@@ -3325,8 +3298,7 @@ nothing — as are its siblings' `fate`, `hardpoint`, `group_name`, `hitpoints`.
 
 ### `[PerfOptions]`
 
-**Not in retail data.** Read **positionally** — its handler in `Freelancer.exe` makes 4 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `Freelancer.exe`: 4 indexed `get_value_*` calls, no `is_value`.
 
 ### `[PerfVersion]`
 
@@ -3336,8 +3308,7 @@ nothing — as are its siblings' `fate`, `hardpoint`, `group_name`, `hitpoints`.
 
 ### `[RandomEncounter]`
 
-**Not in retail data.** Read **positionally** — its handler in `content.dll` makes 50 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
 
 ### `[RandomMission]`
 
@@ -3347,8 +3318,7 @@ nothing — as are its siblings' `fate`, `hardpoint`, `group_name`, `hitpoints`.
 
 ### `[RearView]`
 
-**Not in retail data.** Read **positionally** — its handler in `Freelancer.exe` makes 3 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `Freelancer.exe`: 3 indexed `get_value_*` calls, no `is_value`.
 
 ### `[RepairDroid]`
 
@@ -3364,13 +3334,11 @@ Archetype chain: `RepairDroid`.
 
 ### `[RepairRobotPlacement]`
 
-**Not in retail data, and obsolete.** The header is matched only to emit
-`*** WARNING: [RepairRobotPlacement] is obsolete`, `RoomData.cpp` — no property is read.
+**Not in retail data, obsolete.** `*** WARNING: [RepairRobotPlacement] is obsolete`, `RoomData.cpp`.
 
 ### `[ShipPlacement]`
 
-**Not in retail data, and obsolete.** The header is matched only to emit
-`*** WARNING: [ShipPlacement] is obsolete`, `RoomData.cpp` — no property is read.
+**Not in retail data, obsolete.** `*** WARNING: [ShipPlacement] is obsolete`, `RoomData.cpp`.
 
 ### `[ThrusterEquipConsts]`
 
@@ -3382,9 +3350,8 @@ Archetype chain: `RepairDroid`.
 
 ### `[Turret]`
 
-**Not in retail data.** Read **positionally** — its handler in `Freelancer.exe` makes 6 indexed
-`get_value_*` calls and no `is_value` call, so its properties have no names to recover.
+**Not in retail data — read positionally.** `Freelancer.exe`: 6 indexed `get_value_*` calls, no `is_value`.
 
 ---
 
-[ENGINE.md](ENGINE.md) · [INI.md](INI.md) · [RETAIL.md](RETAIL.md) · [THORN.md](THORN.md)
+[ENGINE.md](ENGINE.md) · [INI.md](../modules/INI.md) · [RETAIL.md](RETAIL.md) · [THORN.md](THORN.md)

@@ -16,7 +16,7 @@ import {
  *
  * The signature decides, never the extension: the engine loads scripts with `dofile`, and Lua's
  * loader sniffs the same five bytes and falls back to compiling source text when they are absent.
- * A plain-text `.thn` is therefore as valid as a compiled one — see [THN.md](../../../docs/THN.md).
+ * A plain-text `.thn` is therefore as valid as a compiled one — see [THN.md](../../../docs/modules/THN.md).
  *
  * @param data File bytes.
  */

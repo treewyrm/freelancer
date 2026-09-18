@@ -11,7 +11,7 @@ import type { Globals, Value } from './types.js'
  * The scene script readers against the retail install.
  *
  * Every count asserted here was measured before the code existed and is written down in
- * [THN.md](../../docs/THN.md), so a failure means the reader drifted rather than that the number
+ * [THN.md](../../docs/modules/THN.md), so a failure means the reader drifted rather than that the number
  * needs updating. Skips itself with a reason when no install is present.
  */
 describe('retail scene scripts', { skip: corpus.skip }, () => {

@@ -4,7 +4,7 @@
  * Every number here is **measured from the retail corpus**, by pairing the 355 numeric-form scripts
  * against the 1,151 symbolic ones: `type = 9` in one is `type = SCENE` in the other, in the same
  * structural position. Nothing is inferred from `thorn.dll`'s string table, which establishes that a
- * name exists and nothing about its value — see [THORN.md](../../../docs/THORN.md), where each entry
+ * name exists and nothing about its value — see [THORN.md](../../../docs/refs/THORN.md), where each entry
  * below carries its provenance and the measurement behind it.
  *
  * **Names the binary carries but no script uses are listed without values**, in the `UNUSED_*`

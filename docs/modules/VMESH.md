@@ -1,41 +1,36 @@
 # VMesh
 
-Freelancer's geometry format. The game targets **Direct3D 8.1** (shipped February 2003; D3D9,
-released December 2002, was too late for core development), and the binary layout maps directly onto
-D3D8 GPU resources — vertex buffers, index buffers, FVF descriptors, and `DrawIndexedPrimitive`
-parameters.
+The geometry format. The game targets Direct3D 8.1, and the binary layout maps directly onto D3D8
+GPU resources — vertex buffers, index buffers, FVF descriptors, `DrawIndexedPrimitive` parameters.
 
-A VMesh asset lives inside a UTF tree, split across two cooperating structures: a **mesh library**
-holding shared vertex and index data, and **mesh references** that address into it by offset and
-count. Export names are in [API.md](API.md#vmesh).
+A VMesh asset lives inside a UTF tree, split across two structures: a **mesh library** holding shared
+vertex and index data, and **mesh references** addressing into it by offset and count.
 
-## Architecture
+## Layout
 
 ```
 VMeshLibrary (UTF directory)
   └─ <mesh name> (UTF directory per mesh)
        └─ VMeshData (UTF file) ── groups[], indices[], vertices[]
 
-VMeshPart (UTF directory)
-  └─ VMeshRef (UTF file) ── meshId (CRC), slice offsets + counts, bounds
-
-MultiLevel (UTF directory)
-  ├─ Switch2 (float[] distance breakpoints)
-  └─ Level0..N
-       └─ VMeshPart
-
-VMeshWire (UTF directory)
-  └─ VWireData (UTF file) ── meshId (CRC), vertex slice, LineList indices
+<part fragment> (UTF directory — root of a .3db, or a part subdirectory of a .cmp)
+  ├─ VMeshPart (UTF directory)  ── alternative to MultiLevel
+  │    └─ VMeshRef (UTF file) ── meshId (CRC), slice offsets + counts, bounds
+  ├─ MultiLevel (UTF directory) ── alternative to VMeshPart
+  │    ├─ Switch2 (float[] distance breakpoints)
+  │    └─ Level0..N
+  │         └─ VMeshPart
+  └─ VMeshWire (UTF directory) ── optional, coexists with either
+       └─ VWireData (UTF file) ── meshId (CRC), vertex slice, LineList indices
 ```
 
 A `VMeshRef` identifies a mesh by the CRC32 of its name and selects a slice of that mesh's groups,
 indices and vertices. `getMesh` finds the mesh in a loaded library; `getMeshDraw` walks the reference
 over it, yielding the per-group offsets `DrawIndexedPrimitive` takes.
 
-`VMeshWire` is a **sibling** of `VMeshPart` rather than a child: it addresses the same library mesh
-by CRC but carries its own index buffer, describing edges instead of faces.
-
----
+`VMeshWire` addresses the same library mesh by CRC as `VMeshPart`/`MultiLevel`, but carries its own
+index buffer, describing edges instead of faces — see [Wireframe overlay](#wireframe-overlay) and
+[Levels of detail](#levels-of-detail).
 
 ## Mesh data
 
@@ -56,8 +51,7 @@ which the API takes separately, is derived from `elementCount`:
 
 ### `VertexFormat`
 
-A `D3DFVF_*` bitmask, passed as a DWORD to `SetVertexShader` (D3D8) or `SetFVF` (D3D9) to describe
-the in-memory vertex layout.
+A `D3DFVF_*` bitmask, passed as a DWORD to `SetVertexShader` (D3D8) or `SetFVF` (D3D9).
 
 | Flag                  | Value           | D3D name                    | Bytes of stride              |
 | --------------------- | --------------- | --------------------------- | ---------------------------- |
@@ -68,9 +62,9 @@ the in-memory vertex layout.
 | `Specular`            | `0x080`         | `D3DFVF_SPECULAR`           | 4 (`D3DCOLOR`, uint32 ARGB)  |
 | `Texture1`–`Texture8` | `0x100`–`0x800` | `D3DFVF_TEX1`–`D3DFVF_TEX8` | 8 per set (2× float32 u/v)   |
 
-> **The texture flags are a count, not independent bits.** Bits 8–11 (`0xf00`) hold the number of UV
-> sets — `D3DFVF_TEX2` means "two sets total", not "the first and the second". Combining them with
-> `|` is wrong; pick exactly one. `getMapCount` and `vertexByteLength` read the field.
+The texture flags are a count, not independent bits: bits 8–11 (`0xf00`) hold the number of UV sets.
+`D3DFVF_TEX2` means "two sets total", not "the first and the second". Combining them with `|` is
+wrong; pick exactly one. `getMapCount` and `vertexByteLength` read the field.
 
 ### `VMeshData`
 
@@ -101,12 +95,10 @@ interface VMeshData {
 | indices     | uint16[]       | count = indexCount                               |
 | vertices    | uint8[]        | count = vertexCount × `vertexByteLength(format)` |
 
----
-
 ## Mesh group
 
-Each group is **one `DrawIndexedPrimitive` call**, and its fields are that call's parameters. Fixed
-size: **12 bytes**.
+Each group is one `DrawIndexedPrimitive` call, and its fields are that call's parameters. Fixed size:
+12 bytes.
 
 ```ts
 interface VMeshGroup {
@@ -127,22 +119,14 @@ device->DrawIndexedPrimitive(primitive,
   primitiveCount);
 ```
 
-> **`vertexEnd` is inclusive.** A group's index values are relative to `vertexStart`, not absolute
-> within the mesh, so `vertexStart + max(indices) === vertexEnd`. Treating it as exclusive silently
-> drops the last vertex of every group.
-
----
+`vertexEnd` is inclusive. A group's index values are relative to `vertexStart`, not absolute within
+the mesh, so `vertexStart + max(indices) === vertexEnd`. Treating it as exclusive silently drops the
+last vertex of every group.
 
 ## Mesh reference
 
 A `VMeshRef` selects a sub-range of groups, indices and vertices from a named `VMeshData`. Fixed
-size: **60 bytes**, the first uint32 being a self-describing size field holding 60.
-
-> **The size field is read and discarded, not validated.** It is 60 in all 9,322 retail references,
-> but the record is fixed-size, so the field carries nothing the layout does not already give — and
-> the engine does not enforce it. A hand-authored model leaving it zero loads and renders. The
-> writer always emits 60, so this is the one field a round trip normalizes rather than reproduces;
-> that is safe precisely because nothing reads it. See [Empty references](#empty-references).
+size: 60 bytes, the first uint32 being a self-describing size field holding 60.
 
 ```ts
 interface VMeshRef {
@@ -161,14 +145,16 @@ interface VMeshRef {
 There are no named D3D structs for the bounds; the fields match the output parameters of the D3DX
 utility functions.
 
-> **Bounding box byte order:** stored interleaved as `max.x, min.x, max.y, min.y, max.z, min.z`, not
-> as two contiguous XYZ vectors. [SURFACE.md](SURFACE.md)'s `Extent` does *not* follow this
-> convention.
+The bounding box is stored interleaved as `max.x, min.x, max.y, min.y, max.z, min.z`, not as two
+contiguous XYZ vectors. [SURFACE.md](SURFACE.md)'s `Extent` does *not* follow this convention.
 
-**Both offsets apply to an index, and neither is absolute on its own** — the absolute vertex is
+Both offsets apply to an index, and neither is absolute on its own — the absolute vertex is
 `ref.vertexStart + group.vertexStart + index`. Dropping `ref.vertexStart` draws the wrong geometry
-rather than failing. [RENDERER.md §3.2](RENDERER.md#32-the-base-offset-scheme-and-what-it-really-means)
+rather than failing. [RENDERER.md §3.2](../refs/RENDERER.md#32-the-base-offset-scheme-and-what-it-really-means)
 carries the measurement and §3.3 the four ways to apply a base vertex in an API that has none.
+
+The size field is read and discarded, not validated — see [The reference size
+field](#the-reference-size-field).
 
 `VMeshPart` is a thin wrapper — a `VMeshPart` directory holding one `VMeshRef` file. `readVMeshPart`
 returns `undefined` when the directory is absent, so a caller can probe
@@ -177,30 +163,21 @@ still throws.
 
 ### Empty references
 
-**A `groupCount` of zero is a reference that draws nothing, and is legal.** Every retail reference
-selects at least one group, so the case does not occur there, but it is the natural way to express a
-compound part that exists only to carry a joint — an animation pivot, with children hanging off it
-and no geometry of its own.
+A `groupCount` of zero is a legal reference that draws nothing — the natural way to express a
+compound part existing only to carry a joint. Omitting `VMeshPart` from the part entirely reads back
+as `undefined` and is equally valid; retail uses neither, but a consumer must handle both.
 
-The alternative is to omit `VMeshPart` from the part entirely, which reads back as `undefined` and
-is equally valid. Retail never does that either: all 5,811 of its `.cmp` parts carry geometry —
-4,852 through `VMeshPart` and 959 through `MultiLevel`, none through neither. So both spellings of "this part draws nothing" are conventions the
-engine accepts rather than anything the format prefers, and a consumer has to handle both — treating
-an absent `VMeshPart` as the only empty case will still be handed a zero-group reference.
-
-> **A reader must not take `groupCount === 0` as a signal to skip the record.** Such a reference
-> still names a mesh: `meshId` is typically the sibling parts' library, left in place by the
-> exporter rather than zeroed, and it resolves. Nothing follows from it, because the group range is
-> empty — but it means a dangling-reference check keyed on `meshId` alone will report a mesh that is
-> never drawn, and an eager one will upload buffers for it.
-
----
+A reader must not skip a record on `groupCount === 0`: `meshId` still names a mesh — typically the
+sibling parts' library, left in place by the exporter rather than zeroed — and it resolves, even
+though the empty group range means nothing is drawn from it. A dangling-reference check keyed on
+`meshId` alone will flag a mesh that's never drawn, and an eager loader will upload buffers for it
+needlessly.
 
 ## Wireframe overlay
 
-An edge-only companion to a part's geometry — the line overlay Freelancer draws over a ship in the
-scanner and dealer views. It reuses a mesh already in the library and supplies its own index buffer,
-drawn as `D3DPT_LINELIST`.
+An edge-only companion to a part's geometry — the line overlay drawn over a ship in the scanner and
+dealer views. It reuses a mesh already in the library and supplies its own index buffer, drawn as
+`D3DPT_LINELIST`.
 
 ```ts
 interface VWireData {
@@ -228,18 +205,18 @@ interface VMeshWire {
 
 Header size is fixed at 16 bytes; the file is `16 + indexCount × 2`.
 
-> **Field order caveat:** `indexCount` is stored *before* `vertexRange`, so the two trailing uint16s
-> are not the (start, count) pair the leading ones are.
+`indexCount` is stored *before* `vertexRange`, so the two trailing uint16s are not the (start, count)
+pair the leading ones are.
 
 ### Indices are relative to `vertexStart`
 
-**Absolute vertex = `vertexStart + index`.** `vertexStart` is a base offset into the mesh's vertex
-buffer, not the smallest index present — the indices themselves normally start at 0. This matters
-because several parts routinely share one wire mesh, each claiming its own slice: read as relative
-the slices tile the buffer, read as absolute every part draws the same vertices.
+Absolute vertex = `vertexStart + index`. `vertexStart` is a base offset into the mesh's vertex
+buffer, not the smallest index present — the indices themselves normally start at 0. Several parts
+routinely share one wire mesh, each claiming its own slice: read as relative the slices tile the
+buffer, read as absolute every part draws the same vertices.
 
 Together `vertexStart` and `vertexRange` are the `MinIndex`/`NumVertices` pair of
-`DrawIndexedPrimitive` — the same role `VMeshGroup` fills with `vertexStart`/`vertexEnd`.
+`DrawIndexedPrimitive` — the role `VMeshGroup` fills with `vertexStart`/`vertexEnd`.
 
 ### Deriving the fields
 
@@ -252,16 +229,14 @@ vertexCount = new Set(ids).size
 vertexRange = Math.max(...ids) - Math.min(...ids) + 1
 ```
 
-> The reader and writer **preserve whatever a file contains** and never normalise it, so assets
-> round-trip byte-exactly regardless of which tool produced them. Use the formulas only when creating
-> new data. `indexCount` is the one field genuinely derived on write.
+The reader and writer preserve whatever a file contains and never normalise it, so assets round-trip
+byte-exactly regardless of which tool produced them. Use the formulas only when creating new data.
+`indexCount` is the one field genuinely derived on write.
 
 The `+ 1` is canonical: as a vertex count it is exactly the `NumVertices` `DrawIndexedPrimitive`
 expects, and it is what every original exporter emits. Two later tools emit one less, which
 under-declares the span so the highest-numbered vertex falls outside it — see
 [Corpus](#exporter-lineage-in-vwiredata).
-
----
 
 ## Levels of detail
 
@@ -273,15 +248,13 @@ interface MultiLevel {
 }
 ```
 
-A `MultiLevel` UTF directory holds `Switch2` — a float32 sequence of N+1 camera-distance breakpoints,
-defaulting to `[0, 1000]` when the file is absent — and one `Level<n>` subdirectory per level, each
-containing a `VMeshPart`.
+A `MultiLevel` UTF directory holds `Switch2` — a float32 sequence of N+1 camera-distance
+breakpoints, defaulting to `[0, 1000]` when the file is absent — and one `Level<n>` subdirectory per
+level, each containing a `VMeshPart`.
 
 `atRange(multiLevel, value)` returns the part whose range `[ranges[i], ranges[i+1])` contains the
-distance, and `undefined` past the last breakpoint — which is the model's cue to vanish, not a bug to
-clamp away. **LOD is per part, not per model**; a large ship's parts switch at different distances.
-
----
+distance, and `undefined` past the last breakpoint — the model's cue to vanish, not a bug to clamp
+away. LOD is per part, not per model; a large ship's parts switch at different distances.
 
 ## Mesh library
 
@@ -290,8 +263,8 @@ type VMeshLibrary = VMeshData[]
 ```
 
 A flat list in the order the meshes appear under the `VMeshLibrary` directory. `getMesh` finds one by
-the CRC32 of its name. Conceptually it is a pool of shared GPU buffers: several `VMeshRef`s can
-address into the same `VMeshData`.
+the CRC32 of its name. A pool of shared GPU buffers: several `VMeshRef`s can address into the same
+`VMeshData`.
 
 `getMeshDraw(data, reference)` yields one `MeshDraw` per group, in index order:
 
@@ -305,27 +278,72 @@ address into the same `VMeshData`.
 }
 ```
 
-With `data.primitive` and `data.format`, which belong to the mesh rather than to any group, that is
-one `DrawIndexedPrimitive`.
+With `data.primitive` and `data.format`, which belong to the mesh rather than any group, that is one
+`DrawIndexedPrimitive`.
 
-**Offsets, not slices.** Nothing here subarrays `indices` or `vertices`. `baseVertex` is a draw
-parameter in Direct3D and has nowhere to go in an API without one — WebGL2's `drawElements` takes a
-byte offset and nothing else — so a consumer there folds it into the index values, the attribute
-pointers or the upload. Picking one is the consumer's;
-[RENDERER.md §3.3](RENDERER.md#33-webgl2-has-no-base-vertex) weighs the four options.
+Nothing here subarrays `indices` or `vertices`. `baseVertex` is a draw parameter in Direct3D and has
+nowhere to go in an API without one — WebGL2's `drawElements` takes a byte offset and nothing else —
+so a consumer there folds it into the index values, the attribute pointers or the upload.
+[RENDERER.md §3.3](../refs/RENDERER.md#33-webgl2-has-no-base-vertex) weighs the four options.
 
 ### Resolution is global, not per file
 
 A `VMeshRef` names its mesh by CRC alone, with nothing to say which file that mesh lives in. At
 runtime Freelancer resolves it against every library currently loaded, so a model may reference
 geometry its own `VMeshLibrary` does not contain — and `getMesh` returns `undefined` for it when
-handed only that one file's library. **A consumer that renders arbitrary models wants to merge
-libraries across files rather than resolve one file at a time.**
+handed only that one file's library. A consumer that renders arbitrary models wants to merge
+libraries across files rather than resolve one file at a time.
 
-`.vms` is not a distinct format: it is a UTF container holding nothing but a library, read by
-`readVMeshLibrary` like any other.
+`.vms` is a UTF container holding nothing but a library, read by `readVMeshLibrary` like any other.
 
----
+## Notes
+
+### The reference size field
+
+The `VMeshRef` size field is 60 in all 9,322 retail references, but the record is fixed-size, so the
+field carries nothing the layout does not already give, and the engine does not enforce it. A
+hand-authored model leaving it zero loads and renders. The writer always emits 60, so this is the one
+field a round trip normalizes rather than reproduces; that is safe precisely because nothing reads
+it.
+
+## API
+
+### `./vmesh`
+
+| Export              | Kind      |                                                                                   |
+| ------------------- | --------- | --------------------------------------------------------------------------------- |
+| `atRange`           | function  | Picks the detail level covering a camera distance; `undefined` past the last one. |
+| `BoundingBox`       | interface | `{ a: Vector3, b: Vector3 }`.                                                     |
+| `BoundingSphere`    | interface | `{ center: Vector3, radius: number }`.                                            |
+| `getMapCount`       | function  | Calculates number of UV maps for the vertex format.                               |
+| `getMesh`           | function  | `(library: VMeshLibrary, name: Hashable): VMeshData \| undefined`                 |
+| `getMeshDraw`       | function  | Generator — yields one `MeshDraw` per group of a reference, in index order.       |
+| `MeshDraw`          | interface | `{ materialId, startIndex, elementCount, baseVertex, numVertices }` — offsets.    |
+| `MultiLevel`        | interface | `{ type: 'multilevel', ranges: number[], levels: VMeshPart[] }`.                  |
+| `Primitive`         | enum      | Direct3D primitive type (`D3DPRIMITIVETYPE`).                                     |
+| `readMultiLevel`    | function  | `(parent: Directory): MultiLevel \| undefined`                                    |
+| `readVMeshData`     | function  | `(parent: Directory): VMeshData`                                                  |
+| `readVMeshGroup`    | function  | `(view: BufferView): VMeshGroup`                                                  |
+| `readVMeshLibrary`  | function  | `(parent: Directory): VMeshLibrary`                                               |
+| `readVMeshPart`     | function  | `(parent: Directory): VMeshPart \| undefined`                                     |
+| `readVMeshRef`      | function  | `(parent: Directory): VMeshRef`                                                   |
+| `readVMeshWire`     | function  | `(parent: Directory): VMeshWire \| undefined`                                     |
+| `vertexByteLength`  | function  | Calculates vertex byte length for the vertex format.                              |
+| `VertexFormat`      | enum      | Direct3D flexible vertex format (FVF).                                            |
+| `VMeshData`         | interface | One mesh: `primitive`, `format`, `groups`, `indices`, `vertices`.                 |
+| `VMeshGroup`        | interface | One draw range: `materialId`, `vertexStart`, `vertexEnd`, `elementCount`.         |
+| `VMeshLibrary`      | type      | `VMeshData[]`.                                                                    |
+| `VMeshPart`         | interface | `{ type: 'vmeshpart', reference: VMeshRef }`.                                     |
+| `VMeshRef`          | interface | A slice of a mesh by CRC, with its group/index/vertex offsets and bounds.         |
+| `VMeshWire`         | interface | `{ data: VWireData }`.                                                            |
+| `VWireData`         | interface | Wireframe line data, stored as authored and never recomputed on write.            |
+| `writeMultiLevel`   | function  | `(value: MultiLevel): Directory`                                                  |
+| `writeVMeshData`    | function  | `(data: VMeshData): Directory`                                                    |
+| `writeVMeshGroup`   | function  | `(group: VMeshGroup): BufferView`                                                 |
+| `writeVMeshLibrary` | function  | `(values: Iterable<VMeshData>): Directory`                                        |
+| `writeVMeshPart`    | function  | `(parent: VMeshPart): Directory`                                                  |
+| `writeVMeshRef`     | function  | `(ref: VMeshRef): File`                                                           |
+| `writeVMeshWire`    | function  | `(data: VMeshWire): Directory`                                                    |
 
 ## Corpus
 
@@ -343,11 +361,15 @@ readers.
 | Busiest single reference | 39 groups |
 | Busiest file | 145 groups (`SHIPS/LIBERTY/LI_DREADNOUGHT/li_dreadnought.cmp`) |
 
-**Every retail mesh is `TriangleList`**, so a renderer can hard-code triangles and treat anything else
-as a load error rather than carry five untestable paths. Vertex format distribution and the base
-offset measurements are in [RENDERER.md §3](RENDERER.md#3-vmesh--gpu-buffers).
+Every retail mesh is `TriangleList`, but that's a fact about the assets, not the engine — the field
+goes straight to `DrawIndexedPrimitive`, so a renderer must honour `primitive` rather than hard-code
+triangles. Vertex format distribution and the base offset measurements are in
+[RENDERER.md §3](../refs/RENDERER.md#3-vmesh--gpu-buffers).
 
 `vertexEnd` is inclusive in all 22,416 groups without exception.
+
+All 5,811 retail `.cmp` parts carry geometry — 4,852 through `VMeshPart` and 959 through
+`MultiLevel`, none through neither.
 
 ### Wireframe indices are relative
 
@@ -358,13 +380,13 @@ absolute: [0,24] [0,99]   [0,83]    [0,68]      ← all overlapping
 relative: [0,24] [36,135] [148,231] [244,312]   ← disjoint, ascending
 ```
 
-Across the Freelancer/Discovery asset corpus the relative reading holds for **718 of 718** such
-groups, while the absolute reading collides in 717 of them.
+Across the Freelancer/Discovery asset corpus the relative reading holds for 718 of 718 such groups,
+while the absolute reading collides in 717.
 
 ### Exporter lineage in `VWireData`
 
 Over the 6,308 records, `vertexCount` matches the unique-id count in 99.3%, and `vertexRange` splits
-perfectly along the tool that wrote it:
+along the tool that wrote it:
 
 | Records | `max-min` | `max-min+1` | Exporter               |
 | ------- | --------- | ----------- | ---------------------- |
@@ -376,14 +398,14 @@ perfectly along the tool that wrote it:
 | 311     | 0         | **311**     | `Jun 10 2002 16:27:11` |
 | 21      | **20**    | 0           | `LancerEdit 2024.06.1` |
 
-Every date-stamped build string is an original Digital Anvil exporter, and all of them emit
-`max - min + 1` without exception.
+Every date-stamped build string is an original Digital Anvil exporter, and all emit `max - min + 1`
+without exception.
 
 ### The one external reference
 
-Retail has exactly one case of a model referencing geometry outside its own file:
-**`INTERFACE/interface.generic.vms`**, a bare UTF tree whose only child is a `VMeshLibrary` holding
-two meshes.
+Retail has exactly one model referencing geometry outside its own file:
+`INTERFACE/interface.generic.vms`, a bare UTF tree whose only child is a `VMeshLibrary` holding two
+meshes.
 
 ```
 INTERFACE/interface.generic.vms
@@ -394,10 +416,9 @@ INTERFACE/interface.generic.vms
 
 The game loads it unprompted — the path is baked into the executable rather than named by any INI —
 which is why 331 `INTERFACE/**` models reference those two meshes without declaring a library of
-their own. Those **530 references are the only external ones in retail**; every other `VMeshRef`
-resolves inside its own file.
+their own. Those 530 references are the only external ones in retail.
 
 ### openFLAME roots read as empty
 
 `readVMeshLibrary` returns an empty library for the four `openFLAME 3D N-mesh` trees rather than
-throwing. See [RETAIL.md](RETAIL.md#openflame-leftovers).
+throwing. See [RETAIL.md](../refs/RETAIL.md#openflame-leftovers).

@@ -5,7 +5,7 @@
  * the engine loads a plain-text script just as happily, observed in the running game from a packed
  * install — so `../text/` is the whole write path today. What a bytecode writer still waits on is
  * two undecoded fields: the four bytes between `ENDCODE` and the constant count, and bytes 19–20 of
- * the header. Both are recorded in [THN.md](../../../docs/THN.md), and `data.ts` already carries the
+ * the header. Both are recorded in [THN.md](../../../docs/modules/THN.md), and `data.ts` already carries the
  * name → byte direction of the opcode table so a writer does not start from nothing.
  */
 /**

@@ -39,32 +39,32 @@ it, and what a `[Ship]` or a `[Nebula]` means is yours to define.
 
 | Import                             | Contents                                                                            | Documentation                       |
 | ---------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------- |
-| `@treewyrm/freelancer`             | `getResourceId`, `getObjectId`, and the lookups built on them                       | [UTF.md](docs/UTF.md#hashing)       |
-| `@treewyrm/freelancer/utf`         | `Directory`, `File` — the UTF container                                             | [UTF.md](docs/UTF.md)               |
-| `@treewyrm/freelancer/utility`     | `BufferView`, windows-1252, tree, timestamp, number and name helpers                | [UTF.md](docs/UTF.md#utilities)     |
-| `@treewyrm/freelancer/math`        | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Matrix4`, `Transform`, scalar helpers     | [API.md](docs/API.md#math)          |
-| `@treewyrm/freelancer/vmesh`       | VMesh geometry parts and mesh library                                               | [VMESH.md](docs/VMESH.md)           |
-| `@treewyrm/freelancer/compound`    | The `Cmpnd` hierarchy shared by rigid and deformable models                         | [COMPOUND.md](docs/COMPOUND.md)     |
-| `@treewyrm/freelancer/rigid`       | `.3db` / `.cmp` / `.sph` models: parts, cameras, spheres, material animation        | [RIGID.md](docs/RIGID.md)           |
-| `@treewyrm/freelancer/animation`   | Keyframe animation scripts, shared by `.cmp` and `.anm`                             | [ANIMATION.md](docs/ANIMATION.md)   |
-| `@treewyrm/freelancer/deformable`  | `.dfm` character models: bones, skinned meshes, detail levels                       | [DEFORMABLE.md](docs/DEFORMABLE.md) |
-| `@treewyrm/freelancer/surface`     | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy                  | [SURFACE.md](docs/SURFACE.md)       |
-| `@treewyrm/freelancer/texture`     | `Texture library` entries: DDS surfaces, Targa mip chains, animations, cubemaps     | [TEXTURE.md](docs/TEXTURE.md)       |
-| `@treewyrm/freelancer/material`    | `Material library` entries: shader type, colours, texture slots                     | [MATERIAL.md](docs/MATERIAL.md)     |
-| `@treewyrm/freelancer/alchemy`     | Alchemy particle effects: node library and effect library                           | [ALCHEMY.md](docs/ALCHEMY.md)       |
-| `@treewyrm/freelancer/ini`         | `Document`, `Section`, `Property`, `Value`, coercion, lookups, `read` / `write`     | [INI.md](docs/INI.md)               |
-| `@treewyrm/freelancer/ini/text`    | Text INI parser and serializer                                                      | [INI.md](docs/INI.md)               |
-| `@treewyrm/freelancer/ini/binary`  | BINI reader and writer                                                              | [INI.md](docs/INI.md)               |
-| `@treewyrm/freelancer/ini/save`    | `.fl` saves: text under a positional XOR mask                                       | [INI.md](docs/INI.md)               |
-| `@treewyrm/freelancer/thn`         | `Globals`, `Global`, `Value`, value helpers, `read` / `write`                       | [THN.md](docs/THN.md)               |
-| `@treewyrm/freelancer/thn/text`    | Lua source parser and serializer                                                    | [THN.md](docs/THN.md)               |
-| `@treewyrm/freelancer/thn/bytecode`| Compiled Lua 3.2 reader, and the opcode table                                       | [THN.md](docs/THN.md)               |
-| `@treewyrm/freelancer/thn/scene`   | Entities and events as typed records, and THORN's vocabulary                        | [THORN.md](docs/THORN.md)           |
-| `@treewyrm/freelancer/resource`    | Resource DLLs: `read` / `write`, string tables, infocards, the `ids_*` id space     | [RESOURCE.md](docs/RESOURCE.md)     |
+| `@treewyrm/freelancer`             | `getResourceId`, `getObjectId`, and the lookups built on them                       | [UTF.md](docs/modules/UTF.md#hashing)       |
+| `@treewyrm/freelancer/utf`         | `Directory`, `File` — the UTF container                                             | [UTF.md](docs/modules/UTF.md)               |
+| `@treewyrm/freelancer/utility`     | `BufferView`, windows-1252, tree, timestamp, number and name helpers                | [UTF.md](docs/modules/UTF.md#utilities)     |
+| `@treewyrm/freelancer/math`        | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Matrix4`, `Transform`, scalar helpers     | [MATH.md](docs/modules/MATH.md)     |
+| `@treewyrm/freelancer/vmesh`       | VMesh geometry parts and mesh library                                               | [VMESH.md](docs/modules/VMESH.md)           |
+| `@treewyrm/freelancer/compound`    | The `Cmpnd` hierarchy shared by rigid and deformable models                         | [COMPOUND.md](docs/modules/COMPOUND.md)     |
+| `@treewyrm/freelancer/rigid`       | `.3db` / `.cmp` / `.sph` models: parts, cameras, spheres, material animation        | [RIGID.md](docs/modules/RIGID.md)           |
+| `@treewyrm/freelancer/animation`   | Keyframe animation scripts, shared by `.cmp` and `.anm`                             | [ANIMATION.md](docs/modules/ANIMATION.md)   |
+| `@treewyrm/freelancer/deformable`  | `.dfm` character models: bones, skinned meshes, detail levels                       | [DEFORMABLE.md](docs/modules/DEFORMABLE.md) |
+| `@treewyrm/freelancer/surface`     | `.sur` collision surfaces: parts, hulls, bounding volume hierarchy                  | [SURFACE.md](docs/modules/SURFACE.md)       |
+| `@treewyrm/freelancer/texture`     | `Texture library` entries: DDS surfaces, Targa mip chains, animations, cubemaps     | [TEXTURE.md](docs/modules/TEXTURE.md)       |
+| `@treewyrm/freelancer/material`    | `Material library` entries: shader type, colours, texture slots                     | [MATERIAL.md](docs/modules/MATERIAL.md)     |
+| `@treewyrm/freelancer/alchemy`     | Alchemy particle effects: node library and effect library                           | [ALCHEMY.md](docs/modules/ALCHEMY.md)       |
+| `@treewyrm/freelancer/ini`         | `Document`, `Section`, `Property`, `Value`, coercion, lookups, `read` / `write`     | [INI.md](docs/modules/INI.md)               |
+| `@treewyrm/freelancer/ini/text`    | Text INI parser and serializer                                                      | [INI.md](docs/modules/INI.md)               |
+| `@treewyrm/freelancer/ini/binary`  | BINI reader and writer                                                              | [INI.md](docs/modules/INI.md)               |
+| `@treewyrm/freelancer/ini/save`    | `.fl` saves: text under a positional XOR mask                                       | [INI.md](docs/modules/INI.md)               |
+| `@treewyrm/freelancer/thn`         | `Globals`, `Global`, `Value`, value helpers, `read` / `write`                       | [THN.md](docs/modules/THN.md)               |
+| `@treewyrm/freelancer/thn/text`    | Lua source parser and serializer                                                    | [THN.md](docs/modules/THN.md)               |
+| `@treewyrm/freelancer/thn/bytecode`| Compiled Lua 3.2 reader, and the opcode table                                       | [THN.md](docs/modules/THN.md)               |
+| `@treewyrm/freelancer/thn/scene`   | Entities and events as typed records, and THORN's vocabulary                        | [THORN.md](docs/refs/THORN.md)           |
+| `@treewyrm/freelancer/resource`    | Resource DLLs: `read` / `write`, string tables, infocards, the `ids_*` id space     | [RESOURCE.md](docs/modules/RESOURCE.md)     |
 
 Freelancer's voice banks under `DATA/AUDIO` need no module of their own — they are flat UTF
 directories of RIFF waveforms, handled with `Directory` and `File` directly. See
-[AUDIO.md](docs/AUDIO.md) for how a line is named and how to read and write one.
+[AUDIO.md](docs/refs/AUDIO.md) for how a line is named and how to read and write one.
 
 ## Installation
 
@@ -295,7 +295,7 @@ the same bytes. Byte-exactness holds where the format permits it:
 | Alchemy effects                     | **Byte-exact**, 596 files bar two encoding residues  |
 | Texture library                     | 4,447 DDS surfaces, both cubemaps, 629 Targa chains  |
 
-The full table, including what cannot round-trip and why, is in [RETAIL.md](docs/RETAIL.md).
+The full table, including what cannot round-trip and why, is in [RETAIL.md](docs/refs/RETAIL.md).
 
 ## Testing
 
@@ -313,33 +313,34 @@ that the number needs updating. **The rest of the suite never depends on retail 
 Each module has a document carrying its binary layout, the retail measurements behind it, and the
 decisions not worth re-litigating.
 
-| Document                             | Subject                                                                      |
-| ------------------------------------ | ---------------------------------------------------------------------------- |
-| [API.md](docs/API.md)                | Every export of every subpath, and what no barrel re-exports                 |
-| [UTF.md](docs/UTF.md)                | The container, `Directory` / `File`, hashing, the utilities                  |
-| [VMESH.md](docs/VMESH.md)            | Mesh parts, the `VMeshWire` overlay, the mesh library, LOD levels            |
-| [COMPOUND.md](docs/COMPOUND.md)      | The `Cmpnd` hierarchy, constraints, joints, hardpoints                       |
-| [RIGID.md](docs/RIGID.md)            | `.3db` / `.cmp` / `.sph`, cameras, spheres, material animation               |
-| [ANIMATION.md](docs/ANIMATION.md)    | Keyframe scripts, channel types, the quantized quaternion decode             |
-| [SURFACE.md](docs/SURFACE.md)        | `.sur` collision files, and their Ipion Virtual Physics lineage              |
-| [TEXTURE.md](docs/TEXTURE.md)        | The four forms a texture entry takes, and cubemaps                           |
-| [MATERIAL.md](docs/MATERIAL.md)      | Shader types, colours, texture slots, and why every property is optional     |
-| [DEFORMABLE.md](docs/DEFORMABLE.md)  | `.dfm` characters: the bone table, skinned meshes, detail levels             |
-| [ALCHEMY.md](docs/ALCHEMY.md)        | `.ale` particle effects, the node library, the case-sensitive hash           |
-| [INI.md](docs/INI.md)                | All three encodings, the shared document model, how the game reads a value   |
-| [THN.md](docs/THN.md)                | The scene script format, its value domain, and why it is not INI             |
-| [THORN.md](docs/THORN.md)            | The scene vocabulary: entities, events, properties, and where each came from |
-| [RESOURCE.md](docs/RESOURCE.md)      | The resource DLLs: the PE container, string tables, infocards, the id space  |
-| [RDL.md](docs/RDL.md)                | The markup every `ids_info` resolves to, which has no module                 |
-| [AUDIO.md](docs/AUDIO.md)            | `DATA/AUDIO` voice banks, which need no module of their own                  |
-| [ENGINE.md](docs/ENGINE.md)          | The INI vocabularies the executables hardcode, and how they were recovered   |
-| [SECTIONS.md](docs/SECTIONS.md)      | Every section and property the game reads, with its declared value shape     |
-| [RETAIL.md](docs/RETAIL.md)          | The corpus, the measurements, the quirks, the open questions                 |
-| [RENDERER.md](docs/RENDERER.md)      | Mapping these structures onto a WebGL2 renderer                              |
+| Document                                     | Subject                                                                      |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| [UTF.md](docs/modules/UTF.md)                | The container, `Directory` / `File`, hashing, the utilities                  |
+| [MATH.md](docs/modules/MATH.md)              | Vectors, quaternions, matrices, transforms, convex hulls                     |
+| [VMESH.md](docs/modules/VMESH.md)            | Mesh parts, the `VMeshWire` overlay, the mesh library, LOD levels            |
+| [COMPOUND.md](docs/modules/COMPOUND.md)      | The `Cmpnd` hierarchy, constraints, joints, hardpoints                       |
+| [RIGID.md](docs/modules/RIGID.md)            | `.3db` / `.cmp` / `.sph`, cameras, spheres, material animation               |
+| [ANIMATION.md](docs/modules/ANIMATION.md)    | Keyframe scripts, channel types, the quantized quaternion decode             |
+| [SURFACE.md](docs/modules/SURFACE.md)        | `.sur` collision files, and their Ipion Virtual Physics lineage              |
+| [TEXTURE.md](docs/modules/TEXTURE.md)        | The four forms a texture entry takes, and cubemaps                           |
+| [MATERIAL.md](docs/modules/MATERIAL.md)      | Shader types, colours, texture slots, and why every property is optional     |
+| [DEFORMABLE.md](docs/modules/DEFORMABLE.md)  | `.dfm` characters: the bone table, skinned meshes, detail levels             |
+| [ALCHEMY.md](docs/modules/ALCHEMY.md)        | `.ale` particle effects, the node library, the case-sensitive hash           |
+| [INI.md](docs/modules/INI.md)                | All three encodings, the shared document model, how the game reads a value   |
+| [THN.md](docs/modules/THN.md)                | The scene script format, its value domain, and why it is not INI             |
+| [RESOURCE.md](docs/modules/RESOURCE.md)      | The resource DLLs: the PE container, string tables, infocards, the id space  |
+| [THORN.md](docs/refs/THORN.md)               | The scene vocabulary: entities, events, properties, and where each came from |
+| [RDL.md](docs/refs/RDL.md)                   | The markup every `ids_info` resolves to, which has no module                 |
+| [AUDIO.md](docs/refs/AUDIO.md)               | `DATA/AUDIO` voice banks, which need no module of their own                  |
+| [ENGINE.md](docs/refs/ENGINE.md)             | The INI vocabularies the executables hardcode, and how they were recovered   |
+| [SECTIONS.md](docs/refs/SECTIONS.md)         | Every section and property the game reads, with its declared value shape     |
+| [RETAIL.md](docs/refs/RETAIL.md)             | The corpus, the measurements, the quirks, the open questions                 |
+| [RENDERER.md](docs/refs/RENDERER.md)         | Mapping these structures onto a WebGL2 renderer                              |
+| [ARCHITECTURE.md](docs/refs/ARCHITECTURE.md) | Commands, invariants, layering, directory structure, code style              |
 
-Each module document carries the format's binary layout and data structures, then a closing
-**Corpus** chapter with the retail counts and round-trip results behind them. Function and type names
-are not repeated per module — they are all in [API.md](docs/API.md).
+Each module document carries the format's binary layout and data structures, an **API** section
+listing its exports (checked against `src/` by `src/api.test.ts`), and a closing **Corpus** chapter
+with the retail counts and round-trip results behind them.
 
 ## Development
 

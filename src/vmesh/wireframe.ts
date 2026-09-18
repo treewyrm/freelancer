@@ -9,7 +9,7 @@ const byteLength = 0x10
  *
  * `vertexStart`, `vertexCount` and `vertexRange` are stored as authored and are never recomputed on
  * write, so files round-trip byte-exactly whichever exporter produced them. Exporters disagree on
- * `vertexRange`; see [VMESH.md](../../docs/VMESH.md) for the canonical formulas to use when
+ * `vertexRange`; see [VMESH.md](../../docs/modules/VMESH.md) for the canonical formulas to use when
  * authoring new data.
  */
 export interface VWireData {

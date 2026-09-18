@@ -42,7 +42,7 @@ export const getNormal = (a: Vector3, b: Vector3, c: Vector3): Vector3 =>
  * involution, and neither is retail's.
  *
  * The order walked here is the face list; IVP walked its own, which the compact ledge does not
- * record, so a tie it broke is not recoverable. See [SURFACE.md](../../docs/SURFACE.md).
+ * record, so a tie it broke is not recoverable. See [SURFACE.md](../../docs/modules/SURFACE.md).
  */
 function getPierceIndices(normals: Vector3[]): number[] {
   const pierce = new Array<number>(normals.length).fill(-1)

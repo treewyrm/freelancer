@@ -38,7 +38,7 @@ export const formatOf = (data: ArrayBufferView | ArrayBufferLike): Format =>
  *
  * **`format` accepts only `'text'`, and that is the type doing its job rather than an oversight.**
  * There is no bytecode writer yet — it is deferred, not ruled out, and waits on the two undecoded
- * header fields recorded in [THN.md](../docs/THN.md). Naming the gap in the signature means asking
+ * header fields recorded in [THN.md](../docs/modules/THN.md). Naming the gap in the signature means asking
  * for bytecode fails to compile instead of throwing at run time, and widening this to the full
  * {@link Format} later is purely additive.
  *

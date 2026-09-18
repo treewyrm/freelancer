@@ -303,7 +303,7 @@ export interface WriteOptions {
  * resource-only image, not the original with its `.rsrc` replaced. For the six that are already
  * resource-only that distinction does not arise; for `resources.dll` it means the stub is gone,
  * which is safe on the evidence above and is the one claim here that only the running game can
- * settle. See the `TODO` in [RESOURCE.md](../../docs/RESOURCE.md).
+ * settle. See the `TODO` in [RESOURCE.md](../../docs/modules/RESOURCE.md).
  *
  * @param resources Entries to write.
  */

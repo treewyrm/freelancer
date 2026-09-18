@@ -434,7 +434,7 @@ describe('retail asset corpus', { skip }, () => {
   // FX/MISC/tlrtube.3db is Freelancer's own. Its "Mesh" tree uses the deformable vocabulary,
   // it carries no openFLAME marker, and EXE/dacom.ini has a [MaterialMap] rule for its sole
   // material. It is residue of FxMeshAppearance, an unfinished feature that crashes the game
-  // on particle spawn — so there is nothing working to model. See docs/RIGID.md.
+  // on particle spawn — so there is nothing working to model. See docs/modules/RIGID.md.
   describe('pre-VMesh assets', () => {
     const legacy = () =>
       assets().filter(

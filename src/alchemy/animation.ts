@@ -88,7 +88,7 @@ export interface TransformPoint {
 // TODO: observe in game. Retail carries exactly two words here — 0x00050304 and 0x80050304 — so
 // only the enable bit is ever varied and the rest cannot be read off the data. They select neither
 // which channels are present (the payload is always nine curves) nor which are used (the same word
-// covers every combination of populated channels). See the TODO section in docs/ALCHEMY.md.
+// covers every combination of populated channels). See the TODO section in docs/modules/ALCHEMY.md.
 /** Which of a node transform's channels are present, and whatever else the low bits mean. */
 export enum TransformFlags {
   None = 0,

@@ -12,7 +12,7 @@ import type { Entity, Event, Script } from './types.js'
  * The typed layer against the retail install.
  *
  * Every count here was measured before the code existed and is written down in
- * [THORN.md](../../../docs/THORN.md) beside the evidence for it, so a failure means the reader
+ * [THORN.md](../../../docs/refs/THORN.md) beside the evidence for it, so a failure means the reader
  * drifted rather than that the number needs updating. Skips itself when no install is present.
  */
 describe('retail scenes, typed', { skip: corpus.skip }, () => {

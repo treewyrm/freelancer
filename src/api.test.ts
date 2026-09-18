@@ -1,9 +1,10 @@
 /**
- * [API.md](../docs/API.md) claims to be resolved from `src/` with the TypeScript checker rather than
- * transcribed. This is what makes that true: it resolves the exports the same way and fails when the
- * document and the barrels disagree in either direction.
+ * Every module doc's `## API` section claims to be resolved from `src/` with the TypeScript checker
+ * rather than transcribed. This is what makes that true: it resolves the exports the same way and
+ * fails when a document and its barrel disagree in either direction. [CLAUDE.md](../CLAUDE.md)'s
+ * entry-point table carries the same claim for the summary counts.
  *
- * It exists because the document drifted once already — an `./ini` rework to classes left eleven
+ * It exists because the documentation drifted once already — an `./ini` rework to classes left eleven
  * free functions listed that no longer existed, and `surface`'s whole construction layer went
  * undocumented for two days. Both are the kind of gap nothing else in the suite can see: every
  * export still compiled, every test still passed, and only a reader was misled.
@@ -45,6 +46,32 @@ const ENTRY_POINTS: Record<string, string> = {
   './resource': 'src/resource/index.ts',
 }
 
+/** Subpath → the module doc whose `## API` section documents it. Several subpaths share a doc. */
+const DOC_OF: Record<string, string> = {
+  '.': 'docs/modules/UTF.md',
+  './utility': 'docs/modules/UTF.md',
+  './math': 'docs/modules/MATH.md',
+  './utf': 'docs/modules/UTF.md',
+  './alchemy': 'docs/modules/ALCHEMY.md',
+  './animation': 'docs/modules/ANIMATION.md',
+  './vmesh': 'docs/modules/VMESH.md',
+  './compound': 'docs/modules/COMPOUND.md',
+  './rigid': 'docs/modules/RIGID.md',
+  './surface': 'docs/modules/SURFACE.md',
+  './texture': 'docs/modules/TEXTURE.md',
+  './material': 'docs/modules/MATERIAL.md',
+  './deformable': 'docs/modules/DEFORMABLE.md',
+  './ini': 'docs/modules/INI.md',
+  './ini/text': 'docs/modules/INI.md',
+  './ini/binary': 'docs/modules/INI.md',
+  './ini/save': 'docs/modules/INI.md',
+  './thn': 'docs/modules/THN.md',
+  './thn/text': 'docs/modules/THN.md',
+  './thn/bytecode': 'docs/modules/THN.md',
+  './thn/scene': 'docs/modules/THN.md',
+  './resource': 'docs/modules/RESOURCE.md',
+}
+
 /**
  * The `Kind` column's vocabulary, which is also what separates an export row from a member row.
  * `./math`'s companion-object tables are two-column and list names in the second cell, so requiring
@@ -79,34 +106,44 @@ function resolveExports(): Record<string, string[]> {
   return result
 }
 
-/** Every name API.md lists under a `## \`<subpath>\`` heading. */
+/** Every name listed under a `### \`<subpath>\`` heading inside a doc's `## API` section. */
 function parseDocument(): Record<string, string[]> {
-  const lines = readFileSync(`${root}docs/API.md`, 'utf8').split('\n')
   const result: Record<string, string[]> = {}
-  let current: string | undefined
 
-  for (const line of lines) {
-    const heading = line.match(/^## `(\.[^`]*)`\s*$/)
+  for (const file of new Set(Object.values(DOC_OF))) {
+    const lines = readFileSync(`${root}${file}`, 'utf8').split('\n')
+    let inApi = false
+    let current: string | undefined
 
-    if (heading) {
-      current = heading[1]
-      result[current!] ??= []
-      continue
+    for (const line of lines) {
+      if (/^## /.test(line)) {
+        inApi = line.trim() === '## API'
+        current = undefined
+        continue
+      }
+
+      if (!inApi) continue
+
+      const heading = line.match(/^### `(\.[^`]*)`\s*$/)
+      if (heading) {
+        current = heading[1]
+        result[current!] ??= []
+        continue
+      }
+
+      if (!current || !line.startsWith('|')) continue
+
+      // Split on unescaped pipes only: a description may carry `\|`, as `'binary' \| 'text'` does.
+      const cells = line
+        .split(/(?<!\\)\|/)
+        .slice(1, -1)
+        .map((cell) => cell.trim())
+
+      if (cells.length !== 3 || !KINDS.has(cells[1]!)) continue
+
+      const name = cells[0]!.match(/^`([A-Za-z0-9_]+)`$/)?.[1]
+      if (name) result[current]!.push(name)
     }
-
-    if (line.startsWith('## ')) current = undefined
-    if (!current || !line.startsWith('|')) continue
-
-    // Split on unescaped pipes only: a description may carry `\|`, as `'binary' \| 'text'` does.
-    const cells = line
-      .split(/(?<!\\)\|/)
-      .slice(1, -1)
-      .map((cell) => cell.trim())
-
-    if (cells.length !== 3 || !KINDS.has(cells[1]!)) continue
-
-    const name = cells[0]!.match(/^`([A-Za-z0-9_]+)`$/)?.[1]
-    if (name) result[current]!.push(name)
   }
 
   for (const subpath of Object.keys(result)) result[subpath]!.sort()
@@ -114,7 +151,7 @@ function parseDocument(): Record<string, string[]> {
   return result
 }
 
-describe('API.md', () => {
+describe('API documentation', () => {
   const resolved = resolveExports()
   const documented = parseDocument()
 
@@ -132,11 +169,11 @@ describe('API.md', () => {
   })
 
   /**
-   * The counts are the document's own summary of itself, and a stale one is the same failure the
+   * The counts are CLAUDE.md's own summary of itself, and a stale one is the same failure the
    * tables had — it reads as measured when it is not.
    */
-  it('counts every entry point correctly in its summary table', () => {
-    const document = readFileSync(`${root}docs/API.md`, 'utf8')
+  it('counts every entry point correctly in the CLAUDE.md entry-point table', () => {
+    const document = readFileSync(`${root}CLAUDE.md`, 'utf8')
     const counted: Record<string, number> = {}
 
     for (const [, subpath, count] of document.matchAll(/^\| `(\.[^`]*)`\s*\| (\d+)\s*\|/gm))
@@ -150,8 +187,8 @@ describe('API.md', () => {
     )
   })
 
-  it('states the correct total', () => {
-    const document = readFileSync(`${root}docs/API.md`, 'utf8')
+  it('states the correct total in CLAUDE.md', () => {
+    const document = readFileSync(`${root}CLAUDE.md`, 'utf8')
     const total = Object.values(resolved).reduce((sum, names) => sum + names.length, 0)
     const points = Object.keys(ENTRY_POINTS).length
 

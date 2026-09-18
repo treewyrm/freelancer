@@ -207,7 +207,7 @@ function getMoment(
  * `massCenter`, `radius` and `surfaceDeviation` reproduce every retail part, and so does
  * `rotationInertia` wherever the hull still encloses the volume it was measured from. It is read
  * by the game — a part blown off a model tumbles by it — so pass a better figure through when one
- * is at hand. See [SURFACE.md](../../docs/SURFACE.md#todo).
+ * is at hand. See [SURFACE.md](../../docs/modules/SURFACE.md#todo).
  */
 export function getMassProperties(
   hulls: Iterable<Hull>,

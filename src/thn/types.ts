@@ -9,7 +9,7 @@
  * retail scripts yields fifteen opcodes, every one of which pushes a value or builds a table — no
  * call, no branch, no local, and not one nested function prototype. There is no control flow to
  * model and no engine API to model, so what is left is four kinds of value and a list of
- * assignments. See [THN.md](../../docs/THN.md).
+ * assignments. See [THN.md](../../docs/modules/THN.md).
  */
 
 /** Which of the four things a value is. */

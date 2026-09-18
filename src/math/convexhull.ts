@@ -5,7 +5,7 @@
  * QuickHull in two ways that matter on the boxy, CAD-like geometry a collision hull is built from:
  * a nested 2D QuickHull resolves coplanar tie-clusters instead of picking an arbitrary member of
  * one, and the initial extreme-point search derives its own tolerance at the data's own magnitude.
- * See [SURFACE.md](../../docs/SURFACE.md#convex-hull).
+ * See [SURFACE.md](../../docs/modules/SURFACE.md#convex-hull).
  *
  * Only {@link generateConvexHull} and its two types are public; the rest is the algorithm's own
  * plumbing.

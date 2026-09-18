@@ -87,7 +87,7 @@ export interface MeshDraw {
  * Offsets only — no slice of `indices` or `vertices` comes back. Direct3D takes `BaseVertex` as a
  * draw parameter, and an API without one (WebGL2 has no base vertex) has to fold it into the
  * indices, the attribute pointers or the buffer upload; which of those is a policy this library does
- * not hold. `docs/RENDERER.md` §3.3 weighs the four options.
+ * not hold. `docs/refs/RENDERER.md` §3.3 weighs the four options.
  *
  * The mesh comes in resolved — see {@link getMesh}.
  */

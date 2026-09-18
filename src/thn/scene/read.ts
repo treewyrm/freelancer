@@ -730,7 +730,7 @@ const readEvent = (where: string, v: Value): Event => {
  * **Both export forms read the same.** `type = SCENE` and `type = 9` are different bytecode and the
  * interim layer keeps them apart; here they are both `'SCENE'`, and likewise for every axis, flag,
  * light type, fog mode and `Y`/`N` in the script. That fold is what this layer is for, and it is only
- * possible because the values are measured — see [THORN.md](../../../docs/THORN.md).
+ * possible because the values are measured — see [THORN.md](../../../docs/refs/THORN.md).
  *
  * Throws a `TypeError` naming the path when a value is not what the vocabulary says it should be, or
  * when an entity type, event action, enum value or flag bit is one this library has not measured.
