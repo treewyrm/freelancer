@@ -54,8 +54,13 @@ export function writePair({ sourceId, targetId }: Pair): BufferView {
 export const WorldId = 0x8000
 
 /**
- * CRC of the root container every effect hangs its instances from. It names no node in the
- * library, is always a root, always carries `flags` 1, and is never either end of a link.
+ * CRC that makes a container the effect's attachment root: the one node the host's placement
+ * matrix reaches. It names no node in the library, is always a root, always carries `flags` 1, and
+ * is never either end of a link.
+ *
+ * **The flag makes a container; this CRC makes it the root.** `alchemy.dll` builds any flagged
+ * instance as a bare folder without looking its CRC up, and then keeps the folder whose CRC is this
+ * one as the target of every placement. Nodes beside it are not placed.
  *
  * Signed, because instance CRCs are read as `int32` and would never compare equal otherwise.
  */
@@ -70,10 +75,10 @@ export const DefaultId = 0xee223b51 | 0
  * them in two separate lists.
  */
 export interface NodeInstance {
-  /** Node name CRC (case-sensitive). */
+  /** Node name CRC (case-sensitive), or {@link DefaultId} on the attachment root. */
   crc: number
 
-  /** Display flags. */
+  /** Non-zero for a container that references no node. */
   flags: number
 
   /** Sorting order. */

@@ -592,7 +592,7 @@ the rigid one, so §5 applies unchanged — `getBoneModel` returns the same `Mod
 An `.ale` is a node library and an effect library in one container, both unwrapped by `readAlchemy`.
 Corpus: 596 files, 1,213 effects, 5,575 nodes, 6,648 instances, of which 5,505 reference a node.
 
-Three resolution rules, each of which produces a working renderer that draws the wrong thing:
+Four resolution rules, each of which produces a working renderer that draws the wrong thing:
 
 - **Hashing is case-sensitive here and nowhere else** — `getResourceId(name, true)`. Folding the way
   every other lookup in this library does strands 2,691 of the 5,505 references.
@@ -602,12 +602,19 @@ Three resolution rules, each of which produces a working renderer that draws the
   names are defined in more than one file and 111 of those disagree**, so 219 references land on a
   name whose meaning depends on load order, and the consumer's load order is what settles them.
   Resolving one file at a time hides that rather than avoiding it.
-- **`flags` decides whether an instance names a node at all — not the CRC.** An instance with `flags`
-  set is a container; its `crc` carries nothing and may hold any value. Retail writes `0xee223b51` in
-  all 1,143 of them, but that is residue from Digital Anvil's authoring tool, not a constant the
-  format defines. Matching the hash works on retail by coincidence. The corpus cannot tell the two
-  rules apart, and retail holds only `flags` 0 and 1, so read non-zero as "no node reference" and
-  infer nothing further.
+- **`flags` decides whether an instance names a node; `DefaultId` decides where the effect is
+  placed.** An instance with `flags` set is a container, built without looking its CRC up. The
+  container whose CRC is `0xee223b51` is the effect's **attachment root**, and the placement matrix
+  the host gives the effect is applied to that node alone. Retail sets both on all 1,143 containers,
+  so either test recognizes one. See
+  [ALCHEMY.md](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-defaultid-makes-it-the-root).
+- **Place the root, not the effect.** Nodes under the root move with the placement; a node at the
+  top level beside it does not. Particles are stored in their appearance's frame, so an emitter
+  under the root and its appearance beside it leave a trail: every birth comes out where the emitter
+  is now, and every particle stays where it was born. Multiplying the placement over the whole
+  effect at draw time puts every particle back on the emitter and erases the trail. 277 of the
+  1,143 rooted retail effects are laid out this way
+  ([Corpus](../modules/ALCHEMY.md#the-container-instance)).
 
 An effect is a tree of `NodeInstance` with two independent edge sets: `children` for containment, and
 `targets` — resolved from the flat `Pair` table — for the emitter → appearance binding. Walking only

@@ -419,7 +419,7 @@ The two 6s once counted here are the table's seventh entry, `AutoInverse`.
 
 ```ts
 interface NodeInstance {
-  crc: number      // CRC of the referenced node name, case-sensitive; meaningless when flags is set
+  crc: number      // CRC of the referenced node name, case-sensitive; DefaultId on the attachment root
   flags: number    // non-zero marks a container that references no node
   sort: number     // serialization order
   id?: number      // on-disk entry identifier
@@ -457,16 +457,32 @@ Instances form a tree via `children`; cross-tree links — an appearance bound t
 `targets`, serialized as the separate flat `Pair` records. Walking only `children` finds the nodes
 and none of the pairings.
 
-### The `flags` field marks a container, not the CRC
+### Two fields, two jobs: `flags` makes a container, `DefaultId` makes it the root
 
-An instance whose `flags` is non-zero references no node, and its `crc` carries nothing — it may hold
-any value. Retail writes `0xee223b51` in every one of them, residue from Digital Anvil's in-house
-authoring tool rather than a value the format defines. `DefaultId` names that residue so it can be
-recognized; it is not the mechanism, and a reader that tests it instead of the flag is right about
-retail by coincidence. See [Corpus](#the-container-instance).
+**Both fields matter, and they decide different things.** `alchemy.dll`'s effect build
+(`0x621efbc`–`0x621f0a0`) reads each entry and branches on `flags` alone:
+
+- **`flags` 0** — the CRC is looked up in the node library and an instance of that node made. A CRC
+  that resolves to nothing fails the whole effect ("couldn't create instace of node", and the build
+  returns −1).
+- **`flags` non-zero** — a bare `FxNode` is made by class name, which the DLL's own messages call a
+  **folder** ("couldn't create instace of folder"). The CRC is not looked up, so any value builds.
+
+Then, for a folder only, **the CRC is compared with `0xee223b51`** (`0x621f07e`). The folder that
+matches is kept as the effect's **attachment root** (the effect's `+0x18`, set at `0x621f2c9`), and
+it is the one node the host's placement reaches: the effect's matrix setter (`0x621f610`) hands a
+placement matrix to that folder and to nothing else. What hangs from it moves with the placement;
+**a node beside it, at the top level, does not.** An effect with no such folder hands the placement
+to every node instead.
+
+So a container carrying some other CRC is still a container, but the effect it sits in loses its
+root. Its nodes then take the placement one by one rather than through one parent. Neither case
+occurs in retail, where flag and CRC coincide on every instance
+([Corpus](#the-container-instance)), so a reader that recognizes the container by either field
+gets retail right. A writer has to set both.
 
 Because retail never writes any other flag value, whether the field is a bitfield or an enum is
-untested: read non-zero as "no node reference" and infer nothing further.
+untested. The DLL tests it against zero and nothing else.
 
 The constant is written `0xee223b51 | 0` because instance CRCs are read with `readInt32`.
 
@@ -516,7 +532,7 @@ implementation detail. Reading those INIs is the consumer's.
 | `BlendingMode`       | enum      | Blend factor, which is `D3DBLEND` verbatim.                                                        |
 | `colorAt`            | function  | `(animation: AnimatedColor, p, t): Vector3`                                                        |
 | `curveAt`            | function  | `(animation: AnimatedCurve, p, t): number`                                                         |
-| `DefaultId`          | const     | CRC of the root container every effect hangs its instances from.                                   |
+| `DefaultId`          | const     | CRC that makes a container the effect's attachment root, the node a placement reaches.             |
 | `DefaultTransformOrder` | const  | The order bytes every retail transform carries, and `alchemy.dll`'s own default (`0x435`).         |
 | `ease`               | function  | `(type: EaseType, a, b, t): number`                                                                |
 | `EaseAnimation`      | interface | An `Animation` with an `easing` type.                                                              |
@@ -614,11 +630,17 @@ one or two each. `FX/EXPLOSIONS/gf_small_damage.ale`'s `gf_small_damage_smoke2.a
 
 Across the 6,648 instances, `flags` takes only the values 0 (5,505 times) and 1 (1,143 times), every
 flagged instance carries `0xee223b51`, and no unflagged one does. The two conditions coincide
-perfectly, so the flag is the mechanism on grounds outside the data.
+perfectly, and each does its own job in the DLL: the flag makes the container and the CRC makes it
+the root ([above](#two-fields-two-jobs-flags-makes-a-container-defaultid-makes-it-the-root)).
 
 The container occurs 1,143 times, always at root, never as either end of a link, and its direct
 children always have `flags` 0; 1,143 of the 1,213 effects have exactly one and the remaining 70 have
 none. No name in any library hashes to `0xee223b51`.
+
+**277 of the 1,143 rooted effects keep appearances beside the root rather than under it** — 401
+appearance instances at the top level against 2,122 hanging from a root. The placement never
+reaches those 401, so their particles stay where they were born while the emitters that feed them
+move on.
 
 ### Effect library versions
 

@@ -482,6 +482,34 @@ describe('retail asset corpus', { skip }, () => {
       strictEqual(without, 70)
     })
 
+    // The root is what a placement reaches, so a node beside it stays where the effect started. An
+    // appearance there keeps its particles in a frame the placement never moves — a trail.
+    it('leaves appearances beside the DefaultId root in 277 effects', () => {
+      let effectsBeside = 0
+      let beside = 0
+      let under = 0
+
+      for (const asset of assets()) {
+        const types = new Map(nodes(asset).nodes.map((node) => [id(node, true), node.type]))
+        const appearance = ({ crc }: NodeInstance) => !!types.get(crc)?.endsWith('Appearance')
+
+        for (const { children } of effects(asset).effects) {
+          const root = children.find(({ crc }) => crc === DefaultId)
+          if (!root) continue
+
+          const top = children.filter((instance) => instance !== root && appearance(instance))
+
+          if (top.length) effectsBeside++
+          beside += top.length
+          under += [...walk(root.children)].filter(appearance).length
+        }
+      }
+
+      strictEqual(effectsBeside, 277)
+      strictEqual(beside, 401)
+      strictEqual(under, 2122)
+    })
+
     it('is never itself a link target', () => {
       for (const asset of assets())
         for (const instance of walk(effects(asset).effects.flatMap(({ children }) => children)))
