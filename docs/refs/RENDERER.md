@@ -475,8 +475,10 @@ which matters, because sampled UVs run well outside 0..1 (measured range roughly
 
 **`MaterialAnim`** (root-level sibling of `Cmpnd`, rigid models only) animates a material's UV
 transform: per-segment offset and scale velocities, with `MAKeys` giving the transform each segment
-starts from. Feed the resulting UV matrix as a uniform; it changes per material per frame, not per
-vertex.
+starts from and four zeros before the first. Apply it as `uv · (1 + scale) + offset` — offset after
+scale, the scales stored as displacements from 1 — on UV0, from a clock that starts at load and
+always loops. Feed it as a uniform; it changes per material per frame, not per vertex. See
+[RIGID.md § What the game does with it](../modules/RIGID.md#what-the-game-does-with-it).
 
 ## 7. Textures
 
@@ -865,15 +867,13 @@ Three sweeps are this document's alone:
 
 ## TODO
 
-Seven open questions reach the renderer. None blocks a correct-looking image — each is a place where
+Four open questions reach the renderer. None blocks a correct-looking image — each is a place where
 this document picks the reading that cannot go visibly wrong.
 
 | Question                                                          | Taken here as                                                              | Settled by                                                             |
 | ----------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Whether a **prismatic** joint's `offset` is applied at all (§5.2) | applied, the same as on the other three types                              | Author a `Pris` joint with a non-zero `child_point` and load the model |
 | Texture flag bits 4 and 6 — the wrap mode field (§6)              | ignored; bit 4 is probably "sample UV1", which would matter on detail maps | [MATERIAL.md § TODO](../modules/MATERIAL.md#todo)                      |
-| Targa origin bit on nine chains (§7)                              | reported through `flip`, rows untouched                                    | [TEXTURE.md § TODO](../modules/TEXTURE.md#todo)                        |
-| `MAKeys` against `MADeltas` in material animation                 | both read, neither derived; the UV transform driver is unconfirmed         | [RIGID.md § TODO](../modules/RIGID.md#todo)                            |
 | `Edge_angles` on two deformable models                            | ignored                                                                    | [DEFORMABLE.md § TODO](../modules/DEFORMABLE.md#todo)                  |
 | The four version-1.1 `Effect` floats (§9.7)                       | unused; no effect culling                                                  | [ALCHEMY.md § TODO](../modules/ALCHEMY.md#todo)                        |
 

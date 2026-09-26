@@ -1,4 +1,4 @@
-import { at } from '#/math/animation.js'
+import { at, type Keyframe } from '#/math/animation.js'
 import { hermite, lerp, quadIn, quadOut, smooth } from '#/math/scalar.js'
 import type Vector3 from '#/math/vector3.js'
 import {
@@ -74,6 +74,38 @@ const outer = (type: EaseType): EaseType =>
       : type
 
 /**
+ * Where the sparam level of an animated property lands for `p`: the inner list at or before it, the
+ * one after, how far between, and the easing that blends what the two give — already the level's
+ * own, with `Auto` and `AutoInverse` swapped (`0x6206f90`, `0x6207740`, `0x6207ef0`).
+ *
+ * The half of {@link floatAt}, {@link colorAt} and {@link curveAt} above the inner lists, and all
+ * three are built on it. It is exported for a caller that evaluates the inner lists somewhere else —
+ * a vertex stage, handed the two lists and the weight's inputs once per draw, since `p` is one value
+ * for a whole effect instance.
+ *
+ * On or past the last key both lists are the last and `span` is 0, which every easing takes to the
+ * lower list's value. `undefined` for an animation with no inner list at all.
+ */
+export interface SparamLevel<T> {
+  lower: T
+  upper: T
+  span: number
+  easing: EaseType
+}
+
+export function sparamLevel<T extends Keyframe>(
+  animation: EaseAnimation<T>,
+  p: number,
+): SparamLevel<T> | undefined {
+  const last = animation.keyframes.at(-1)
+  if (!last) return undefined
+  if (p >= last.key) return { lower: last, upper: last, span: 0, easing: outer(animation.easing) }
+
+  const { start, end, span } = at(animation.keyframes, p)
+  return { lower: start, upper: end, span, easing: outer(animation.easing) }
+}
+
+/**
  * Folds a key outside a looped curve's range back into it, by the curve's {@link WrapFlags} mode on
  * that side (`0x6246a52`..`0x6246c7a`).
  *
@@ -144,12 +176,13 @@ export function floatWhen(animation: EaseAnimation<FloatKeyframe>, key: number):
  * @param t The inner key. What it is belongs to the caller: see [Two clocks] in ALCHEMY.md.
  */
 export function floatAt(animation: AnimatedFloat, p: number, t: number): number {
-  const last = animation.keyframes.at(-1)
-  if (!last) return 0
-  if (p >= last.key) return floatWhen(last, t)
+  const level = sparamLevel(animation, p)
+  if (!level) return 0
 
-  const { start, end, span } = at(animation.keyframes, p)
-  return ease(outer(animation.easing), floatWhen(start, t), floatWhen(end, t), span)
+  const { lower, upper, span, easing } = level
+  if (lower === upper) return floatWhen(lower, t)
+
+  return ease(easing, floatWhen(lower, t), floatWhen(upper, t), span)
 }
 
 /**
@@ -216,18 +249,18 @@ export function vectorWhen(animation: EaseAnimation<VectorKeyframe>, key: number
  * @param t The inner key. What it is belongs to the caller: see [Two clocks] in ALCHEMY.md.
  */
 export function colorAt(animation: AnimatedColor, p: number, t: number): Vector3 {
-  const last = animation.keyframes.at(-1)
-  if (!last) return { x: 0, y: 0, z: 0 }
-  if (p >= last.key) return vectorWhen(last, t)
+  const level = sparamLevel(animation, p)
+  if (!level) return { x: 0, y: 0, z: 0 }
 
-  const { start, end, span } = at(animation.keyframes, p)
-  const a = vectorWhen(start, t)
-  const b = vectorWhen(end, t)
-  const type = outer(animation.easing)
+  const { lower, upper, span, easing } = level
+  if (lower === upper) return vectorWhen(lower, t)
 
-  if (type === EaseType.Step) return a
+  const a = vectorWhen(lower, t)
+  const b = vectorWhen(upper, t)
 
-  const f = weight(type, a.x + a.y + a.z < b.x + b.y + b.z, span)
+  if (easing === EaseType.Step) return a
+
+  const f = weight(easing, a.x + a.y + a.z < b.x + b.y + b.z, span)
   return { x: lerp(a.x, b.x, f), y: lerp(a.y, b.y, f), z: lerp(a.z, b.z, f) }
 }
 
@@ -301,12 +334,13 @@ export function hermiteAt(animation: LoopAnimation<VectorKeyframe>, key: number)
  * @param t The inner key. What it is belongs to the caller: see [Two clocks] in ALCHEMY.md.
  */
 export function curveAt(animation: AnimatedCurve, p: number, t: number): number {
-  const last = animation.keyframes.at(-1)
-  if (!last) return 0
-  if (p >= last.key) return hermiteAt(last, t)
+  const level = sparamLevel(animation, p)
+  if (!level) return 0
 
-  const { start, end, span } = at(animation.keyframes, p)
-  return ease(outer(animation.easing), hermiteAt(start, t), hermiteAt(end, t), span)
+  const { lower, upper, span, easing } = level
+  if (lower === upper) return hermiteAt(lower, t)
+
+  return ease(easing, hermiteAt(lower, t), hermiteAt(upper, t), span)
 }
 
 /** Samples the three curves of a {@link TransformPoint} into a vector. */

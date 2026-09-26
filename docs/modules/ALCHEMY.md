@@ -355,6 +355,9 @@ Every rule below is ported from retail `alchemy.dll`, which evaluates in three p
 
 - **A key on or past the last keyframe returns that keyframe's value**, at both eased levels, before
   any easing runs — so a `Step` list reaches its last value exactly on its last key.
+- **`sparamLevel` is that level alone**, and `floatAt`, `colorAt` and `curveAt` are each it plus
+  their inner evaluator — so a caller evaluating the inner lists elsewhere, once `p` is fixed for a
+  whole effect instance, resolves the level the same way.
 - **The sparam level eases with its own inline code**, not the table, and has `Auto` and
   `AutoInverse` the other way round. Retail's outer lists use only `Smooth`, `Linear` and `QuadIn`,
   so the swap is never exercised.
@@ -542,6 +545,8 @@ implementation detail. Reading those INIs is the consumer's.
 | `readEffectLibrary`  | function  | Reads effect library.                                                                              |
 | `readNodeLibrary`    | function  | Reads node library.                                                                                |
 | `setNodeName`        | function  | Assigns alchemy node name.                                                                         |
+| `sparamLevel`        | function  | `(animation: EaseAnimation<T>, p): SparamLevel<T> \| undefined` — the sparam level alone.          |
+| `SparamLevel`        | interface | `{ lower, upper, span, easing }`: the two inner lists `p` lands between, and how they blend.       |
 | `Transform`          | interface | Animated transform.                                                                                |
 | `transformAt`        | function  | `(point: Transform, p, t): TransformAt`                                                            |
 | `TransformAt`        | interface | A sampled transform: `position`, `rotation`, `scale`.                                              |

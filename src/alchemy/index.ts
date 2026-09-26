@@ -45,6 +45,8 @@ export {
 
 export {
   type TransformAt,
+  type SparamLevel,
+  sparamLevel,
   ease,
   easeVector,
   limit,

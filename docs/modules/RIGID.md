@@ -127,7 +127,7 @@ the material it drives and holds three or four files. No `.dfm` carries one.
 ```ts
 interface MaterialAnim {
   name: string                   // material name, from the directory
-  flags: number                  // MAFlags; purpose unknown
+  flags: number                  // MAFlags; the game never reads it
   keyframes: MaterialKeyframe[]  // time + the four velocities
   keys: MaterialKey[]            // one fewer than keyframes
 }
@@ -138,7 +138,7 @@ interface MaterialAnim {
 | `MACount`  | uint32    | Number of `MADeltas` keyframes                                   |
 | `MADeltas` | float32[] | `MACount × 5` floats                                             |
 | `MAKeys`   | float32[] | `(MACount − 1) × 4` floats; omitted entirely when `MACount` is 1 |
-| `MAFlags`  | uint32    | Animation flags — see [TODO](#todo)                              |
+| `MAFlags`  | uint32    | Stored by the game and never read — see [below](#what-the-game-does-with-it) |
 
 Each `MADeltas` keyframe is `time`, `uOffsetSpeed`, `vOffsetSpeed`, `uScaleSpeed`, `vScaleSpeed`.
 Each `MAKeys` keyframe is `uOffset`, `vOffset`, `uScale`, `vScale`. There is one fewer key than
@@ -149,6 +149,24 @@ corroborated against the corpus.
 `time` is a duration, not a timestamp — see [Corpus](#material-animation).
 
 `MAKeys` is not `MADeltas` integrated. See [What `MAKeys` is not](#what-makeys-is-not).
+
+### What the game does with it
+
+Read out of `shading.dll`, which loads the entries and evaluates them.
+
+- **The keys are where each segment starts, and the deltas are rates within it.** Segment `i` starts
+  at `MAKeys[i − 1]`, or at four zeros for `i = 0`, and each value is that plus its speed times the
+  time elapsed in the segment (`0x6ec7330`). Nothing integrates across a boundary, so where a
+  segment's velocities arrive and where the next key starts can differ — and the game jumps there.
+- **The scales are displacements from 1.** The matrix the game builds is `u' = (1 + uScale) · u +
+  uOffset` and `v' = (1 + vScale) · v + vOffset`, scaling about UV `(0, 0)` — offset *after* scale.
+  It is applied to texture stage 0 as a two-coordinate texture transform.
+- **Time is a duration, and the sequence always loops.** Each frame adds `dt` to the time elapsed in
+  the current segment; while that is strictly past the segment's duration it is subtracted and the
+  next segment begins, wrapping to the first past the last (`0x6ec72a0`). An instance starts at zero
+  when its material is loaded, and every instance advances every frame.
+- **`MAFlags` is never read.** The loader stores it beside the count (`0x6ec6a60`), and no code in any
+  retail binary that reaches the animation library reads it back.
 
 ## Nodes this module does not read
 
@@ -280,27 +298,6 @@ entries span a one-keyframe rock material and the 340-keyframe fountain alike, a
 `li_resort_waterscape.cmp` holds both values at once.
 
 ## TODO
-
-### What `MAFlags` selects
-
-A `uint32` on every `MaterialAnim` entry, `2` in 78 of the 82 and `0` in the other four. The value
-round-trips untouched and nothing reads it. Two settings across 82 entries is too little to
-correlate against anything in the file.
-
-*Experiment*: set each of the four zero entries to `2`, and a couple of the `2`s to `0`, and watch
-the surface they drive. A looping banner that stops looping, an animation that stops playing, or a
-scroll that reverses names the bit. Until then `flags` stays a bare number rather than a named enum.
-
-### What the engine does with `MAKeys`
-
-Both files are read and neither is derived. Unknown: which drives the UV transform in game, and what
-the other contributes — whether `MAKeys` sets the absolute offset and scale at each segment boundary
-with `MADeltas` interpolating between, or whether the velocities drive continuously and the keys are
-a correction the engine snaps to.
-
-*Experiment*: `BASES/RHEINLAND/rh_01_bizmark_cityscape.cmp` is the readable subject, since a wrong
-reading shows as a mistimed flip rather than a subtly wrong scroll rate. Zero `MADeltas` while
-leaving `MAKeys` intact, then the reverse.
 
 ### `FX/MISC/tlrtube.3db`'s animated UV set
 

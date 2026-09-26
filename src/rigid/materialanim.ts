@@ -32,10 +32,10 @@ export interface MaterialKey {
   /** V start offset. */
   vOffset: number
 
-  /** U start scale. */
+  /** U start scale, as a displacement from 1: the game multiplies by `1 + uScale`. */
   uScale: number
 
-  /** V start scale. */
+  /** V start scale, as a displacement from 1: the game multiplies by `1 + vScale`. */
   vScale: number
 }
 
@@ -53,13 +53,16 @@ export interface MaterialAnim {
   /** Material name. */
   name: string
 
-  /** Animation flags. Purpose unknown; retail data holds `2`, or `0` in four entries. */
+  /**
+   * `MAFlags`, carried for the round trip. The game stores it and never reads it back; retail data
+   * holds `2`, or `0` in four entries.
+   */
   flags: number
 
   /** Segments, in playback order. */
   keyframes: MaterialKeyframe[]
 
-  /** Starting transform per segment, less the implicit first. */
+  /** Starting transform per segment, less the implicit first, which is four zeros. */
   keys: MaterialKey[]
 }
 

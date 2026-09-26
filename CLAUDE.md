@@ -18,7 +18,7 @@ than here.
 
 ## Entry points
 
-**494 exports across 22 entry points.** Each doc's `## API` section is resolved from `src/` with
+**496 exports across 22 entry points.** Each doc's `## API` section is resolved from `src/` with
 the TypeScript checker and checked by `src/api.test.ts` — a drifted table fails the suite, not just
 a reader.
 
@@ -28,7 +28,7 @@ a reader.
 | `./utility`       | 30      | [UTF.md](docs/modules/UTF.md#utilities)      |
 | `./math`          | 31      | [MATH.md](docs/modules/MATH.md)              |
 | `./utf`           | 4       | [UTF.md](docs/modules/UTF.md)                |
-| `./alchemy`       | 51      | [ALCHEMY.md](docs/modules/ALCHEMY.md)        |
+| `./alchemy`       | 53      | [ALCHEMY.md](docs/modules/ALCHEMY.md)        |
 | `./animation`     | 36      | [ANIMATION.md](docs/modules/ANIMATION.md)    |
 | `./vmesh`         | 32      | [VMESH.md](docs/modules/VMESH.md)            |
 | `./compound`      | 14      | [COMPOUND.md](docs/modules/COMPOUND.md)      |
