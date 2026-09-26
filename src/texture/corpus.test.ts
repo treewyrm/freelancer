@@ -483,6 +483,69 @@ describe('retail asset corpus', { skip }, () => {
           )
       }
     })
+
+    /**
+     * The tiled seven all begin at V = 1, over atlases that are all top-left Targas — the one file the
+     * game's loader reverses into memory (`shading.dll` `0x6ebf512`; every other image is copied in
+     * file order). Frame V is then ordinary V over that memory, zero at its first row, and
+     * `shading.dll` hands frames out as stored (`0x6ec2ee0`).
+     *
+     * Settled by content as well as by the disassembly: `XP_HERM` is an explosion, so its sequence has
+     * to open on an empty cell and grow. Sample the atlas in file order instead — skip the loader's
+     * reversal — and it opens on the smoke fading out.
+     */
+    it('plays an explosion from nothing, over an atlas reversed as the game loads it', () => {
+      const tiled = animations().filter(({ texture }) =>
+        texture.frames.some(({ u1, u2 }) => Math.abs(u2 - u1) < 1),
+      )
+
+      strictEqual(tiled.length, 7)
+
+      for (const { where, path, texture } of tiled) {
+        strictEqual(Math.max(texture.frames[0]!.v1, texture.frames[0]!.v2), 1, where)
+
+        const atlas = images().find(
+          (entry) => entry.path === path && entry.texture.name === `${texture.name}_0`,
+        )!.texture
+
+        strictEqual(atlas.storage, 'targa', `${where}: atlas`)
+        strictEqual(atlas.flip, true, `${where}: atlas is a top-left Targa`)
+      }
+
+      const explosion = animations().find(
+        ({ where }) => where === 'FX/standardeffects.txm :: XP_HERM',
+      )!.texture
+      const atlas = images().find(
+        ({ where }) => where === 'FX/standardeffects.txm :: XP_HERM_0',
+      )!.texture
+
+      strictEqual(atlas.type, 'rgba32_8888')
+
+      const { width, height } = atlas
+      const bitmap = atlas.levels[0]!
+
+      /** The file row the game holds at memory row `row`: reversed, since this atlas sets the bit. */
+      const fileRow = (row: number) => height - 1 - row
+
+      /** Alpha over a frame's rect, as a fraction of full cover, with V = 0 at memory row 0. */
+      const coverage = (index: number) => {
+        const { u1, v1, u2, v2 } = explosion.frames[index]!
+        const [left, right] = [Math.min(u1, u2) * width, Math.max(u1, u2) * width]
+        const [first, last] = [Math.min(v1, v2) * height, Math.max(v1, v2) * height]
+        let sum = 0
+
+        for (let row = first; row < last; row++)
+          for (let column = left; column < right; column++)
+            sum += bitmap[(fileRow(row) * width + column) * 4 + 3]!
+
+        return sum / ((right - left) * (last - first) * 255)
+      }
+
+      const opening = [0, 1, 2, 3].map(coverage)
+
+      ok(opening[0]! < 0.02, `frame 0 is an empty cell: ${opening}`)
+      ok(opening[1]! < opening[2]! && opening[2]! < opening[3]!, `frames 1–3 grow: ${opening}`)
+    })
   })
 
   describe('writing back', () => {

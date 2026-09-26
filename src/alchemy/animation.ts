@@ -1,6 +1,6 @@
 import BufferView from '#/utility/bufferview.js'
 import type Vector3 from '#/math/vector3.js'
-import { readArray, writeArray, readFloat, writeFloat, readInteger, writeInteger } from './misc.js'
+import { readArray, writeArray, readFloat, writeFloat } from './misc.js'
 import type { Keyframe } from '#/math/animation.js'
 
 /** A scalar keyframe. */
@@ -22,17 +22,14 @@ export interface Animation<T extends Keyframe> {
 }
 
 /**
- * Easing animation type.
+ * Easing animation type: the index into `alchemy.dll`'s table of seven easing functions
+ * (`0x6257c20`, filled at `0x6242880`), which the loader stores as the raw byte.
  *
- * The list may be incomplete. Two retail keyframes — the alpha fade of the motion dust in
- * `dust.ale` and `motionblur_dust.ale` — hold a 6, one past `Auto`, on a four-keyframe list
- * where the easing is actually interpolated and on screen for as long as the player is in
- * space. Those two nodes are the only `FLDustAppearance` in the game and 6 appears nowhere
- * else, so the value tracks Freelancer's own node type rather than one author's slip. Whether
- * it names a seventh interpolation or something the dust code reads for another purpose is
- * unresolved; `ease` falls back to linear. See [Easing outside the enum] in ALCHEMY.md.
+ * `AutoInverse` is the seventh entry, and is what both `FLDustAppearance` alpha fades carry. A
+ * byte past it indexes off the end of the table; retail's only such bytes sit on single-keyframe
+ * lists, which never call an easing. See [Easing] in ALCHEMY.md.
  *
- * The value is stored as read and written back unchanged either way.
+ * The value is stored as read and written back unchanged.
  */
 export enum EaseType {
   Step,
@@ -40,7 +37,10 @@ export enum EaseType {
   QuadIn,
   QuadOut,
   Smooth,
+  /** QuadIn toward a larger value, QuadOut toward a smaller one. */
   Auto,
+  /** QuadOut toward a larger value, QuadIn toward a smaller one — `Auto` mirrored. */
+  AutoInverse,
 }
 
 /** A keyframe list interpolated by one named easing curve, with no behaviour outside its range. */
@@ -48,21 +48,30 @@ export interface EaseAnimation<T extends Keyframe> extends Animation<T> {
   easing: EaseType
 }
 
-/** Looped animation out-of-bounds toggles. */
+/**
+ * What a looped curve does past each end: **two four-bit modes, not a bitfield** — the low nibble
+ * before the first key, the next one after the last, each one of hold (0), cycle, cycle with
+ * offset, oscillate and linear. Combine one `Before` member with one `After` member.
+ *
+ * `alchemy.dll` switches on each nibble (`0x6246b00`, `0x6246c2f`); a nibble past 4 falls through
+ * into the in-range search with an out-of-range key, which retail never does and `hermiteAt`
+ * treats as hold. See [Wrap modes] in ALCHEMY.md.
+ */
 export enum WrapFlags {
   None = 0,
-  BeforeRepeat = 1 << 0,
-  BeforeMirror = 1 << 1,
-  BeforeClamp = 1 << 2,
-  BeforeContinue = 1 << 3,
-  AfterRepeat = 1 << 4,
-  AfterMirror = 1 << 5,
-  AfterClamp = 1 << 6,
-  AfterContinue = 1 << 7,
+  BeforeCycle = 0x1,
+  BeforeCycleOffset = 0x2,
+  BeforeOscillate = 0x3,
+  BeforeLinear = 0x4,
+  AfterCycle = 0x10,
+  AfterCycleOffset = 0x20,
+  AfterOscillate = 0x30,
+  AfterLinear = 0x40,
 }
 
 /**
  * A keyframe list that says what happens outside its own range, and what an empty list evaluates to.
+ * `flags` is the whole 16-bit word as read; only its low byte is ever consulted.
  */
 export interface LoopAnimation<T extends Keyframe> extends Animation<T> {
   default: number
@@ -85,29 +94,24 @@ export interface TransformPoint {
   z: AnimatedCurve
 }
 
-// TODO: observe in game. Retail carries exactly two words here — 0x00050304 and 0x80050304 — so
-// only the enable bit is ever varied and the rest cannot be read off the data. They select neither
-// which channels are present (the payload is always nine curves) nor which are used (the same word
-// covers every combination of populated channels). See the TODO section in docs/modules/ALCHEMY.md.
-/** Which of a node transform's channels are present, and whatever else the low bits mean. */
-export enum TransformFlags {
-  None = 0,
-  Unknown1 = 1 << 2,
-  Unknown2 = 1 << 8,
-  Unknown3 = 1 << 9,
-  Unknown4 = 1 << 16,
-  Unknown5 = 1 << 18,
-  Default = TransformFlags.Unknown1 |
-    TransformFlags.Unknown2 |
-    TransformFlags.Unknown3 |
-    TransformFlags.Unknown4 |
-    TransformFlags.Unknown5,
-  Enable = 1 << 31,
-}
+/**
+ * The three order bytes a transform opens with. `alchemy.dll` packs them into one word as nibbles
+ * (`0x62439f0`), copies it and writes it back, and **never evaluates it**: the builder's rotation
+ * order is fixed. Retail carries only {@link DefaultTransformOrder}. See [Transform] in
+ * ALCHEMY.md.
+ */
+export type TransformOrder = [number, number, number]
 
-/** Animated transform. */
+/** The order bytes every retail transform carries, and `alchemy.dll`'s own default (`0x435`). */
+export const DefaultTransformOrder: Readonly<TransformOrder> = [4, 3, 5]
+
+/**
+ * Animated transform. The curves are all present or all absent; absent is the identity, which is
+ * what the fourth header byte records (`0x80` with curves, `0x00` without) and what the writer
+ * derives it from.
+ */
 export interface Transform {
-  flags: TransformFlags
+  order: TransformOrder
   position?: TransformPoint
   rotation?: TransformPoint
   scale?: TransformPoint
@@ -292,38 +296,48 @@ export function writeTransformPoint(point: TransformPoint): BufferView {
   return BufferView.join(writeAnimatedCurve(x), writeAnimatedCurve(y), writeAnimatedCurve(z))
 }
 
-/** Tests if transform data is provided. */
-export const isTransformEnabled = (flags: TransformFlags) =>
-  (flags & TransformFlags.Enable) >>> 0 > 0
+/** The fourth header byte's only bit `alchemy.dll` tests: nine curves follow. */
+const CURVES = 0x80
 
-/** Reads animated transform. */
+/**
+ * Reads animated transform: three signed order bytes, a byte whose sign bit alone says whether
+ * nine curves follow (`0x62280a0`), then those curves. The other seven bits are never read.
+ */
 export function readTransform(view: BufferView): Transform {
-  const flags = readInteger(view)
-  let position: TransformPoint | undefined
-  let rotation: TransformPoint | undefined
-  let scale: TransformPoint | undefined
+  const order: TransformOrder = [view.readInt8(), view.readInt8(), view.readInt8()]
 
-  if (isTransformEnabled(flags)) {
-    position = readTransformPoint(view)
-    rotation = readTransformPoint(view)
-    scale = readTransformPoint(view)
+  if ((view.readUint8() & CURVES) === 0) return { order }
+
+  return {
+    order,
+    position: readTransformPoint(view),
+    rotation: readTransformPoint(view),
+    scale: readTransformPoint(view),
   }
-
-  return { flags, position, rotation, scale }
 }
 
-/** Writes animated transform. */
+/**
+ * Writes animated transform. The curve byte is derived, as `alchemy.dll`'s writer derives it
+ * (`0x6227ef0`): `0x80` and nine curves when all three points are present, `0x00` alone otherwise.
+ */
 export function writeTransform(transform: Transform): BufferView {
-  const { flags, position, rotation, scale } = transform
-  const views: BufferView[] = []
+  const {
+    order: [a, b, c],
+    position,
+    rotation,
+    scale,
+  } = transform
+  const header = BufferView.allocate(Int8Array.BYTES_PER_ELEMENT * 4)
+    .writeInt8(a)
+    .writeInt8(b)
+    .writeInt8(c)
 
-  if (isTransformEnabled(flags) && position && rotation && scale) {
-    views.push(
-      writeTransformPoint(position),
-      writeTransformPoint(rotation),
-      writeTransformPoint(scale),
-    )
-  }
+  if (!position || !rotation || !scale) return header.writeUint8(0)
 
-  return BufferView.join(writeInteger(flags), ...views)
+  return BufferView.join(
+    header.writeUint8(CURVES),
+    writeTransformPoint(position),
+    writeTransformPoint(rotation),
+    writeTransformPoint(scale),
+  )
 }

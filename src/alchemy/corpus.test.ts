@@ -6,7 +6,7 @@ import BufferView from '#/utility/bufferview.js'
 import { DefaultId, readEffectLibrary, writeEffectLibrary, type NodeInstance } from './effect.js'
 import { colorAt, curveAt, floatAt, transformAt } from './evaluation.js'
 import { getNodeName, readNodeLibrary, writeNodeLibrary, type Node } from './node.js'
-import { EaseType } from './animation.js'
+import { DefaultTransformOrder, EaseType } from './animation.js'
 import { PropertyType } from './property.js'
 
 const assets = () => load('ale')
@@ -188,11 +188,10 @@ describe('retail asset corpus', { skip }, () => {
       strictEqual(transforms, 1289)
     })
 
-    // The easing byte is meant to hold one of six values. Nine keyframes do not, and they fall
-    // into two groups that should not be conflated — see [Easing outside the enum] in
-    // ALCHEMY.md. Easing only does anything to a list of more than one keyframe, which is the
-    // line this test draws: seven strays cannot be observed at all, and two can.
-    it('keeps easing within the enum bar nine keyframes in three files', () => {
+    // The easing byte indexes alchemy.dll's table of seven functions. Seven keyframes hold a byte
+    // past it, and every one is on a list of a single keyframe, which never calls an easing — see
+    // [Easing] in ALCHEMY.md. The two 6s, once counted here, are the table's seventh entry.
+    it('keeps easing within the table bar seven single-keyframe lists in one file', () => {
       const stray: {
         path: string
         node: string | undefined
@@ -224,7 +223,7 @@ describe('retail asset corpus', { skip }, () => {
                 ok(property.easing in EaseType, `${asset.path}: outer easing ${property.easing}`)
             }
 
-      // Group one: junk in a slot nothing reads. Every value has its low three bits clear and
+      // Junk in a slot nothing reads. Every value has its low three bits clear and
       // bit 3 set, every list holds a single keyframe, and all seven are in one unused effect.
       const junk = stray.filter(({ keyframes }) => keyframes === 1)
 
@@ -244,40 +243,31 @@ describe('retail asset corpus', { skip }, () => {
       for (const { easing } of junk)
         strictEqual(easing & 0b1111, 0b1000, `0x${easing.toString(16)}`)
 
-      // Group two: a value one past `Auto`, on a curve that interpolates and is on screen
-      // whenever the player is in space. This is the one that may be a type we have not named.
-      deepStrictEqual(
-        stray.filter(({ keyframes }) => keyframes > 1),
-        [
-          {
-            path: 'FX/SPACE/dust.ale',
-            node: 'gf_red_dustapp.app',
-            property: 'BasicApp_Alpha',
-            easing: 6,
-            keyframes: 4,
-          },
-          {
-            path: 'FX/SPACE/motionblur_dust.ale',
-            node: 'motionblur_dust.app',
-            property: 'BasicApp_Alpha',
-            easing: 6,
-            keyframes: 4,
-          },
-        ],
-      )
+      strictEqual(stray.length, junk.length, 'every byte past the table is on a single keyframe')
     })
 
-    // Easing 6 and `FLDustAppearance` imply one another across the whole corpus: the node type
-    // has exactly two instances and both use it, and no other node type uses it anywhere. Every
-    // other dust in the game — icedust, leedsdust, snowdust and the rest — builds the same
-    // effect out of `FxBasicAppearance` with easing 4 over an identically configured emitter.
-    // So the value is not one author's stray keystroke; it tracks Freelancer's own node type.
-    it('confines easing 6 to the two FLDustAppearance nodes', () => {
+    // `AutoInverse` (6) and `FLDustAppearance` imply one another across the whole corpus: the
+    // node type has exactly two instances and both use it, and no other node type uses it
+    // anywhere. Every other dust in the game — icedust, leedsdust, snowdust and the rest — builds
+    // the same effect out of `FxBasicAppearance` with `Smooth` over an identically configured
+    // emitter.
+    it('confines AutoInverse to the two FLDustAppearance nodes', () => {
       const dust: { path: string; easing: number[] }[] = []
+      const elsewhere: string[] = []
 
       for (const asset of assets())
         for (const node of nodes(asset).nodes) {
-          if (node.type !== 'FLDustAppearance') continue
+          if (node.type !== 'FLDustAppearance') {
+            for (const property of node.properties)
+              if (
+                (property.type === PropertyType.AnimatedFloat ||
+                  property.type === PropertyType.AnimatedColor) &&
+                property.keyframes.some(({ easing }) => easing === EaseType.AutoInverse)
+              )
+                elsewhere.push(`${asset.path}/${property.name}`)
+
+            continue
+          }
 
           const alpha = node.properties.find(({ name }) => name === 'BasicApp_Alpha')
           ok(alpha?.type === PropertyType.AnimatedFloat, `${asset.path}: alpha is not animated`)
@@ -286,9 +276,61 @@ describe('retail asset corpus', { skip }, () => {
         }
 
       deepStrictEqual(dust, [
-        { path: 'FX/SPACE/dust.ale', easing: [6] },
-        { path: 'FX/SPACE/motionblur_dust.ale', easing: [6] },
+        { path: 'FX/SPACE/dust.ale', easing: [EaseType.AutoInverse] },
+        { path: 'FX/SPACE/motionblur_dust.ale', easing: [EaseType.AutoInverse] },
       ])
+      deepStrictEqual(elsewhere, [])
+    })
+
+    // The wrap word is two four-bit modes (alchemy.dll 0x6246b00, 0x6246c2f), and retail uses
+    // six words. Only 0x01 and 0x10 mean what the bitfield reading once took them for; 0x20,
+    // 0x30 and 0x33 sit on eight curves that span a range, all but one a `Node_Transform`.
+    it('uses six wrap words, none past oscillate', () => {
+      const words = new Map<number, number>()
+      const count = (flags: number) => words.set(flags, (words.get(flags) ?? 0) + 1)
+
+      for (const asset of assets())
+        for (const node of nodes(asset).nodes)
+          for (const property of node.properties) {
+            if (property.type === PropertyType.AnimatedCurve)
+              for (const { flags } of property.keyframes) count(flags)
+
+            if (property.type === PropertyType.Transform)
+              for (const point of [property.position, property.rotation, property.scale])
+                for (const curve of point ? [point.x, point.y, point.z] : [])
+                  for (const { flags } of curve.keyframes) count(flags)
+          }
+
+      deepStrictEqual(
+        [...words].sort(([a], [b]) => a - b),
+        [
+          [0x00, 38715],
+          [0x01, 7],
+          [0x10, 623],
+          [0x20, 4],
+          [0x30, 4],
+          [0x33, 2],
+        ],
+      )
+    })
+
+    // A transform opens with three order bytes alchemy.dll never evaluates, and every retail one
+    // carries the DLL's own default. Whether curves follow is the fourth byte's sign bit.
+    it('gives every transform the default order, and curves to 1289 of them', () => {
+      const orders = new Map<string, number>()
+      let curves = 0
+
+      for (const asset of assets())
+        for (const node of nodes(asset).nodes)
+          for (const property of node.properties)
+            if (property.type === PropertyType.Transform) {
+              const key = property.order.join(' ')
+              orders.set(key, (orders.get(key) ?? 0) + 1)
+              if (property.position) curves++
+            }
+
+      deepStrictEqual([...orders], [[DefaultTransformOrder.join(' '), 5590]])
+      strictEqual(curves, 1289)
     })
 
     // Half of every looped list in the game is empty and most of the rest holds a single

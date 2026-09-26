@@ -2,10 +2,9 @@ import { deepStrictEqual, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import BufferView from '#/utility/bufferview.js'
 import {
+  DefaultTransformOrder,
   EaseType,
-  TransformFlags,
   WrapFlags,
-  isTransformEnabled,
   readAnimatedColor,
   readAnimatedCurve,
   readAnimatedFloat,
@@ -27,6 +26,7 @@ import {
   type AnimatedColor,
   type AnimatedCurve,
   type AnimatedFloat,
+  type TransformOrder,
   type TransformPoint,
 } from './animation.js'
 
@@ -84,7 +84,7 @@ describe('animation containers', () => {
   it('heads a looped list with a default value, wrap flags and count', () => {
     const animation = {
       default: 1.5,
-      flags: WrapFlags.BeforeRepeat | WrapFlags.AfterContinue,
+      flags: WrapFlags.BeforeCycle | WrapFlags.AfterCycleOffset,
       keyframes: [{ key: 0, value: { x: 1, y: 2, z: 3 } }],
     }
 
@@ -167,60 +167,51 @@ describe('animated properties', () => {
 })
 
 describe('transform', () => {
-  it('reads points only when the high flag bit is set', () => {
-    strictEqual(isTransformEnabled(TransformFlags.Default), false)
-    strictEqual(isTransformEnabled(TransformFlags.Enable), true)
-    strictEqual(isTransformEnabled(TransformFlags.Enable | TransformFlags.Default), true)
+  const order = () => [...DefaultTransformOrder] as TransformOrder
+
+  it('writes the order bytes and a clear curve byte when no points are present', () => {
+    const view = writeTransform({ order: order() })
+
+    deepStrictEqual([...view.bytes], [4, 3, 5, 0])
+    deepStrictEqual(readTransform(view.rewind()), { order: order() })
   })
 
-  it('writes flags alone when disabled', () => {
-    const transform = { flags: TransformFlags.Default }
-    const view = writeTransform(transform)
-
-    strictEqual(view.byteLength, 4)
-    deepStrictEqual(readTransform(view.rewind()), {
-      flags: TransformFlags.Default,
-      position: undefined,
-      rotation: undefined,
-      scale: undefined,
-    })
-  })
-
-  it('round-trips position, rotation and scale when enabled', () => {
-    const transform = {
-      flags: TransformFlags.Enable | TransformFlags.Default,
-      position: point(),
-      rotation: point(),
-      scale: point(),
-    }
-
+  it('round-trips position, rotation and scale behind a curve byte of 0x80', () => {
+    const transform = { order: order(), position: point(), rotation: point(), scale: point() }
     const view = writeTransform(transform)
 
     strictEqual(view.byteLength, 4 + 3 * 3 * (2 + 4 + 8 + 16))
+    strictEqual(view.rewind().readInt32(), 0x80050304 | 0)
     deepStrictEqual(readTransform(view.rewind()), transform)
   })
 
-  // The enable bit is written from the flags, not from the presence of the points, so a
-  // transform that claims to be enabled but carries none writes a header the reader will
-  // then over-read. Callers clear the bit rather than dropping the points.
-  it('writes flags alone when enabled without points', () => {
-    strictEqual(writeTransform({ flags: TransformFlags.Enable }).byteLength, 4)
+  // alchemy.dll's writer derives the byte from the curves, so a partial set cannot claim a
+  // payload it does not carry.
+  it('writes no curves unless all three points are present', () => {
+    strictEqual(writeTransform({ order: order(), position: point() }).byteLength, 4)
   })
 
-  it('keeps the enable bit signed so it survives a round trip', () => {
-    const flags = readTransform(writeTransform({ flags: TransformFlags.Default }).rewind()).flags
+  // The reader tests the sign bit and nothing else (0x62280a0).
+  it('reads curves on the sign bit of the fourth byte alone', () => {
+    const header = (flag: number) =>
+      BufferView.allocate(4).writeInt8(4).writeInt8(3).writeInt8(5).writeUint8(flag)
 
-    strictEqual(flags, TransformFlags.Default)
-    strictEqual(TransformFlags.Enable, -0x80000000, 'read back as int32')
+    deepStrictEqual(readTransform(header(0x7f).rewind()), { order: order() })
+  })
+
+  it('reads the order bytes signed', () => {
+    const view = BufferView.allocate(4).writeUint8(0xff).writeInt8(0).writeInt8(1).writeUint8(0)
+
+    deepStrictEqual(readTransform(view.rewind()).order, [-1, 0, 1])
   })
 
   it('leaves the view positioned after the transform', () => {
     const view = BufferView.join(
-      writeTransform({ flags: TransformFlags.Default }),
-      writeTransform({ flags: TransformFlags.None }),
+      writeTransform({ order: order() }),
+      writeTransform({ order: [1, 2, 3] }),
     )
 
     readTransform(view)
-    strictEqual(readTransform(view).flags, TransformFlags.None)
+    deepStrictEqual(readTransform(view).order, [1, 2, 3])
   })
 })

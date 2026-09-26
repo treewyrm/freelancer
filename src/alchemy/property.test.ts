@@ -2,7 +2,7 @@ import { deepStrictEqual, notStrictEqual, strictEqual, throws } from 'node:asser
 import { describe, it } from 'node:test'
 import { getResourceId } from '#/hash.js'
 import BufferView from '#/utility/bufferview.js'
-import { EaseType, TransformFlags, WrapFlags } from './animation.js'
+import { EaseType, WrapFlags } from './animation.js'
 import { BlendingMode } from './misc.js'
 import { PropertyType, readProperty, writeProperty, type Property } from './property.js'
 
@@ -96,10 +96,7 @@ describe('property values', () => {
       {
         name: 'Node_Transform',
         type: PropertyType.Transform,
-        flags: TransformFlags.Default,
-        position: undefined,
-        rotation: undefined,
-        scale: undefined,
+        order: [4, 3, 5],
       },
       {
         name: 'BasicApp_Size',
@@ -123,7 +120,7 @@ describe('property values', () => {
           {
             key: 0,
             default: 0,
-            flags: WrapFlags.AfterRepeat,
+            flags: WrapFlags.AfterCycle,
             keyframes: [{ key: 0, value: { x: 1, y: 0, z: 0 } }],
           },
         ],

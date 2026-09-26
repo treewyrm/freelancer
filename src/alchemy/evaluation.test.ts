@@ -1,9 +1,8 @@
-import { deepStrictEqual, notStrictEqual, ok, strictEqual } from 'node:assert/strict'
+import { deepStrictEqual, notStrictEqual, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { quadIn, quadOut, smooth } from '#/math/scalar.js'
 import {
   EaseType,
-  TransformFlags,
   WrapFlags,
   type AnimatedColor,
   type AnimatedCurve,
@@ -45,36 +44,27 @@ describe('ease', () => {
     strictEqual(ease(EaseType.Smooth, 0, 10, 0.5), 10 * smooth(0.5))
   })
 
+  // alchemy.dll 0x6242a20: QuadIn toward the larger end, QuadOut toward the smaller.
   it('picks the direction of Auto from which end is larger', () => {
     strictEqual(ease(EaseType.Auto, 0, 10, 0.25), 10 * quadIn(0.25), 'rising eases in')
     strictEqual(ease(EaseType.Auto, 10, 0, 0.25), 10 - 10 * quadOut(0.25), 'falling eases out')
+  })
+
+  // 0x6242a70, the seventh entry of the table, and what both FLDustAppearance alpha fades carry.
+  it('mirrors Auto for AutoInverse', () => {
+    strictEqual(ease(EaseType.AutoInverse, 0, 10, 0.25), 10 * quadOut(0.25), 'rising eases out')
+    strictEqual(ease(EaseType.AutoInverse, 10, 0, 0.25), 10 - 10 * quadIn(0.25), 'falling eases in')
   })
 
   it('short-circuits when both ends are equal', () => {
     strictEqual(ease(EaseType.Smooth, 3, 3, 0.5), 3)
   })
 
-  // Three retail files carry an easing byte the enum does not define; falling back to linear
-  // keeps a stray value from turning the whole sample into NaN.
-  it('falls back to linear for an easing type it does not know', () => {
-    for (const type of [6, 8, 120, 136, 248]) strictEqual(ease(type, 0, 10, 0.5), 5)
+  // Past the table the DLL reads whatever follows it. Retail's only such bytes — all in
+  // gf_bolt01.ale — sit on single-keyframe lists, which never call an easing.
+  it('falls back to linear past the end of the table', () => {
+    for (const type of [7, 8, 120, 136, 248]) strictEqual(ease(type, 0, 10, 0.5), 5)
   })
-
-  // Seven of the nine strays are junk on single-keyframe lists in an effect the game never
-  // plays. This one is not: `dust.ale` and `motionblur_dust.ale` both put a 6 on the alpha
-  // fade of the motion dust, four keyframes that really are interpolated, and the player sees
-  // it whenever they are in space. Those two are the only `FLDustAppearance` nodes in the
-  // game and nothing else uses 6, so it tracks Freelancer's own node type. Linear is a
-  // placeholder until someone watches it in game.
-  // Commented out rather than run as `todo`: it reports every run and there is nothing to act on
-  // until the node type is observed in game. Uncomment as-is to bring it back.
-  // it(
-  //   'names easing type 6',
-  //   { todo: 'unidentified: tracks FLDustAppearance, see ALCHEMY.md' },
-  //   () => {
-  //     ok(6 in EaseType, 'EaseType has no name for the value retail uses on the motion dust')
-  //   },
-  // )
 
   it('eases each vector component independently', () => {
     deepStrictEqual(easeVector(EaseType.Linear, { x: 0, y: 0, z: 0 }, { x: 1, y: 2, z: 4 }, 0.5), {
@@ -90,38 +80,42 @@ describe('limit', () => {
     deepStrictEqual(limit(WrapFlags.None, 0, 2, 1), { key: 1, count: 0 })
   })
 
-  it('clamps to the ends', () => {
-    strictEqual(limit(WrapFlags.AfterClamp, 0, 2, 5).key, 2)
-    strictEqual(limit(WrapFlags.BeforeClamp, 0, 2, -5).key, 0)
+  it('holds the ends when a side has no mode', () => {
+    strictEqual(limit(WrapFlags.None, 0, 2, 5).key, 2)
+    strictEqual(limit(WrapFlags.None, 0, 2, -5).key, 0)
   })
 
-  it('repeats, holding at the end of a whole cycle', () => {
-    strictEqual(limit(WrapFlags.AfterRepeat, 0, 1, 2.25).key, 0.25)
+  it('cycles', () => {
+    strictEqual(limit(WrapFlags.AfterCycle, 0, 1, 2.25).key, 0.25)
+    strictEqual(limit(WrapFlags.BeforeCycle, 0, 1, -0.25).key, 0.75)
 
-    // `fract` returns 1 rather than 0 on a whole number, so a loop lands on its last keyframe
-    // instead of snapping back to the first.
-    strictEqual(limit(WrapFlags.AfterRepeat, 0, 1, 2).key, 1)
+    // `fmod` of a whole number of ranges is zero, so a cycle lands back on its first keyframe
+    // after the range and on its last before it (0x6246c36, 0x6246b07).
+    strictEqual(limit(WrapFlags.AfterCycle, 0, 1, 2).key, 0)
+    strictEqual(limit(WrapFlags.BeforeCycle, 0, 1, -1).key, 1)
   })
 
-  it('mirrors back into the range', () => {
-    strictEqual(limit(WrapFlags.AfterMirror, 0, 1, 1.25).key, 0.75)
-    strictEqual(limit(WrapFlags.BeforeMirror, 0, 1, -0.25).key, 0.25)
+  it('oscillates back into the range', () => {
+    strictEqual(limit(WrapFlags.AfterOscillate, 0, 1, 1.25).key, 0.75)
+    strictEqual(limit(WrapFlags.AfterOscillate, 0, 1, 2.25).key, 0.25)
+    strictEqual(limit(WrapFlags.BeforeOscillate, 0, 1, -0.25).key, 0.25)
+    strictEqual(limit(WrapFlags.BeforeOscillate, 0, 1, -1.25).key, 0.75)
   })
 
-  it('counts whole cycles for continue, in both directions', () => {
-    strictEqual(limit(WrapFlags.AfterContinue, 0, 1, 2.5).count, 2)
-    strictEqual(limit(WrapFlags.BeforeContinue, 0, 1, -1.5).count, -2)
+  it('cycles and counts whole ranges for cycle with offset, in both directions', () => {
+    deepStrictEqual(limit(WrapFlags.AfterCycleOffset, 0, 1, 2.5), { key: 0.5, count: 2 })
+    deepStrictEqual(limit(WrapFlags.BeforeCycleOffset, 0, 1, -1.5), { key: 0.5, count: -2 })
   })
 
-  it('repeats and counts at once, which is what an accumulating curve wants', () => {
-    deepStrictEqual(limit(WrapFlags.AfterContinue | WrapFlags.AfterRepeat, 0, 1, 2.5), {
-      key: 0.5,
-      count: 2,
-    })
+  // Each side is a four-bit mode, not a set of flags: 0x30 is oscillate, not cycle plus
+  // something, and a before mode says nothing about the far end.
+  it('reads each nibble as one mode', () => {
+    strictEqual(limit(0x30, 0, 1, 1.25).key, 0.75)
+    strictEqual(limit(WrapFlags.BeforeOscillate, 0, 1, 1.25).key, 1)
   })
 
   it('maps the key through the range, not through zero to one', () => {
-    strictEqual(limit(WrapFlags.AfterRepeat, 10, 20, 25).key, 15)
+    strictEqual(limit(WrapFlags.AfterCycle, 10, 20, 25).key, 15)
   })
 })
 
@@ -163,7 +157,39 @@ describe('float and colour animations', () => {
     strictEqual(floatAt(animation, 2, 0), 100)
   })
 
-  it('interpolates colours component by component', () => {
+  // 0x6242b2f: at or past the last key the list returns that key's value, not the easing's end —
+  // which only Step can tell apart.
+  it('returns the last value on the last key, even stepped', () => {
+    const stepped = {
+      key: 0,
+      easing: EaseType.Step,
+      keyframes: [
+        { key: 0, value: 1 },
+        { key: 1, value: 2 },
+      ],
+    }
+
+    strictEqual(floatWhen(stepped, 0.5), 1)
+    strictEqual(floatWhen(stepped, 1), 2)
+  })
+
+  // 0x6206f90 carries its own easings, with the two Auto types swapped relative to the table.
+  it('swaps Auto and AutoInverse at the sparam level', () => {
+    const constant = (key: number, value: number) => ({
+      key,
+      easing: EaseType.Linear,
+      keyframes: [{ key: 0, value }],
+    })
+
+    strictEqual(
+      floatAt({ easing: EaseType.Auto, keyframes: [constant(0, 0), constant(1, 10)] }, 0.25, 0),
+      10 * quadOut(0.25),
+    )
+  })
+
+  // FxRampColor packs each key to 0x00RRGGBB and moves each channel by (b − a) × w >> 8, with
+  // w = _ftol(t × 255) — so the midpoint of black to white is 127/255, not a half.
+  it('eases colours in bytes', () => {
     const color: AnimatedColor = {
       easing: EaseType.Linear,
       keyframes: [
@@ -178,8 +204,10 @@ describe('float and colour animations', () => {
       ],
     }
 
-    deepStrictEqual(vectorWhen(color.keyframes[0]!, 0.5), { x: 0.5, y: 0.25, z: 0 })
-    deepStrictEqual(colorAt(color, 0, 1), { x: 1, y: 0.5, z: 0 })
+    const byte = (n: number) => Math.fround(n * Math.fround(1 / 255))
+
+    deepStrictEqual(vectorWhen(color.keyframes[0]!, 0.5), { x: byte(126), y: byte(63), z: 0 })
+    deepStrictEqual(colorAt(color, 0, 1), { x: 1, y: byte(127), z: 0 }, 'a half is 127 stored')
   })
 
   // An eased list has no fallback field the way a looped one does, so an empty one contributes
@@ -244,8 +272,7 @@ describe('hermiteAt', () => {
   // Tangents are stored per unit of key and `hermite` wants them per unit of span, so a curve
   // keyed over a quarter of a unit needs its tangents quartered to draw the same shape. Retail
   // never keys on 0..1: 9322 of 9324 adjacent intervals are something else, and 142 lists in 54
-  // files carry a tangent across one. Dropping the scale multiplies every tangent by 1/delta,
-  // which on a typical 0.03-wide interval overshoots by thirty times.
+  // files carry a tangent across one. The DLL multiplies both tangents by the interval (0x62469bf).
   it('scales tangents by the width of the interval', () => {
     const narrow = loop([knot(0, 0, 4), knot(0.25, 10)])
 
@@ -258,60 +285,82 @@ describe('hermiteAt', () => {
     notStrictEqual(hermiteAt(narrow, 0.125), 5.5, 'which is what the unscaled tangent would give')
   })
 
-  // The interval collapses on the two shapes most of retail is made of, and the scale has to
-  // vanish rather than divide: 11791 lists hold one knot and 40 put every knot on one key.
   it('ignores tangents where the interval has no width', () => {
     strictEqual(hermiteAt(loop([knot(0, 3, 99, 99)]), 0.5), 3)
-    strictEqual(hermiteAt(loop([knot(2, 3, 99, 99), knot(2, 5, 99, 99)]), 99), 3)
   })
 
-  // `limit` folds a key landing exactly on the end of a curve carrying no wrap flags back to
-  // its start, so the last knot is never sampled. Left as it stands until the game is observed
-  // doing one or the other; the flagged cases below are the ones retail actually relies on.
-  // Commented out rather than run as `todo`: it reports every run and there is nothing to act on
-  // until the game is observed. Uncomment as-is to bring it back.
-  // it(
-  //   'reaches the last knot at the end of the range',
-  //   { todo: 'unverified: limit folds key 1 back to 0 when unflagged' },
-  //   () => {
-  //     strictEqual(hermiteAt(loop([knot(0, 0), knot(1, 10)]), 1), 10)
-  //   },
-  // )
+  // 0x6246c8f takes the last keyframe at or before the key, so on a shared key the last one wins.
+  it('reads knots sharing one key as the last of them on the key and after it', () => {
+    const shared = loop([knot(2, 3), knot(2, 5)])
 
-  it('holds the ends of a flagged curve', () => {
-    const curve = loop([knot(0, 0), knot(1, 10)], WrapFlags.AfterClamp | WrapFlags.BeforeClamp)
+    strictEqual(hermiteAt(shared, 2), 5)
+    strictEqual(hermiteAt(shared, 99), 5)
+    strictEqual(hermiteAt(shared, -99), 3)
+  })
 
-    strictEqual(hermiteAt(curve, 1), 10)
+  it('reaches the last knot at the end of the range', () => {
+    strictEqual(hermiteAt(loop([knot(0, 0), knot(1, 10)]), 1), 10)
+  })
+
+  it('holds the ends of a curve with no modes', () => {
+    const curve = loop([knot(0, 0), knot(1, 10)])
+
     strictEqual(hermiteAt(curve, 5), 10)
     strictEqual(hermiteAt(curve, -5), 0)
   })
 
-  it('accumulates whole loops when the curve continues past its end', () => {
-    const curve = loop([knot(0, 0), knot(1, 10)], WrapFlags.AfterContinue | WrapFlags.AfterRepeat)
+  it('extrapolates along the end tangents for linear', () => {
+    const curve = loop(
+      [knot(0, 0, 0, 2), knot(1, 10, 3, 0)],
+      WrapFlags.BeforeLinear | WrapFlags.AfterLinear,
+    )
 
-    strictEqual(hermiteAt(curve, 1.5), 15, 'one loop of 10 plus half of the next')
+    strictEqual(hermiteAt(curve, -2), -4, 'in-tangent of the first knot')
+    strictEqual(hermiteAt(curve, 3), 16, 'out-tangent of the last knot')
+  })
+
+  it('accumulates whole ranges for cycle with offset', () => {
+    const curve = loop([knot(0, 0), knot(1, 10)], WrapFlags.AfterCycleOffset)
+
+    strictEqual(hermiteAt(curve, 1.5), 15, 'one range of 10 plus half of the next')
     strictEqual(hermiteAt(curve, 2.5), 25)
   })
 
-  // Most retail curves are a single knot, which spans no range at all. `limit` returns it
-  // rather than remapping the key through a zero-length range, which divided by zero and
-  // carried NaN into the sample regardless of how far the key was from the knot.
-  it('reads a single knot as a constant', () => {
+  // Retail: 0x20 on three live Transform curves, 0x30 on three, 0x33 on two. Read as the bits
+  // they were once taken for, 0x20 mirrored and 0x30 repeated.
+  it('reads the retail words other than 0x10 as the modes they are', () => {
+    const curve = (flags: WrapFlags) => loop([knot(0, 0), knot(1, 10)], flags)
+
+    strictEqual(
+      hermiteAt(curve(WrapFlags.AfterCycleOffset), 1.25),
+      10 + 10 * smooth(0.25),
+      'cycle with offset',
+    )
+    strictEqual(
+      hermiteAt(curve(WrapFlags.AfterOscillate), 1.25),
+      hermiteAt(curve(WrapFlags.AfterOscillate), 0.75),
+      'oscillate',
+    )
+    strictEqual(
+      hermiteAt(curve(WrapFlags.BeforeOscillate | WrapFlags.AfterOscillate), -0.25),
+      hermiteAt(curve(WrapFlags.BeforeOscillate | WrapFlags.AfterOscillate), 0.25),
+      'oscillate before',
+    )
+  })
+
+  // Most retail curves are a single knot. The cycling modes need a range, so the knot holds
+  // whatever they say; linear alone extends it (0x6246a11).
+  it('reads a single knot as a constant unless a side is linear', () => {
     for (const key of [-99, 0, 0.5, 99]) strictEqual(hermiteAt(loop([knot(0, 3)]), key), 3)
-  })
 
-  it('reads knots sharing one key as a constant', () => {
-    strictEqual(hermiteAt(loop([knot(2, 3), knot(2, 5)]), 99), 3)
-  })
-
-  it('reads a single knot the same way whatever the flags say', () => {
     for (const flags of [
-      WrapFlags.None,
-      WrapFlags.AfterClamp | WrapFlags.BeforeClamp,
-      WrapFlags.AfterRepeat | WrapFlags.AfterContinue,
-      WrapFlags.AfterMirror,
+      WrapFlags.AfterCycle,
+      WrapFlags.AfterCycleOffset,
+      WrapFlags.AfterOscillate,
     ])
       strictEqual(hermiteAt(loop([knot(0, 3)], flags), 99), 3)
+
+    strictEqual(hermiteAt(loop([knot(0, 3, 1)], WrapFlags.AfterLinear), 2), 5)
   })
 })
 
@@ -340,7 +389,7 @@ describe('transformAt', () => {
   it('samples position, rotation and scale', () => {
     const result = transformAt(
       {
-        flags: TransformFlags.Enable,
+        order: [4, 3, 5],
         position: { x: point(1), y: point(2), z: point(3) },
         rotation: { x: point(4), y: point(5), z: point(6) },
         scale: { x: point(7), y: point(8), z: point(9) },
@@ -352,13 +401,12 @@ describe('transformAt', () => {
     deepStrictEqual(result.position, { x: 1, y: 2, z: 3 })
     deepStrictEqual(result.rotation, { x: 4, y: 5, z: 6 })
     deepStrictEqual(result.scale, { x: 7, y: 8, z: 9 })
-    strictEqual(result.flags, TransformFlags.Enable)
   })
 
-  // A transform with the enable bit clear carries no points, and every node has one, so the
+  // A transform with the curve byte clear carries no points, and every node has one, so the
   // identity has to come from here rather than from the file.
   it('returns the identity for a transform carrying no points', () => {
-    const result = transformAt({ flags: TransformFlags.Default }, 0, 0)
+    const result = transformAt({ order: [4, 3, 5] }, 0, 0)
 
     deepStrictEqual(result.position, { x: 0, y: 0, z: 0 })
     deepStrictEqual(result.rotation, { x: 0, y: 0, z: 0 })

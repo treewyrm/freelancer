@@ -186,8 +186,7 @@ real sentences — retail uses them to hold a double space after a full stop.
 
 ## Corpus
 
-Measured across retail's 5,307 infocards and cross-checked against Discovery's 17,439, by
-`freelancer-editor`'s `npm run rdl`.
+Measured across retail's 5,307 infocards and cross-checked against Discovery's 17,439.
 
 |                                                          | Retail           | Discovery  |
 | -------------------------------------------------------- | ---------------- | ---------- |

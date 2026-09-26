@@ -359,7 +359,7 @@ driven degree of freedom — the trailing factor is there for authored assets.
 *parent* frame, which is what the `Cyl` struct comment inherited from Conquest: Frontier Wars says.
 The two orders coincide only where the rest rotation is identity, true for just 294 of the 929 driven
 joints, so 635 come out visibly wrong under the other. Nothing in the files separates them; settled
-by playing retail scripts under both orders in freelancer-testing's viewer.
+by playing retail scripts under both orders.
 
 **`offset` is a contact point, not a pivot.** MAXLancer's `scripts/Transform.ms` composes its axis
 and spheric joint controllers as `preTranslate (translate R position) -offset`, which in
@@ -498,14 +498,14 @@ Things that will bite:
   6,849 image entries — 64% — are block-compressed and unreadable without it. `dxt1` must upload as
   `COMPRESSED_RGBA_S3TC_DXT1_EXT`, never the RGB variant — punch-through is selected per block and
   nothing in the container flags it, so the RGB decode renders those texels opaque black.
-- **Do not normalize the vertical origin — upload every level in file order.** Both containers store
-  the picture bottom row first, the UVs beside them put zero at the image bottom, and the game
-  reorders nothing, so rows in file order sampled by the file's own V come out the right way up; a
-  flip on either side puts the image upside down. The `flip` field is a statement of what the
-  container declared, not an instruction (top-down for all 4,447 DDS, both cubemaps and 9 Targas;
-  bottom-up for the rest), and the 9 are an open question about retail rather than about the loader
-  — see [TEXTURE.md § TODO](../modules/TEXTURE.md#todo). This is also why `UNPACK_FLIP_Y_WEBGL` never comes up,
-  which is as well: `compressedTexImage2D` raises `INVALID_OPERATION` when it is set.
+- **Upload in file order, except a Targa chain reporting `flip: true`, whose rows go in reversed.**
+  That is what the game's loader does: every image ends up bottom row first, the UVs beside it put
+  zero at the image bottom, and V = 0 samples the first row uploaded. A DDS declares top-down for all
+  4,447 retail surfaces and is copied as stored regardless, so `flip` is an instruction for
+  `storage: 'targa'` only — nine chains in retail, seven of them the grid animations' atlases. See
+  [TEXTURE.md § What the game reorders](../modules/TEXTURE.md#what-the-game-reorders). The reversal is
+  a CPU copy of an uncompressed level, so `UNPACK_FLIP_Y_WEBGL` still never comes up, which is as
+  well: `compressedTexImage2D` raises `INVALID_OPERATION` when it is set.
 - **`UNPACK_ALIGNMENT` must be 1 for `rgb24_888`.** Rows are `width * 3` bytes, which is not a
   multiple of 4 for most widths, and the default alignment of 4 shears the image.
 - **Mip chains are usually incomplete.** 4,394 stop at 4×4 (six more at 8×4) and 807 hold a single
@@ -515,7 +515,10 @@ Things that will bite:
 - All retail textures are power-of-two; 20 are non-square. WebGL2 handles both, and `RGB565`, `RGBA4`
   and `RGB5_A1` are core sized formats, so the 16-bit entries need no expansion.
 - 12 entries are animated — a `Frame rects` table over sibling atlas entries. Resolve the frame to a
-  UV rect at bind time; the sheet is an ordinary texture.
+  UV rect at bind time; the sheet is an ordinary texture, and **frame V is ordinary V** — provided
+  the atlas was uploaded as the game loads it. All seven tiled atlases are top-left Targas; upload one
+  in file order and every tiled animation plays its rows backwards. See
+  [TEXTURE.md § Animated textures](../modules/TEXTURE.md#animated-textures).
 
 ## 8. Deformable models
 
@@ -534,7 +537,7 @@ the rigid one, so §5 applies unchanged — `getBoneModel` returns the same `Mod
   `[Rᵀ | -Rᵀt]`. Librelancer names the same matrix the other way round — see
   [Librelancer's `BoneToRoot`](#librelancers-bonetoroot).
 
-  Measured, in freelancer-testing: composing `bindPose(bone) · asRead(bone)` over all 9,456 retail
+  Measured: composing `bindPose(bone) · asRead(bone)` over all 9,456 retail
   bones gives the identity to 8.88e-16, and skinning every one of the 855,377 drawn vertices with the
   resulting table moves them 3.14e-7 at worst. Points are stored in bind-pose root space.
 
@@ -724,9 +727,11 @@ across most of the corpus.
   used. `FX/MISC/tlrtube.3db` is residue of this feature and crashes the retail game when a particle
   spawns for it — see [RETAIL.md](RETAIL.md).
 
-A fourth fits the geometry but not the parameter model: **`FLDustAppearance` (2)** keys its alpha on
-camera motion rather than particle age — observed in game, the space dust that fades in as the camera
-turns. It declares no property `FxBasicAppearance` lacks, so the node type is the entire signal.
+A fourth fits the geometry but not the parameter model: **`FLDustAppearance` (2)** samples its alpha
+at particle age like any appearance, then multiplies it by a term computed from the camera's speed,
+and stretches each quad along the particle's motion across the view since the last frame — the space
+dust that fades in as the camera moves. It declares no property `FxBasicAppearance` lacks, so the
+node type is the entire signal; retail `alchemy.dll` holds the arithmetic (`0x620fcb0`).
 
 `FxRectAppearance` (431) is a velocity-aligned stretched quad rather than a camera-facing one. It
 keeps the vertex count and the batch key, so it instances alongside the billboards under a different
@@ -870,11 +875,10 @@ this document picks the reading that cannot go visibly wrong.
 | Targa origin bit on nine chains (§7)                              | reported through `flip`, rows untouched                                    | [TEXTURE.md § TODO](../modules/TEXTURE.md#todo)                        |
 | `MAKeys` against `MADeltas` in material animation                 | both read, neither derived; the UV transform driver is unconfirmed         | [RIGID.md § TODO](../modules/RIGID.md#todo)                            |
 | `Edge_angles` on two deformable models                            | ignored                                                                    | [DEFORMABLE.md § TODO](../modules/DEFORMABLE.md#todo)                  |
-| `TransformFlags` low bits on an Alchemy node (§9)                 | ignored; `transformAt` applies the curves without them                     | [ALCHEMY.md § TODO](../modules/ALCHEMY.md#todo)                        |
 | The four version-1.1 `Effect` floats (§9.7)                       | unused; no effect culling                                                  | [ALCHEMY.md § TODO](../modules/ALCHEMY.md#todo)                        |
 
-The joint composition order (§5.2) is **closed**: freelancer-testing's animation player answered it
-by playing retail scripts under both orders, and the driven factor goes before the rest rotation.
+The joint composition order (§5.2) is **closed**: playing retail scripts under both orders answered
+it, and the driven factor goes before the rest rotation.
 
 **The prismatic row is a suspicion with a source behind it.** MAXLancer's `scripts/Transform.ms`
 applies `offset` in its revolute, cylinder and spheric branches and not in its prismatic one, with a
@@ -885,12 +889,6 @@ say — all 3,699 records that carry an offset leave it zero, prismatic ones inc
 hand-authored `.cmp`: one `Pris` joint, a non-zero `child_point`, and a look at whether the child
 sits where the offset puts it. A null result means dropping the trailing factor from the prismatic
 row of §5.2's table alone.
-
-The two particle rows differ in kind. `TransformFlags` is constant across all 5,590 retail
-transforms, so the data cannot say what the bits select — and what is left for them to select is
-*how* the curves apply: node-local against emitter against world space, rotation order, whether the
-transform tracks the emitter after spawn. Those are decisions a renderer makes regardless; the open
-question is whether the file was trying to say something about them.
 
 Bit 4 is the one with teeth: a detail map sampling the wrong coordinate set tiles at the wrong rate
 rather than vanishing, which is exactly the kind of error §10 is about.

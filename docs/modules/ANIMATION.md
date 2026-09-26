@@ -316,7 +316,7 @@ then the data is not periodic … each frame consists of a time value"*.
 The stride always divides the `Frames` file exactly — no trailing bytes anywhere.
 
 Script durations run from 0 — a single keyframe, a closed pose rather than a defect — to 400 seconds,
-median 3.33. Measured by freelancer-testing's `npm run corpus`.
+median 3.33.
 
 ### What a `.cmp` script actually drives
 

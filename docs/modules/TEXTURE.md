@@ -109,9 +109,11 @@ Bit 5 of the image descriptor selects a top-left origin; Targa's default is bott
 **reports** the origin through `Texture.flip` rather than reordering rows, matching `readMIPS`, which
 reports `flip: true` unconditionally because DDS always stores the top row first.
 
-Freelancer reorders nothing, and a consumer reproducing it should not either. See [Why nothing is
-reordered](#why-nothing-is-reordered). The nine chains that set the bit are the open case — see
-[TODO](#todo).
+Freelancer reorders one thing: **a Targa that sets the bit.** Its loader in `shading.dll` copies a
+bottom-left Targa and every DDS in file order, and copies a top-left Targa's row `i` to row
+`height − 1 − i`, so every image lands in memory bottom row first. A consumer reproducing the game
+reverses exactly the chains `readMIP` reports with `flip: true`, and nothing else. See [What the game
+reorders](#what-the-game-reorders).
 
 ### Writing a chain back
 
@@ -213,25 +215,35 @@ throwing. See [RETAIL.md](../refs/RETAIL.md#openflame-leftovers) and
 
 ## Notes
 
-### Why nothing is reordered
+### What the game reorders
 
-The declared origin is not the authored one.
+The declared origin is not the authored one for a DDS.
 `BASES/LIBERTY/li_01_manhattan_cityscape.cmp :: banner2manh.tga` is a DDS, so `flip: true` by
 specification, and its lettering — *Weather*, *SODA*, *Avalon* — reads only once the rows are
 reversed. The bottom-left Targas store the picture the same way round;
 `INTERFACE/BASESIDE/news_vendor.3db :: UI_CITY_news.tga` spells `NEWS` reversed in file order too.
 
-Both containers hold the picture bottom row first, the UVs beside them are 3ds Max's with zero at the
-image bottom, and the two cancel: rows in file order sampled by the file's own V come out the right
-way up.
+`shading.dll`'s Targa decoder (`0x6ebf2b0`) branches on the image descriptor at `0x6ebf400`:
 
-Librelancer reached the same conclusion against the running game: its Targa reader carries the
-row-reversal written out and commented out, under *"Technically we should flip these, but Freelancer
-does not / Leave unflipped"* (`ImageLib/TGA.cs:186`); its DDS reader has no flip either, and no
-shader in the tree flips `v`.
+| Bit 5 (top-left) | Bit 4 (right-to-left) | Routine     | Rows                                            |
+| ---------------- | --------------------- | ----------- | ----------------------------------------------- |
+| clear            | clear                 | `0x6ebf64c` | one `rep movs` of the level: **file order**     |
+| set              | clear                 | `0x6ebf512` | file row `i` to row `height − 1 − i`: **reversed** |
 
-Reporting rather than transforming is what lets a consumer act on the nine outliers without a decode
-change.
+The two right-to-left branches mirror columns and never run on retail data. The DDS path copies in
+file order and reads no origin at all, which is why every DDS keeps the orientation its authoring tool
+gave it rather than the one its header declares.
+
+So memory is bottom row first for all of it, the UVs beside a mesh are 3ds Max's with zero at the
+image bottom, and the game samples V = 0 at the first row in memory: file order for 2,391 Targa chains
+and every DDS, reversed for the nine top-left chains.
+
+Librelancer's Targa reader carries the row reversal written out and commented out, under
+*"Technically we should flip these, but Freelancer does not / Leave unflipped"* (`ImageLib/TGA.cs:186`)
+— right for the bottom-left chains it was measured on, and wrong for the nine, which it draws mirrored.
+
+Reporting rather than transforming is what lets a consumer do the same without a decode change: the
+reader hands back file order and `flip`, and the reversal is the consumer's, for `storage: 'targa'` only.
 
 ## API
 
@@ -381,10 +393,17 @@ Twelve entries, at 3, 10, 15 and 30 FPS, splitting evenly between two authoring 
 | One atlas, tiled    | 7     | A single atlas cut into a grid — 4×4 for 16 frames, 2×2 for 4 |
 | One atlas per frame | 5     | `Texture count` atlases, each rect the full surface `0,0→1,1` |
 
-The seven tiled animations run V downward (`v1: 1 → v2: 0.75` for the first frame of a 4×4 grid),
-and their atlases are precisely seven of the nine Targas that set the top-left origin bit. A rect
-with zero at the image bottom over a bitmap stored bottom row first puts frame 0 at the top left.
-Honour the bit and frame 0 lands at the bottom instead, so the animation runs its rows backwards.
+The seven tiled animations run V down from 1 (`v1: 1 → v2: 0.75` for the first frame of a 4×4 grid),
+and their atlases are precisely seven of the nine Targas that set the top-left origin bit — the files
+the game's loader reverses into memory ([What the game reorders](#what-the-game-reorders)). **Frame V
+is ordinary V over that memory**, zero at the image bottom: `shading.dll` hands a frame out exactly as
+stored (`0x6ec2ee0` copies `u1, v1, u2, v2` into the record beside the atlas's handle), so frame 0 is
+the top-left cell of the sheet as drawn. Alchemy's quad puts the record's first V on its screen-up
+edge, so the sprite draws upright too.
+
+`FX/standardeffects.txm :: XP_HERM` is an explosion, and it opens on an empty cell and grows only this
+way. Leave the atlas in file order — skip the loader's reversal — and every grid runs its rows
+backwards, opening the explosion on its smoke fading out.
 
 `Texture count` is exactly the highest frame index plus one in all twelve.
 
@@ -455,21 +474,6 @@ each `MIP0..n` — and adds `U wrap mode` / `V wrap mode`, so neither reader can
 Freelancer cannot load either, so neither will this library.
 
 ## TODO
-
-### Do the nine top-left Targa chains render mirrored?
-
-The general question is closed: retail stores the picture bottom row first in both containers, the
-game reorders neither, and the UVs cancel it — see [Vertical origin](#vertical-origin). What remains
-is the nine chains listed under [Targa levels](#targa-levels) that set bit 5, whose rows run the
-other way to everything else.
-
-A loader that reorders nothing draws those nine vertically mirrored against how they were authored;
-being sprites, flares and a near-symmetric HUD plate is why nobody would notice. Either the game
-mirrors them and always did, or its loader carries a case for the bit that the other 2,391 chains
-never exercise. Six of the nine are effect atlases, so the frame order is the tell.
-
-*Experiment*: observe those nine in game. Clearing the bit on a chain and reading the pixels back the
-other way is the confirming edit.
 
 ### `DDSCAPS_ALPHA` on a cubemap
 

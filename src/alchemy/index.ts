@@ -37,10 +37,10 @@ export {
   type AnimatedCurve,
   type TransformPoint,
   type Transform,
+  type TransformOrder,
   EaseType,
   WrapFlags,
-  TransformFlags,
-  isTransformEnabled,
+  DefaultTransformOrder,
 } from './animation.js'
 
 export {
