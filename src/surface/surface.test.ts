@@ -3,7 +3,8 @@ import { describe, it } from 'node:test'
 import BufferView from '#/utility/bufferview.js'
 import Vector3 from '#/math/vector3.js'
 import { readSurfaceLibrary, writeSurfaceLibrary } from './library.js'
-import { createBox, getExtent, readExtent, writeExtent, type Extent } from './extent.js'
+import type BoundingBox from '#/math/boundingbox.js'
+import { createBox, getExtent, readExtent, writeExtent } from './extent.js'
 import { readPoint, writePoint, type Point } from './point.js'
 import { createHull, getIndices, HullType, readHull, writeHull, type Hull } from './hull.js'
 import { createNode, getNodeExtent, mergeNodes, readNode, writeNode } from './node.js'
@@ -90,8 +91,8 @@ function samplePart(root?: Node): Part {
     id: 0x0badf00d | 0,
     fixed: false,
     hardpoints: [1, 2, 3],
-    minimum: { x: -1, y: -2, z: -3 },
-    maximum: { x: 4, y: 5, z: 6 },
+    min: { x: -1, y: -2, z: -3 },
+    max: { x: 4, y: 5, z: 6 },
     ...sampleSurface(root ?? node(3, tetrahedron(0, 5), left, right)),
   }
 }
@@ -110,35 +111,21 @@ function deepPart(): Part {
   )
 }
 
-/** Blank target for {@link readSurface}, which fills an existing object. */
-const emptySurface = (): Surface => ({
-  massCenter: { x: 0, y: 0, z: 0 },
-  rotationInertia: { x: 0, y: 0, z: 0 },
-  radius: 0,
-  surfaceDeviation: 0,
-  points: [],
-  root: { center: { x: 0, y: 0, z: 0 }, radius: 0, boxSizes: { x: 0, y: 0, z: 0 }, padding: 0 },
-  padding: { x: 0, y: 0, z: 0 },
-})
-
 describe('extent', () => {
-  it('stores minimum and maximum as contiguous vectors', () => {
-    const extent: Extent = { minimum: { x: 1, y: 2, z: 3 }, maximum: { x: 4, y: 5, z: 6 } }
+  it('stores min and max as contiguous vectors', () => {
+    const extent: BoundingBox = { min: { x: 1, y: 2, z: 3 }, max: { x: 4, y: 5, z: 6 } }
 
     deepStrictEqual([...new Float32Array(writeExtent(extent).buffer)], [1, 2, 3, 4, 5, 6])
-
-    const back: Extent = { minimum: { x: 0, y: 0, z: 0 }, maximum: { x: 0, y: 0, z: 0 } }
-    readExtent(writeExtent(extent).rewind(), back)
-    deepStrictEqual(back, extent)
+    deepStrictEqual(readExtent(writeExtent(extent).rewind()), extent)
   })
 })
 
 describe('point', () => {
   it('stores coordinates first and client data last', () => {
     const point: Point = { x: 1.5, y: -2.5, z: 0.25, clientData: 0x2a }
-    const view = BufferView.allocate(16)
+    const view = writePoint(point)
 
-    writePoint(view, point)
+    strictEqual(view.byteLength, 16)
     deepStrictEqual([...new Float32Array(view.buffer, 0, 3)], [1.5, -2.5, 0.25])
     strictEqual(new Int32Array(view.buffer, 12, 1)[0], 0x2a)
 
@@ -150,12 +137,9 @@ describe('point', () => {
 describe('hull', () => {
   it('round-trips faces, edges and adjacency', () => {
     const hull = tetrahedron(0x1234)
-    const view = BufferView.allocate(16 + hull.faces.length * 16)
+    const view = writeHull(hull)
 
-    writeHull(view, hull)
-    strictEqual(view.offset, view.byteLength - 4, 'hull header is 12 bytes plus 16 per face')
-
-    view.offset = 0
+    strictEqual(view.byteLength, 12 + hull.faces.length * 16, 'header is 12 bytes, 16 per face')
     deepStrictEqual(readHull(view), hull)
   })
 
@@ -167,20 +151,14 @@ describe('hull', () => {
       item.virtualEdges = [true, true, true]
     }
 
-    const view = BufferView.allocate(16 + hull.faces.length * 16)
-    writeHull(view, hull)
-    view.offset = 0
-
-    deepStrictEqual(readHull(view), hull)
+    deepStrictEqual(readHull(writeHull(hull)), hull)
   })
 
   it('rejects a mismatched index count', () => {
     const hull = tetrahedron(0)
-    const view = BufferView.allocate(16 + hull.faces.length * 16)
+    const view = writeHull(hull)
 
-    writeHull(view, hull)
     view.setUint32(4, (99 << 8) | hull.type, true)
-    view.offset = 0
 
     throws(() => readHull(view), RangeError)
   })
@@ -188,31 +166,23 @@ describe('hull', () => {
 
 describe('node', () => {
   it('occupies twenty bytes, the sphere ahead of the packed box', () => {
-    const view = BufferView.allocate(20)
+    const view = writeNode(node(2.5))
 
-    writeNode(view, node(2.5))
-    strictEqual(view.offset, 20)
+    strictEqual(view.byteLength, 20)
 
     deepStrictEqual([...new Float32Array(view.buffer, 0, 4)], [0.5, 0.25, -0.125, 2.5])
     deepStrictEqual([...new Uint8Array(view.buffer, 16, 4)], [100, 200, 250, 0])
   })
 
   it('round-trips box sizes that land on a step of 1/250', () => {
-    const view = BufferView.allocate(20)
     const value = node(2.5)
 
-    writeNode(view, value)
-    view.offset = 0
-
     // Children are not part of the record, so the reader hands back the node on its own.
-    deepStrictEqual(readNode(view), value)
+    deepStrictEqual(readNode(writeNode(value)), value)
   })
 
   it('quantises box sizes that do not, to the nearest step', () => {
-    const view = BufferView.allocate(20)
-
-    writeNode(view, { ...node(1), boxSizes: { x: 0.5, y: 1, z: 0 } })
-    view.offset = 0
+    const view = writeNode({ ...node(1), boxSizes: { x: 0.5, y: 1, z: 0 } })
 
     deepStrictEqual(readNode(view).boxSizes, { x: 125 / 0xfa, y: 1, z: 0 })
   })
@@ -235,8 +205,7 @@ describe('surface block', () => {
   // The byte is free to run past 250, so the decoded factor is free to exceed one.
   it('round-trips every deviation the byte can hold, including those past 250', () => {
     for (const steps of [0, 1, 243, 250, 251, 255]) {
-      const surface = emptySurface()
-      readSurface(writeSurface({ ...samplePart(), surfaceDeviation: steps / 0xfa }), surface)
+      const surface = readSurface(writeSurface({ ...samplePart(), surfaceDeviation: steps / 0xfa }))
 
       strictEqual(surface.surfaceDeviation, steps / 0xfa)
     }
@@ -248,7 +217,7 @@ describe('surface block', () => {
     // `offset_ledgetree_root`, which the reader bounds against the block size.
     view.setInt32(4 + 32, 0xffff, true)
 
-    throws(() => readSurface(view.rewind(), emptySurface()), RangeError)
+    throws(() => readSurface(view.rewind()), RangeError)
   })
 })
 
@@ -376,7 +345,7 @@ describe('surface library', () => {
   })
 })
 
-const unit: Extent = { minimum: { x: -1, y: -1, z: -1 }, maximum: { x: 1, y: 1, z: 1 } }
+const unit: BoundingBox = { min: { x: -1, y: -1, z: -1 }, max: { x: 1, y: 1, z: 1 } }
 
 /** A tetrahedron over the four corners of the unit cube that share no face. */
 const tetrahedronGeometry = () => ({
@@ -403,16 +372,16 @@ describe('extent', () => {
         { x: 0, y: 0, z: 0 },
       ]),
       {
-        minimum: { x: -4, y: -2, z: -6 },
-        maximum: { x: 1, y: 5, z: 3 },
+        min: { x: -4, y: -2, z: -6 },
+        max: { x: 1, y: 5, z: 3 },
       },
     )
   })
 
   it('reports an empty point set as an inverted extent, which unions cleanly', () => {
-    const { minimum, maximum } = getExtent([])
+    const { min, max } = getExtent([])
 
-    ok(minimum.x === Infinity && maximum.x === -Infinity)
+    ok(min.x === Infinity && max.x === -Infinity)
   })
 
   it('builds a box whose corners are indexed by axis bit', () => {
@@ -536,11 +505,7 @@ describe('createHull', () => {
     strictEqual(hull.type, HullType.Enabled)
     strictEqual(getIndices(hull.faces).length, 2 + hull.faces.length / 2)
 
-    const view = BufferView.allocate(16 + hull.faces.length * 16)
-    writeHull(view, hull)
-    view.offset = 0
-
-    deepStrictEqual(readHull(view), hull)
+    deepStrictEqual(readHull(writeHull(hull)), hull)
   })
 
   it('leaves a subtree hull id at zero, since the writer assigns it', () => {
@@ -588,11 +553,11 @@ describe('node bounds', () => {
     const bounds = getNodeExtent(merged)
 
     for (const child of [left, right]) {
-      const { minimum, maximum } = getNodeExtent(child)
+      const { min, max } = getNodeExtent(child)
 
-      ok(minimum.x >= bounds.minimum.x && maximum.x <= bounds.maximum.x)
-      ok(minimum.y >= bounds.minimum.y && maximum.y <= bounds.maximum.y)
-      ok(minimum.z >= bounds.minimum.z && maximum.z <= bounds.maximum.z)
+      ok(min.x >= bounds.min.x && max.x <= bounds.max.x)
+      ok(min.y >= bounds.min.y && max.y <= bounds.max.y)
+      ok(min.z >= bounds.min.z && max.z <= bounds.max.z)
     }
 
     strictEqual(merged.left, left)
@@ -603,7 +568,7 @@ describe('node bounds', () => {
 
 describe('createHierarchy', () => {
   const leaf = (x: number) => {
-    const extent = { minimum: { x, y: -1, z: -1 }, maximum: { x: x + 2, y: 1, z: 1 } }
+    const extent = { min: { x, y: -1, z: -1 }, max: { x: x + 2, y: 1, z: 1 } }
     const { points, triangles } = createBox(extent)
 
     return createNode(createHull(x, points, triangles), points)
@@ -643,7 +608,7 @@ describe('createHierarchy', () => {
 
 describe('getMassProperties', () => {
   it('puts the mass centre of a box at its centre and the radius on its corner', () => {
-    const extent = { minimum: { x: -1, y: -2, z: -3 }, maximum: { x: 3, y: 4, z: 5 } }
+    const extent = { min: { x: -1, y: -2, z: -3 }, max: { x: 3, y: 4, z: 5 } }
     const { points, triangles } = createBox(extent)
     const { massCenter, radius } = getMassProperties([createHull(0, points, triangles)], points)
 
@@ -707,9 +672,9 @@ describe('createSurface', () => {
 })
 
 describe('createPart', () => {
-  const box = (id: number, minimum: Vector3, maximum: Vector3) => ({
+  const box = (id: number, min: Vector3, max: Vector3) => ({
     id,
-    ...createBox({ minimum, maximum }),
+    ...createBox({ min, max }),
   })
 
   const cube = (id: number, x: number) =>
@@ -731,8 +696,8 @@ describe('createPart', () => {
   it('takes the extent from the collision geometry, not from the bounding boxes it adds', () => {
     const part = createPart(1, [cube(1, 0), cube(2, 10)])
 
-    deepStrictEqual(part.minimum, { x: -1, y: -1, z: -1 })
-    deepStrictEqual(part.maximum, { x: 11, y: 1, z: 1 })
+    deepStrictEqual(part.min, { x: -1, y: -1, z: -1 })
+    deepStrictEqual(part.max, { x: 11, y: 1, z: 1 })
   })
 
   it('hangs a box hull on every inner node, as every retail file does', () => {
@@ -807,16 +772,16 @@ describe('createPart', () => {
     const part = createPart(1, [cube(1, 0), cube(2, 10), cube(3, 20)])
 
     for (const node of getNodes(part.root)) {
-      const { minimum, maximum } = getNodeExtent(node)
+      const { min, max } = getNodeExtent(node)
 
       for (const hull of getHulls(node))
         for (const index of getIndices(hull.faces)) {
           const point = part.points[index]!
 
           ok(Vector3.distance(point, node.center) <= node.radius * 1.0001)
-          ok(point.x >= minimum.x - 1e-6 && point.x <= maximum.x + 1e-6)
-          ok(point.y >= minimum.y - 1e-6 && point.y <= maximum.y + 1e-6)
-          ok(point.z >= minimum.z - 1e-6 && point.z <= maximum.z + 1e-6)
+          ok(point.x >= min.x - 1e-6 && point.x <= max.x + 1e-6)
+          ok(point.y >= min.y - 1e-6 && point.y <= max.y + 1e-6)
+          ok(point.z >= min.z - 1e-6 && point.z <= max.z + 1e-6)
         }
     }
   })
@@ -877,8 +842,8 @@ describe('createHullGeometry', () => {
     ok(part)
     strictEqual(part.points.length, 8)
     strictEqual(part.root.hull?.id, 9)
-    deepStrictEqual(part.minimum, { x: -2, y: -2, z: -2 })
-    deepStrictEqual(part.maximum, { x: 2, y: 2, z: 2 })
+    deepStrictEqual(part.min, { x: -2, y: -2, z: -2 })
+    deepStrictEqual(part.max, { x: 2, y: 2, z: 2 })
   })
 
   it('holds the hull inside what a hull can address, however large the cloud', () => {

@@ -5,8 +5,9 @@ import type Directory from '#/utf/directory.js'
 import type File from '#/utf/file.js'
 import { listTreeElements } from '#/utility/tree.js'
 import { readConstraints, writeConstraints, type Constraint } from '#/compound/constraint.js'
-import { readMaterialAnimLibrary, writeMaterialAnim } from './materialanim.js'
-import { isCompoundModel } from '#/compound/model.js'
+import { readHardpoints, writeHardpoints } from '#/compound/hardpoint.js'
+import { readMaterialAnimLibrary, writeMaterialAnim, type MaterialAnim } from './materialanim.js'
+import { isCompound } from '#/compound/model.js'
 import { readRigidModel, writeRigidModel } from './rigid.js'
 
 /** Record size of each constraint file, the two 0x40-byte name fields included. */
@@ -20,7 +21,7 @@ const sizes: Record<string, number> = {
 }
 
 /** Rigid models. `.sph` planets and `.dfm` characters are not compounds. */
-const assets = () => load('cmp', '3db').filter(({ root }) => isCompoundModel(root))
+const assets = () => load('cmp', '3db').filter(({ root }) => isCompound(root))
 
 const constraintFiles = (root: Directory) => root.getDirectory('Cmpnd', 'Cons')?.files ?? []
 
@@ -113,6 +114,27 @@ describe('retail asset corpus', { skip }, () => {
   it('reads every rigid model, compound or single part', () => {
     for (const { path, root } of load('cmp', '3db'))
       ok(readRigidModel(root).type, `${path} produced no part`)
+  })
+
+  // A hardpoint's Position is optional in the file, and exactly one retail hardpoint omits it —
+  // in a stale fragment no `Cmpnd` part names, so the game never loads it. The reader leaves the
+  // key off rather than placing it at the origin, and the writer adds no file.
+  it('reads one hardpoint without a position, and writes it back without one', () => {
+    const bare: string[] = []
+
+    for (const { path, root } of load('cmp', '3db'))
+      for (const fragment of [root, ...root.directories])
+        for (const hardpoint of readHardpoints(fragment))
+          if (!hardpoint.position) {
+            bare.push(`${path}/${fragment.name}: ${hardpoint.name}`)
+
+            const written = writeHardpoints([hardpoint])
+            strictEqual(written.getFile('Fixed', hardpoint.name, 'Position'), undefined)
+          }
+
+    deepStrictEqual(bare, [
+      'SHIPS/BORDER_WORLD/BW_VHEAVY_FIGHTER/bw_vheavy_fighter.cmp/bw_port_wing02_lod1020911031436.3db: HpContrail04',
+    ])
   })
 
   // Camera fields live in a `Camera` subdirectory of the fragment, not at its root — detecting
@@ -211,15 +233,20 @@ describe('retail asset corpus', { skip }, () => {
         }
     })
 
-    // MAKeys carries one fewer entry than MADeltas because the first is the material's own
-    // untransformed UV state — which is why the file is omitted outright at a single keyframe.
-    it('carries one fewer key than keyframe, and no MAKeys file at all when that leaves none', () => {
+    // MAKeys carries one fewer entry than MADeltas because the first segment starts from the
+    // material's own untransformed UV state — which is why the file is omitted outright at a
+    // single segment.
+    it('starts every animation at zero, and has no MAKeys file for a single segment', () => {
       for (const { path, root } of animated())
         for (const anim of readMaterialAnimLibrary(root)) {
-          strictEqual(anim.keys.length, anim.keyframes.length - 1, `${path}/${anim.name}`)
+          deepStrictEqual(
+            anim.segments[0]?.start,
+            { uOffset: 0, vOffset: 0, uScale: 0, vScale: 0 },
+            `${path}/${anim.name}`,
+          )
 
           const stored = root.getDirectory('MaterialAnim', anim.name)?.getFile('MAKeys')
-          strictEqual(!!stored, anim.keyframes.length > 1, `${path}/${anim.name}`)
+          strictEqual(!!stored, anim.segments.length > 1, `${path}/${anim.name}`)
         }
     })
 
@@ -229,16 +256,19 @@ describe('retail asset corpus', { skip }, () => {
     // the reader stores MAKeys rather than deriving it. Locked down so that a future attempt
     // to derive it has to confront the counterexamples first.
     it('does not let a single alignment derive the keys from the deltas', () => {
-      const displacement = ({ keyframes }: (typeof library)[number]) =>
-        keyframes.map(({ time, uOffsetSpeed, vOffsetSpeed, uScaleSpeed, vScaleSpeed }) => [
-          uOffsetSpeed * time,
-          vOffsetSpeed * time,
-          uScaleSpeed * time,
-          vScaleSpeed * time,
+      const displacement = ({ segments }: MaterialAnim) =>
+        segments.map(({ duration, velocity: { uOffset, vOffset, uScale, vScale } }) => [
+          uOffset * duration,
+          vOffset * duration,
+          uScale * duration,
+          vScale * duration,
         ])
 
+      /** The stored keys: every segment's start but the first, which the file leaves implicit. */
+      const keysOf = ({ segments }: MaterialAnim) => segments.slice(1).map(({ start }) => start)
+
       const library = animated().flatMap(({ path, root }) =>
-        readMaterialAnimLibrary(root).map((anim) => ({ path, ...anim })),
+        readMaterialAnimLibrary(root).map((anim) => ({ path, ...anim, keys: keysOf(anim) })),
       )
 
       const verdicts = new Map<number, string[]>()
@@ -288,7 +318,8 @@ describe('retail asset corpus', { skip }, () => {
     it('holds no negative segment durations', () => {
       for (const { path, root } of animated())
         for (const anim of readMaterialAnimLibrary(root))
-          for (const { time } of anim.keyframes) ok(time >= 0, `${path}/${anim.name}: ${time}`)
+          for (const { duration } of anim.segments)
+            ok(duration >= 0, `${path}/${anim.name}: ${duration}`)
     })
   })
 

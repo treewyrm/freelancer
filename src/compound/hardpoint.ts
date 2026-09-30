@@ -9,15 +9,22 @@ import Matrix3 from '#/math/matrix3.js'
 interface Base<T extends string> {
   type: T
   name: string
-  position: Vector3
+
+  /**
+   * Where the hardpoint sits in its part. Absent when the hardpoint has no `Position` file, which
+   * places it at the part's origin. One retail hardpoint of 12,053 is written that way, in a stale
+   * fragment no `Cmpnd` part names.
+   */
+  position?: Vector3
+
   orientation: Matrix3
 }
 
 /** Fixed attachment hardpoint. */
-interface Fixed extends Base<'fixed'> {}
+export interface FixedHardpoint extends Base<'fixed'> {}
 
 /** Revolute attachment hardpoint. */
-interface Revolute extends Base<'revolute'> {
+export interface RevoluteHardpoint extends Base<'revolute'> {
   axis: Vector3
   min: number
   max: number
@@ -31,17 +38,17 @@ interface Revolute extends Base<'revolute'> {
  * kinds a hardpoint can drive. A third variant here would be a shape no reader can produce and
  * no writer can place.
  */
-export type Hardpoint = Fixed | Revolute
+export type Hardpoint = FixedHardpoint | RevoluteHardpoint
 
-/** Reads a `Position` file, defaulting to the origin when the hardpoint carries none. */
-function readPosition(parent: Directory): Vector3 {
+/** Reads a `Position` file, `undefined` when the hardpoint carries none. */
+function readPosition(parent: Directory): Vector3 | undefined {
   const file = parent.getFile('position')
-  return (file && Vector3.read(BufferView.from(file))) ?? Vector3.copy({})
+  return file && Vector3.read(BufferView.from(file))
 }
 
-/** Writes a `Position` file, in the retail capitalization. */
-function writePosition(position: Vector3): File {
-  return new File('Position', Vector3.write(position))
+/** Writes a `Position` file, in the retail capitalization, when there is a position to write. */
+function writePosition(position: Vector3 | undefined): File[] {
+  return position ? [new File('Position', Vector3.write(position))] : []
 }
 
 /** Reads an `Orientation` file, defaulting to identity when the hardpoint carries none. */
@@ -66,76 +73,83 @@ function writeAxis(axis: Vector3): File {
   return new File('Axis', Vector3.write(axis))
 }
 
+/** Assembles a hardpoint, leaving `position` off when the file carries none. */
+function located<T extends Hardpoint>(hardpoint: T, position: Vector3 | undefined): T {
+  if (position) hardpoint.position = position
+  return hardpoint
+}
+
 /** Reads one fixed hardpoint from its own directory, which is also its name. */
-function readFixed(parent: Directory): Fixed {
-  return {
-    type: 'fixed',
-    name: parent.name,
-    position: readPosition(parent),
-    orientation: readOrientation(parent),
-  }
+function readFixed(parent: Directory): FixedHardpoint {
+  return located(
+    { type: 'fixed', name: parent.name, orientation: readOrientation(parent) },
+    readPosition(parent),
+  )
 }
 
 /** Writes one fixed hardpoint as a directory named after it, for placing under `Hardpoints/Fixed`. */
-function writeFixed(fixed: Fixed): Directory {
+function writeFixed(fixed: FixedHardpoint): Directory {
   const { name, position, orientation } = fixed
-  return new Directory(name, [writePosition(position), writeOrientation(orientation)])
+  return new Directory(name, [...writePosition(position), writeOrientation(orientation)])
 }
 
 /**
  * Reads one revolute hardpoint from its own directory, which is also its name. `Min` and `Max` are
  * the rotation limits about `axis`, in radians, and default to zero when absent.
  */
-function readRevolute(parent: Directory): Revolute {
-  const position = readPosition(parent)
+function readRevolute(parent: Directory): RevoluteHardpoint {
   const orientation = readOrientation(parent)
   const axis = readAxis(parent)
 
   const [min = 0] = parent.getFile('min')?.readFloats() ?? []
   const [max = 0] = parent.getFile('max')?.readFloats() ?? []
 
-  return { type: 'revolute', name: parent.name, position, orientation, axis, min, max }
+  return located(
+    { type: 'revolute', name: parent.name, orientation, axis, min, max },
+    readPosition(parent),
+  )
 }
 
 /**
  * Writes one revolute hardpoint as a directory named after it, for placing under
  * `Hardpoints/Revolute`. Every file is emitted, defaults included, the way retail writes them.
  */
-function writeRevolute(revolute: Revolute): Directory {
+function writeRevolute(revolute: RevoluteHardpoint): Directory {
   const { name, position, orientation, axis, min, max } = revolute
 
   const directory = new Directory(name, [
-    writePosition(position),
+    ...writePosition(position),
     writeOrientation(orientation),
     writeAxis(axis),
-    new File('Min').writeFloats(min),
-    new File('Max').writeFloats(max),
+    new File('Min').setFloats(min),
+    new File('Max').setFloats(max),
   ])
 
   return directory
 }
 
 /**
- * Reads hardpoints from object directory.
+ * Reads hardpoints from object directory, empty when it carries none.
  * @param parent Object directory
  * @returns
  */
-export function* readHardpoints(parent: Directory): Generator<Hardpoint> {
-  const hardpoints = parent.getDirectory('hardpoints')
-  if (!hardpoints) return
+export function readHardpoints(parent: Directory): Hardpoint[] {
+  const hardpoints: Hardpoint[] = []
+  const directory = parent.getDirectory('hardpoints')
+  if (!directory) return hardpoints
 
-  for (const directory of hardpoints.directories) {
-    switch (directory.name.toLowerCase()) {
+  for (const group of directory.directories) {
+    switch (group.name.toLowerCase()) {
       case 'fixed':
-        for (const subdirectory of directory.directories) yield readFixed(subdirectory)
-
+        for (const subdirectory of group.directories) hardpoints.push(readFixed(subdirectory))
         break
       case 'revolute':
-        for (const subdirectory of directory.directories) yield readRevolute(subdirectory)
-
+        for (const subdirectory of group.directories) hardpoints.push(readRevolute(subdirectory))
         break
     }
   }
+
+  return hardpoints
 }
 
 /**
@@ -150,10 +164,10 @@ export function writeHardpoints(hardpoints: Iterable<Hardpoint>): Directory {
   for (const hardpoint of hardpoints) {
     switch (hardpoint.type) {
       case 'fixed':
-        directory.setDirectory('Fixed').children.push(writeFixed(hardpoint))
+        directory.ensureDirectory('Fixed').children.push(writeFixed(hardpoint))
         break
       case 'revolute':
-        directory.setDirectory('Revolute').children.push(writeRevolute(hardpoint))
+        directory.ensureDirectory('Revolute').children.push(writeRevolute(hardpoint))
         break
 
       // A variant added without a branch here would drop out of the file unannounced.
@@ -166,7 +180,7 @@ export function writeHardpoints(hardpoints: Iterable<Hardpoint>): Directory {
 }
 
 /**
- * Finds a hardpoint by name or resource CRC within one part's list. `getModelHardpoint` is the
+ * Finds a hardpoint by name or resource CRC within one part's list. `getCompoundHardpoint` is the
  * counterpart that searches a whole model and says which part owns the match.
  */
 export const getHardpoint = (hardpoints: Hardpoint[], name: Hashable): Hardpoint | undefined =>

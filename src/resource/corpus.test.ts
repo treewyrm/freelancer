@@ -6,7 +6,12 @@ import { write, writeSection } from './write.js'
 import { readBlock, readStrings, writeStrings } from './strings.js'
 import { readInfocards, writeInfocards } from './infocards.js'
 import { globalIdOf, languageOf, readLibrary, RETAIL_LIBRARIES, writeLibrary } from './library.js'
-import { CODE_PAGE_WINDOWS_1252, LANGUAGE_ENGLISH_US, LANGUAGE_NEUTRAL, Type } from './data.js'
+import {
+  CODE_PAGE_WINDOWS_1252,
+  LANGUAGE_ENGLISH_US,
+  LANGUAGE_NEUTRAL,
+  ResourceType,
+} from './data.js'
 
 /**
  * The reader and writer against the retail install.
@@ -52,8 +57,8 @@ describe('retail corpus', { skip: corpus.skip }, () => {
       for (const { resources } of libraries)
         for (const { type } of resources) {
           total++
-          if (type === Type.String) blocks++
-          if (type === Type.Html) cards++
+          if (type === ResourceType.String) blocks++
+          if (type === ResourceType.Html) cards++
         }
 
       assert.equal(total, 6653)
@@ -64,7 +69,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
     it('gives every content resource US English and code page 1252', () => {
       for (const { path, resources } of libraries)
         for (const { type, language, codePage } of resources) {
-          if (type !== Type.String && type !== Type.Html) continue
+          if (type !== ResourceType.String && type !== ResourceType.Html) continue
 
           assert.equal(language, LANGUAGE_ENGLISH_US, `${path} language`)
           assert.equal(codePage, CODE_PAGE_WINDOWS_1252, `${path} code page`)
@@ -77,7 +82,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
       for (const { path, resources } of libraries)
         for (const { type, language } of resources)
           if (language === LANGUAGE_NEUTRAL) {
-            assert.equal(type, Type.Version, `${path} has a neutral non-version resource`)
+            assert.equal(type, ResourceType.Version, `${path} has a neutral non-version resource`)
             neutral++
           }
 
@@ -134,7 +139,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
 
       for (const { path, resources } of libraries)
         for (const { type, data } of resources) {
-          if (type !== Type.String) continue
+          if (type !== ResourceType.String) continue
 
           const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
           let offset = 0
@@ -305,7 +310,7 @@ describe('retail corpus', { skip: corpus.skip }, () => {
       let hollow = 0
 
       for (const { path, resources } of libraries) {
-        const blocks = resources.filter(({ type }) => type === Type.String)
+        const blocks = resources.filter(({ type }) => type === ResourceType.String)
         const vacant = blocks.filter(({ id, data }) => readBlock(data, Number(id)).size === 0)
 
         if (vacant.length)

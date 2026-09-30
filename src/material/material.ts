@@ -116,26 +116,26 @@ export function writeMaterial(material: Material): Directory {
     flipV,
   } = material
 
-  const files: File[] = [new File('Type').writeStrings(type)]
+  const files: File[] = [new File('Type').setStrings(type)]
 
   const color = (name: string, value: Vector3 | undefined) => {
     if (value) files.push(new File(name, Vector3.write(value)))
   }
 
   const scalar = (name: string, value: number | undefined) => {
-    if (value !== undefined) files.push(new File(name).writeFloats(value))
+    if (value !== undefined) files.push(new File(name).setFloats(value))
   }
 
   const flag = (name: string, value: boolean | undefined) => {
-    if (value !== undefined) files.push(new File(name).writeIntegers(value ? 1 : 0))
+    if (value !== undefined) files.push(new File(name).setIntegers(value ? 1 : 0))
   }
 
   const texture = (slot: string, value: TextureReference | undefined) => {
     if (!value) return
 
     files.push(
-      new File(`${slot}_name`).writeStrings(value.name),
-      new File(`${slot}_flags`).writeIntegers(value.flags),
+      new File(`${slot}_name`).setStrings(value.name),
+      new File(`${slot}_flags`).setIntegers(value.flags),
     )
   }
 

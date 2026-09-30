@@ -2,53 +2,48 @@ import Directory from '#/utf/directory.js'
 import { getResource, type Hashable } from '#/hash.js'
 
 /**
- * One segment of a material animation.
+ * A material's UV transform, or its rate of change per second.
  *
- * `time` is the segment's own duration, not an offset from the start of the animation — the
- * velocities apply for that long before the next keyframe takes over.
+ * The scales are displacements from 1: the game multiplies by `1 + uScale` and `1 + vScale`.
  */
-export interface MaterialKeyframe {
-  /** Segment duration in seconds. */
-  time: number
-
-  /** U tiling offset velocity, per second. */
-  uOffsetSpeed: number
-
-  /** V tiling offset velocity, per second. */
-  vOffsetSpeed: number
-
-  /** U tiling scale velocity, per second. */
-  uScaleSpeed: number
-
-  /** V tiling scale velocity, per second. */
-  vScaleSpeed: number
-}
-
-/** UV transform a segment starts from. */
-export interface MaterialKey {
-  /** U start offset. */
+export interface MaterialTransform {
+  /** U offset. */
   uOffset: number
 
-  /** V start offset. */
+  /** V offset. */
   vOffset: number
 
-  /** U start scale, as a displacement from 1: the game multiplies by `1 + uScale`. */
+  /** U scale, as a displacement from 1. */
   uScale: number
 
-  /** V start scale, as a displacement from 1: the game multiplies by `1 + vScale`. */
+  /** V scale, as a displacement from 1. */
   vScale: number
 }
 
 /**
- * Animates the UV transform of a single material, named by the directory holding it.
+ * One segment of a material animation: where the UV transform starts, how fast it moves, and for
+ * how long before the next segment takes over.
  *
- * `keys` always has one entry fewer than {@link keyframes}, the first transform being implicit.
- *
- * The two are related but not redundant: key magnitudes match segment displacements
- * (`speed × time`) closely enough that they clearly describe the same motion, yet no single
- * alignment between them reproduces every retail entry, so `keys` must be read rather than
- * derived. See [What `MAKeys` is not](../../docs/modules/RIGID.md#what-makeys-is-not).
+ * `start` and `velocity` are both read rather than derived — nothing integrates across a boundary,
+ * so where one segment's velocity arrives and where the next starts can differ, and the game jumps.
+ * See [What `MAKeys` is not](../../docs/modules/RIGID.md#what-makeys-is-not).
  */
+export interface MaterialSegment {
+  /** Segment duration in seconds, from `MADeltas`. */
+  duration: number
+
+  /**
+   * Transform the segment starts from: `MAKeys[i − 1]`, and on the first segment the four zeros
+   * the file leaves implicit. The writer refuses a first segment that starts anywhere else, since
+   * the file has nowhere to put it.
+   */
+  start: MaterialTransform
+
+  /** Transform velocity, per second, from `MADeltas`. */
+  velocity: MaterialTransform
+}
+
+/** Animates the UV transform of a single material, named by the directory holding it. */
 export interface MaterialAnim {
   /** Material name. */
   name: string
@@ -60,10 +55,7 @@ export interface MaterialAnim {
   flags: number
 
   /** Segments, in playback order. */
-  keyframes: MaterialKeyframe[]
-
-  /** Starting transform per segment, less the implicit first, which is four zeros. */
-  keys: MaterialKey[]
+  segments: MaterialSegment[]
 }
 
 /**
@@ -73,12 +65,17 @@ export interface MaterialAnim {
 export type MaterialAnimLibrary = MaterialAnim[]
 
 /** Floats per `MADeltas` and `MAKeys` entry. */
-const keyframeLength = 5
+const deltaLength = 5
 const keyLength = 4
 
+const zero = (): MaterialTransform => ({ uOffset: 0, vOffset: 0, uScale: 0, vScale: 0 })
+
+const isZero = ({ uOffset, vOffset, uScale, vScale }: MaterialTransform): boolean =>
+  !uOffset && !vOffset && !uScale && !vScale
+
 /** Animation duration in seconds, the sum of its segment durations. */
-export const getMaterialAnimDuration = ({ keyframes }: MaterialAnim): number =>
-  keyframes.reduce((total, { time }) => total + time, 0)
+export const getMaterialAnimDuration = ({ segments }: MaterialAnim): number =>
+  segments.reduce((total, { duration }) => total + duration, 0)
 
 /** Finds a material animation by name. */
 export const getMaterialAnim = (
@@ -99,74 +96,74 @@ export function readMaterialAnim(parent: Directory): MaterialAnim {
   const [flags = 0] = parent.getFile('MAFlags')?.readIntegers() ?? []
 
   const deltas = [...(parent.getFile('MADeltas')?.readFloats() ?? [])]
-  if (deltas.length < count * keyframeLength)
+  if (deltas.length < count * deltaLength)
     throw new RangeError(`MADeltas in ${parent.name} holds fewer than ${count} keyframes`)
-
-  const keyframes: MaterialKeyframe[] = new Array(count)
-
-  for (let i = 0, o = 0; i < count; i++, o += keyframeLength)
-    keyframes[i] = {
-      time: deltas[o]!,
-      uOffsetSpeed: deltas[o + 1]!,
-      vOffsetSpeed: deltas[o + 2]!,
-      uScaleSpeed: deltas[o + 3]!,
-      vScaleSpeed: deltas[o + 4]!,
-    }
 
   // The first key is the material's own UV state, so only the rest are stored. A single-segment
   // animation has none at all, and retail omits the file rather than writing it empty.
-  const stored = [...(parent.getFile('MAKeys')?.readFloats() ?? [])]
-  if (stored.length < (count - 1) * keyLength)
+  const keys = [...(parent.getFile('MAKeys')?.readFloats() ?? [])]
+  if (keys.length < (count - 1) * keyLength)
     throw new RangeError(`MAKeys in ${parent.name} holds fewer than ${count - 1} keys`)
 
-  const keys: MaterialKey[] = new Array(count - 1)
+  const segments: MaterialSegment[] = new Array(count)
 
-  for (let i = 0, o = 0; i < count - 1; i++, o += keyLength)
-    keys[i] = {
-      uOffset: stored[o]!,
-      vOffset: stored[o + 1]!,
-      uScale: stored[o + 2]!,
-      vScale: stored[o + 3]!,
+  for (let i = 0; i < count; i++) {
+    const d = i * deltaLength
+    const k = (i - 1) * keyLength
+
+    segments[i] = {
+      duration: deltas[d]!,
+      start: i
+        ? { uOffset: keys[k]!, vOffset: keys[k + 1]!, uScale: keys[k + 2]!, vScale: keys[k + 3]! }
+        : zero(),
+      velocity: {
+        uOffset: deltas[d + 1]!,
+        vOffset: deltas[d + 2]!,
+        uScale: deltas[d + 3]!,
+        vScale: deltas[d + 4]!,
+      },
     }
+  }
 
-  return { name: parent.name, flags, keyframes, keys }
+  return { name: parent.name, flags, segments }
 }
 
 /**
  * Writes a material animation into a directory named after the material.
  * @param anim Material animation
+ * @throws RangeError on an animation with no segments, or whose first segment starts anywhere but
+ * zero — the file stores no first key.
  */
 export function writeMaterialAnim(anim: MaterialAnim): Directory {
-  const { name, flags, keyframes, keys } = anim
+  const { name, flags, segments } = anim
+  const [first, ...rest] = segments
 
-  if (!keyframes.length) throw new RangeError(`Material animation ${name} has no keyframes`)
-  if (keys.length !== keyframes.length - 1)
-    throw new RangeError(
-      `Material animation ${name} has ${keys.length} keys for ${keyframes.length} keyframes`,
-    )
+  if (!first) throw new RangeError(`Material animation ${name} has no segments`)
+  if (!isZero(first.start))
+    throw new RangeError(`Material animation ${name} does not start from the zero transform`)
 
   const directory = new Directory(name)
 
-  directory.setFile('MACount').writeIntegers(keyframes.length)
-  directory.setFile('MAFlags').writeIntegers(flags)
+  directory.ensureFile('MACount').setIntegers(segments.length)
+  directory.ensureFile('MAFlags').setIntegers(flags)
 
   directory
-    .setFile('MADeltas')
-    .writeFloats(
-      ...keyframes.flatMap(({ time, uOffsetSpeed, vOffsetSpeed, uScaleSpeed, vScaleSpeed }) => [
-        time,
-        uOffsetSpeed,
-        vOffsetSpeed,
-        uScaleSpeed,
-        vScaleSpeed,
+    .ensureFile('MADeltas')
+    .setFloats(
+      ...segments.flatMap(({ duration, velocity: { uOffset, vOffset, uScale, vScale } }) => [
+        duration,
+        uOffset,
+        vOffset,
+        uScale,
+        vScale,
       ]),
     )
 
-  if (keys.length)
+  if (rest.length)
     directory
-      .setFile('MAKeys')
-      .writeFloats(
-        ...keys.flatMap(({ uOffset, vOffset, uScale, vScale }) => [
+      .ensureFile('MAKeys')
+      .setFloats(
+        ...rest.flatMap(({ start: { uOffset, vOffset, uScale, vScale } }) => [
           uOffset,
           vOffset,
           uScale,

@@ -1,4 +1,4 @@
-import type Vector3 from '#/math/vector3.js'
+import type BoundingSphere from '#/math/boundingsphere.js'
 import BufferView from '#/utility/bufferview.js'
 import { assemble, flatten } from '#/utility/hierarchy.js'
 import { readArray, readString, writeArray, writeString } from './misc.js'
@@ -52,7 +52,7 @@ export function writePair({ sourceId, targetId }: Pair): BufferView {
 }
 
 /** Parent identifier standing in for the world, i.e. the instance is a root. */
-export const WorldId = 0x8000
+export const WORLD_ID = 0x8000
 
 /**
  * CRC of `"Control Root"`, the name that makes a container the effect's control root: the one node
@@ -68,7 +68,7 @@ export const WorldId = 0x8000
  *
  * Signed, because instance CRCs are read as `int32` and would never compare equal otherwise.
  */
-export const ControlRootId = 0xee223b51 | 0
+export const CONTROL_ROOT_ID = 0xee223b51 | 0
 
 /**
  * One use of a library node within an effect: which node, how it is placed in the instance tree,
@@ -79,14 +79,19 @@ export const ControlRootId = 0xee223b51 | 0
  * them in two separate lists.
  */
 export interface NodeInstance {
-  /** Node name CRC (case-sensitive), or {@link ControlRootId} on the control root. */
+  /** Node name CRC (case-sensitive), or {@link CONTROL_ROOT_ID} on the control root. */
   crc: number
 
   /** Non-zero for a container that references no node. */
   flags: number
 
-  /** Sorting order. */
-  sort: number
+  /**
+   * Position of this instance's entry in the file, which is not tree order.
+   *
+   * Preserved on read and honoured on write. Instances without one go out after those that have
+   * one, breadth-first, so a hand-built tree needs neither this nor {@link id}.
+   */
+  sort?: number
 
   /**
    * Entry identifier linking this instance to its parent and to pair targets.
@@ -107,15 +112,16 @@ export interface NodeInstance {
 /**
  * One named effect: a tree of node instances, hanging off the roots in `children`.
  *
- * `center` and `radius` are the version 1.1 bounding sphere: stored by the authoring tool, never read
- * by the game, and all zero on most effects. See docs/modules/ALCHEMY.md#effect-library-versions.
+ * `bounds` is the version 1.1 bounding sphere: stored by the authoring tool, never read by the
+ * game, and all zero on most effects. See docs/modules/ALCHEMY.md#effect-library-versions.
  */
 export interface Effect {
   name: string
-  /** Bounding sphere centre, in the effect's space. Version 1.1 only. */
-  center?: Vector3
-  /** Bounding sphere radius; zero where the effect does not state one. Version 1.1 only. */
-  radius?: number
+  /**
+   * Bounding sphere, in the effect's space. Absent on a version 1 library, which does not store
+   * one; the DLL takes that as zero.
+   */
+  bounds?: BoundingSphere
   children: NodeInstance[]
 }
 
@@ -123,7 +129,7 @@ export interface Effect {
  * Reads one effect: its name, its instance entries and the links between them.
  *
  * The file is flat. Hierarchy comes out of each entry's `parentId` — a value at or above
- * {@link WorldId} makes the instance a root — and the links are a separate list resolved against
+ * {@link WORLD_ID} makes the instance a root — and the links are a separate list resolved against
  * the same identifiers, so an instance can be some other instance's target without being its child.
  *
  * A target naming an identifier no entry hands out is dropped rather than throwing, since a link is
@@ -132,15 +138,13 @@ export interface Effect {
  */
 export function readEffect(view: BufferView, version = 1): Effect {
   const name = readString(view)
-  const center = { x: 0, y: 0, z: 0 }
-  let radius = 0
+  let bounds: BoundingSphere | undefined
 
-  if (version > 1) {
-    center.x = view.readFloat32()
-    center.y = view.readFloat32()
-    center.z = view.readFloat32()
-    radius = view.readFloat32()
-  }
+  if (version > 1)
+    bounds = {
+      center: { x: view.readFloat32(), y: view.readFloat32(), z: view.readFloat32() },
+      radius: view.readFloat32(),
+    }
 
   const entries = readArray(view, readEntry, view.readInt32())
   const pairs = readArray(view, readPair, view.readInt32())
@@ -159,7 +163,7 @@ export function readEffect(view: BufferView, version = 1): Effect {
         targets: [],
       },
       childId,
-      parentId: parentId < WorldId ? parentId : undefined,
+      parentId: parentId < WORLD_ID ? parentId : undefined,
     }),
 
     // Iterate over child-parent pairs.
@@ -168,13 +172,13 @@ export function readEffect(view: BufferView, version = 1): Effect {
 
       // Pick pairs matching this node instance.
       for (const { targetId } of pairs.filter(({ sourceId }) => sourceId === childId)) {
-        const target = array.find(({ childId }) => targetId == childId)?.child
+        const target = array.find(({ childId }) => targetId === childId)?.child
         if (target) child.targets.push(target)
       }
     },
   )
 
-  return { name, center, radius, children }
+  return bounds ? { name, bounds, children } : { name, children }
 }
 
 /**
@@ -183,10 +187,11 @@ export function readEffect(view: BufferView, version = 1): Effect {
  * Identifiers are not derived from the tree: an instance keeps whatever `id` it was read with, and
  * the rest are numbered into the gaps left over — retail's handles are sparse and unordered, and
  * renumbering them would still load but would no longer round-trip. Entries go out in each
- * instance's recorded `sort` order, which is the order the file had them in.
+ * instance's recorded `sort` order, which is the order the file had them in, and instances without
+ * one follow breadth-first.
  * @param version Library version; only past 1 is the bounding sphere written.
  */
-export const writeEffect = (effect: Effect, version = 1): BufferView => {
+export function writeEffect(effect: Effect, version = 1): BufferView {
   const pairs: Pair[] = []
 
   // Flattens hierarchy of node instances into entry list.
@@ -212,7 +217,7 @@ export const writeEffect = (effect: Effect, version = 1): BufferView => {
     }
 
   const entries: (Entry & { sort: number })[] = steps.map(({ child: source, parent }) => {
-    const { flags, crc, sort } = source
+    const { flags, crc, sort = Infinity } = source
     const childId = identifiers.get(source)!
 
     for (const target of source.targets) {
@@ -226,20 +231,21 @@ export const writeEffect = (effect: Effect, version = 1): BufferView => {
       })
     }
 
-    return { flags, crc, parentId: parent ? identifiers.get(parent)! : WorldId, childId, sort }
+    return { flags, crc, parentId: parent ? identifiers.get(parent)! : WORLD_ID, childId, sort }
   })
 
-  entries.sort(({ sort: a }, { sort: b }) => a - b)
+  // Stable, so the instances without a recorded position keep their breadth-first order.
+  entries.sort(({ sort: a }, { sort: b }) => (a === b ? 0 : a < b ? -1 : 1))
 
   const chunks: BufferView[] = []
 
   if (version > 1) {
     chunks.push(
       BufferView.allocate(Float32Array.BYTES_PER_ELEMENT * 4)
-        .writeFloat32(effect.center?.x ?? 0)
-        .writeFloat32(effect.center?.y ?? 0)
-        .writeFloat32(effect.center?.z ?? 0)
-        .writeFloat32(effect.radius ?? 0),
+        .writeFloat32(effect.bounds?.center.x ?? 0)
+        .writeFloat32(effect.bounds?.center.y ?? 0)
+        .writeFloat32(effect.bounds?.center.z ?? 0)
+        .writeFloat32(effect.bounds?.radius ?? 0),
     )
   }
 

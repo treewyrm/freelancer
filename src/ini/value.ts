@@ -1,4 +1,4 @@
-import type { Value } from './types.js'
+import type { Value, ValueOf } from './types.js'
 import { atof, atoi, formatFloat32, formatInt32, isInt32 } from '#/utility/number.js'
 import { fold } from '#/utility/string.js'
 
@@ -45,22 +45,23 @@ export const list = (...values: (boolean | number | string)[]): Value[] => value
  * Whether a value carries the boolean type tag. Retail carries none, so this is a test for
  * hand-built data — a flag in a file is the *string* `true`, which {@link isString} matches.
  */
-export const isBoolean = (value: Value): boolean => value.type === 'boolean'
+export const isBoolean = (value: Value): value is ValueOf<'boolean'> => value.type === 'boolean'
 
 /** Whether a value carries the integer type tag, which `100` was compiled to and `100.0` was not. */
-export const isInteger = (value: Value): boolean => value.type === 'integer'
+export const isInteger = (value: Value): value is ValueOf<'integer'> => value.type === 'integer'
 
 /**
  * Whether a value carries the float type tag. **14,209 retail floats hold an integral value**, so
  * this is a fact about the tag and not about the number.
  */
-export const isFloat = (value: Value): boolean => value.type === 'float'
+export const isFloat = (value: Value): value is ValueOf<'float'> => value.type === 'float'
 
 /** Whether a value carries either numeric type tag. */
-export const isNumber = (value: Value): boolean => isInteger(value) || isFloat(value)
+export const isNumber = (value: Value): value is ValueOf<'integer' | 'float'> =>
+  isInteger(value) || isFloat(value)
 
 /** Whether a value carries the string type tag. */
-export const isString = (value: Value): boolean => value.type === 'string'
+export const isString = (value: Value): value is ValueOf<'string'> => value.type === 'string'
 
 /**
  * Reads a value as a boolean, the way `INI_Reader::get_value_bool` does.

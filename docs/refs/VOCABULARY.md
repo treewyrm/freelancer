@@ -137,7 +137,8 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
   → [COMPOUND § Constraints](../modules/COMPOUND.md#constraints)
 - **Joint** — how a child part hangs from its parent, and which degrees of freedom animation may
   drive: `Fix` (rigid), `Rev` (rotation about one axis), `Pris` (sliding along one axis), `Cyl`
-  (both, and it cannot be animated), `Sphere` (rotation within per-axis limits), `Loose` (free).
+  (both, and it cannot be animated), `Sphere` (rotation; its limits are never applied), `Trans`
+  (free sliding, loaded but never shipped), `Loose` (free).
   → [COMPOUND § Joints](../modules/COMPOUND.md#joints),
   [ANIMATION § Why cylinder joints cannot be animated](../modules/ANIMATION.md#why-cylinder-joints-cannot-be-animated)
 - **Position and offset** — the two ends of a joint's contact point, in the parent's frame and in
@@ -168,8 +169,9 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
   → [RENDERER § 3.2](RENDERER.md#32-the-base-offset-scheme-and-what-it-really-means)
 - **Vertex format** (FVF) — the Direct3D bitmask describing a vertex's layout. Its texture bits are a
   count of UV sets. → [VMESH § `VertexFormat`](../modules/VMESH.md#vertexformat)
-- **Wireframe overlay** (`VMeshWire`, `VWireData`) — a line list over a library mesh, drawn in the
-  scanner and dealer views. → [VMESH § Wireframe overlay](../modules/VMESH.md#wireframe-overlay)
+- **Wireframe overlay** (`VMeshWire`, its one file `VWireData`) — a line list over a library mesh,
+  drawn in the scanner and dealer views. → [VMESH § Wireframe
+  overlay](../modules/VMESH.md#wireframe-overlay)
 - **`.vms`** — a file holding nothing but a mesh library. The game loads `interface.generic.vms`
   without being asked. → [VMESH § The one external reference](../modules/VMESH.md#the-one-external-reference)
 - **Level of detail** (`MultiLevel`, `Level<n>`, `Switch2`) — a rigid part picks one of several
@@ -265,15 +267,18 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **Interval** / **time marker** — the spacing between keyframes in seconds; a negative interval
   means each keyframe carries its own time instead. → [ANIMATION § `Header`](../modules/ANIMATION.md#header)
 - **Channel type** — a bitfield saying what each keyframe holds. The low nibble comes from Conquest:
-  Frontier Wars and the high nibble is Freelancer's compression (`ZeroPosition`,
-  `IdentityQuaternion`, `VectorQuaternion`, `AngleQuaternion`).
+  Frontier Wars and the five bits above it are Freelancer's compression (`ZeroPosition`,
+  `IdentityQuaternion`, `VectorQuaternion`, `AngleQuaternion`, `ShortQuaternion`).
   → [ANIMATION § `ChannelType`](../modules/ANIMATION.md#channeltype),
   [ANIMATION § Quantized quaternions](../modules/ANIMATION.md#quantized-quaternions)
 - **Joint rest** — the joint's position and rotation declared in `Cons`. Sphere and loose channels
   displace it rather than replace it.
   → [ANIMATION § A sphere or loose channel is a displacement](../modules/ANIMATION.md#a-sphere-or-loose-channel-is-a-displacement-of-the-joints-rest)
-- **Nominal range** — a joint's declared `min`/`max`. Retail animation exceeds it, and the reader
-  does not clamp. → [ANIMATION § The range is nominal](../modules/ANIMATION.md#the-range-is-nominal)
+- **Joint range** — a joint's declared `min`/`max`. Retail animation exceeds it; the reader keeps
+  what the file stores, and the engine clamps revolute and prismatic values to it.
+  → [ANIMATION § The range is enforced](../modules/ANIMATION.md#the-range-is-enforced)
+- **Root motion** — an object map moving its object from where it stood, and on a loop carrying on
+  from where the last cycle ended. → [ANIMATION § Object maps are relative](../modules/ANIMATION.md#object-maps-are-relative-and-carry-motion-forward)
 - **`Root height`** — how far above a room's floor a character stands; it lifts the object, not the
   skeleton. → [ANIMATION § Root height](../modules/ANIMATION.md#root-height-elevates-the-character-not-the-skeleton)
 
@@ -362,17 +367,19 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **Pair** (target) — a link across the tree binding an appearance to an emitter, stored apart from
   the tree. → [ALCHEMY § Effect library](../modules/ALCHEMY.md#effect-library)
 - **Folder** (container) — an instance whose `flags` is non-zero. The DLL builds it as a bare
-  `FxNode` and never looks its CRC up.
-  → [ALCHEMY § Two fields, two jobs](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-controlrootid-makes-it-the-root)
-- **Control root** (`Control Root`, `ControlRootId`) — the folder whose CRC is the hash of
+  `FxNode` and never looks its CRC up. → [ALCHEMY § Two fields, two
+  jobs](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-control_root_id-makes-it-the-root)
+- **Control root** (`Control Root`, `CONTROL_ROOT_ID`) — the folder whose CRC is the hash of
   `Control Root`: the one node an effect's placement reaches. What hangs from it moves with the
-  effect; what sits beside it does not. The name ships nowhere in retail and was recovered by search.
-  → [ALCHEMY § Two fields, two jobs](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-controlrootid-makes-it-the-root),
-  [ALCHEMY § The root's name was recovered](../modules/ALCHEMY.md#the-roots-name-was-recovered-not-read)
+  effect; what sits beside it does not. The name ships nowhere in retail and was recovered by
+  search. → [ALCHEMY § Two fields, two
+  jobs](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-control_root_id-makes-it-the-root),
+  [ALCHEMY § The root's name was
+  recovered](../modules/ALCHEMY.md#the-roots-name-was-recovered-not-read)
 - **Placement** — the matrix the host gives an effect. It goes to the control root, or to each
-  top-level instance when there is none.
-  → [ALCHEMY § Two fields, two jobs](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-controlrootid-makes-it-the-root)
-- **World** (`WorldId`) — the parent id that marks an instance as top-level.
+  top-level instance when there is none. → [ALCHEMY § Two fields, two
+  jobs](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-control_root_id-makes-it-the-root)
+- **World** (`WORLD_ID`) — the parent id that marks an instance as top-level.
   → [ALCHEMY § Effect library](../modules/ALCHEMY.md#effect-library)
 - **Sparam** — a control value the host supplies to blend between an effect's states. It is the
   outer key of every animated property. → [ALCHEMY § Evaluation](../modules/ALCHEMY.md#evaluation)
@@ -380,13 +387,13 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
   the node's own time, depending on what samples it.
   → [ALCHEMY § Evaluation](../modules/ALCHEMY.md#evaluation)
 - **Eased list** / **looped list** — the two inner keyframe lists: one easing type held at the ends,
-  or Hermite keyframes with a default and wrap modes.
+  or Hermite keyframes with a fallback and a wrap mode at each end.
   → [ALCHEMY § Containers](../modules/ALCHEMY.md#containers),
-  [ALCHEMY § `WrapFlags`](../modules/ALCHEMY.md#wrapflags)
+  [ALCHEMY § `WrapMode`](../modules/ALCHEMY.md#wrapmode)
 - **Easing** (`EaseType`) — a byte indexing `alchemy.dll`'s table of seven easing functions.
   → [ALCHEMY § `EaseType`](../modules/ALCHEMY.md#easetype)
 - **Transform** (Alchemy, `Node_Transform`) — a node's animated position, rotation and scale.
-  → [ALCHEMY § `Transform`](../modules/ALCHEMY.md#transform)
+  → [ALCHEMY § `AnimatedTransform`](../modules/ALCHEMY.md#animatedtransform)
 - **LOD value** — a value the host sets that scales how many particles an emitter makes and how
   large an appearance draws. → [ALCHEMY § Known names](../modules/ALCHEMY.md#known-names)
 
@@ -538,9 +545,10 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **Sphere** — a joint kind, or the procedural sphere of a `.sph`.
   → [COMPOUND § Joints](../modules/COMPOUND.md#joints),
   [RIGID § Procedural spheres](../modules/RIGID.md#procedural-spheres)
-- **Transform** — an Alchemy node's animated transform, or one step of a transform stack in
-  `./math`. → [ALCHEMY § `Transform`](../modules/ALCHEMY.md#transform), [MATH](../modules/MATH.md)
+- **Transform** — an Alchemy node's animated transform (`AnimatedTransform`), or one step of a
+  transform stack in `./math` (`Transform`).
+  → [ALCHEMY § `AnimatedTransform`](../modules/ALCHEMY.md#animatedtransform), [MATH](../modules/MATH.md)
 - **Host** — whatever places a guest: the game engine for an Alchemy effect or a THORN scene, the
-  body for a costume's head and hands.
-  → [ALCHEMY § Two fields, two jobs](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-controlrootid-makes-it-the-root),
+  body for a costume's head and hands. → [ALCHEMY § Two fields, two
+  jobs](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-control_root_id-makes-it-the-root),
   [COSTUME § The pieces and the seats](COSTUME.md#the-pieces-and-the-seats)

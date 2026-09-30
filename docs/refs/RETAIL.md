@@ -307,7 +307,6 @@ wrong, and the open question is which is right.
 | Whether anything reads `Edge_angles`                                                                                                        | [DEFORMABLE.md](../modules/DEFORMABLE.md#todo) | Delete them from one of the two files                                                         |
 | How the engine maps a four-entry `Fractions` set onto the distance bands                                                                    | [DEFORMABLE.md](../modules/DEFORMABLE.md#todo) | Watch a four-level character switch as the camera pulls back                                  |
 | How close a `.sur`'s `rotationInertia` has to be                                                                                            | [SURFACE.md](../modules/SURFACE.md#todo)       | Rewrite a `pod_*` debris file with the derived value, then with `0.2 × radius²`, and shoot it |
-| Whether the engine still decodes a `0x08` event channel                                                                                     | [ANIMATION.md](../modules/ANIMATION.md#todo)   | Author one and load the model                                                                 |
 | Whether the shipped game honours `@include`                                                                                                 | [INI.md](../modules/INI.md#todo)               | Add one to a text INI the game reads                                                          |
 | What the 4-byte gap and header bytes 19–20 of a compiled `.thn` hold                                                                        | [THN.md](../modules/THN.md#todo)               | **Read Lua 3.2's `ldump.c`/`lundump.c` first** — probably not a game question at all          |
 | What `event_flags` means; bits 1, 2 and 128 occur and 128 dominates                                                                         | [THORN.md](THORN.md#todo)                      | Flip a bit on a `START_MOTION` in a scene that plays                                          |
@@ -327,10 +326,18 @@ wrong, and the open question is which is right.
 | What matches the 651 keys that have literals but no `is_value` call site                                                                    | [ENGINE.md](ENGINE.md#todo)                    | Probably `get_name_ptr` plus a local compare — a reading problem, not an in-game one          |
 
 Two that look like they belong here do not. Cylinder joint animation is **impossible**, not
-unimplemented — a cylinder needs 2 floats and no combination of the channel type bits comes to 2
+unimplemented — a cylinder needs 2 floats, no combination of the channel type bits comes to 2, and
+`engbase.dll` has no player for two
 ([ANIMATION.md](../modules/ANIMATION.md#why-cylinder-joints-cannot-be-animated)). `FX/MISC/tlrtube.3db`'s
 animated UV set is **blocked**, not pending — validating a reader needs `FxMeshAppearance` to stop
 crashing first ([RIGID.md](../modules/RIGID.md#todo)).
+
+Three animation questions are **closed** by reading `engbase.dll`: whether the engine decodes an
+event channel (its codec does, but the loader skips every `Event map`), whether it clamps a joint to
+its range (revolute and prismatic, on every set), and whether a `Pris` joint applies its `offset`
+(it does) — [ANIMATION.md](../modules/ANIMATION.md#the-event-bit-0x08),
+[ANIMATION.md](../modules/ANIMATION.md#the-range-is-enforced),
+[COMPOUND.md](../modules/COMPOUND.md#position-and-offset).
 
 ---
 

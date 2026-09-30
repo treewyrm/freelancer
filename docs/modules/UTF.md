@@ -64,8 +64,11 @@ Eight bytes of version block, then a 48-byte field block.
   timestamps.
 - Path lookups compare names by `getResourceId`, never by string, so `getDirectory`/`getFile` are
   case-insensitive.
+- `isUTF` checks the signature and version without parsing, the way `isBinary`, `isBytecode`,
+  `isSave` and `isImage` do for their formats. The layout constants stay module-private.
 - `File` implements `ArrayBufferView` and carries typed iterators for the three payload shapes:
-  32-bit integers, 32-bit floats, NUL-separated strings.
+  32-bit integers, 32-bit floats, NUL-separated strings. The `set*` writers replace the payload;
+  `append` is the one method that keeps what was there.
 
 ## Hashing
 
@@ -121,7 +124,7 @@ See [AUDIO.md](../refs/AUDIO.md#corpus).
 `readStrings` ends a run at the end of the payload as readily as at a terminator. Exporters exist
 that size the payload to the text exactly and the game reads those, so a reader that insists on a
 terminator rejects working models. The container gives no help: `dataSizeAllocated` equals
-`dataSizeUsed` in every such payload measured. `writeStrings` always emits the terminator, so a
+`dataSizeUsed` in every such payload measured. `setStrings` always emits the terminator, so a
 rewrite normalizes the payload and grows it by a byte.
 
 ### Hashing is not a utility
@@ -139,8 +142,8 @@ The hash functions. `getResourceId` is UTF-side (mesh names, material names, Alc
 
 | Export            | Kind     |                                                                                       |
 | ----------------- | -------- | ------------------------------------------------------------------------------------- |
-| `filterObjects`   | function | `<T>(items, predicate, value, caseSensitive?): T[]`                                   |
-| `filterResources` | function | `<T>(items, predicate, value, caseSensitive?): T[]`                                   |
+| `filterObjects`   | function | `<T>(items, select, value, caseSensitive?): T[]`                                      |
+| `filterResources` | function | `<T>(items, select, value, caseSensitive?): T[]`                                      |
 | `getObject`       | function | Finds object matching key value.                                                      |
 | `getObjectId`     | function | Gets object id (archetypes, system objects, etc).                                     |
 | `getResource`     | function | Finds resource matching key value.                                                    |
@@ -176,15 +179,15 @@ The hash functions. `getResourceId` is UTF-side (mesh names, material names, Alc
 | `isHex`            | function  | `(value: string): boolean`                                                              |
 | `isInt32`          | function  | `(value: number): boolean`                                                              |
 | `listTreeElements` | function  | `<T extends Tree<T>>(parent): Generator<T>`                                             |
-| `listTreePairs`    | function  | `<T extends Tree<T>>(parent): Generator<Parenthesis<T>>`                                |
-| `Parenthesis`      | interface | A parent-child pair representing a link in a hierarchy.                                 |
+| `listTreePairs`    | function  | `<T extends Tree<T>>(parent): Generator<TreeLink<T>>`                                   |
 | `parseHex`         | function  | `(value: string): number`                                                               |
 | `path`             | namespace | UTF path helpers: `split`, `join`, `resolve`, `directoryOf`, `nameOf`, `equals`.        |
-| `reduceTree`       | function  | `<T extends Tree<T>, R>(root, reducer, initial): R`                                     |
+| `reduceTree`       | function  | `<T extends Tree<T>, R>(root, reducer, initial): R`; the root's parent is `undefined`.  |
 | `toDOSTimestamp`   | function  | Convert `Date` to DOS timestamp.                                                        |
 | `toFileTime`       | function  | `(date: Date): bigint`                                                                  |
 | `toHex`            | function  | `(value, byteLength?, prefix?): string`                                                 |
 | `Tree`             | interface | Tree node recursively containing child nodes.                                           |
+| `TreeLink`         | interface | A parent-child pair: one edge of a hierarchy.                                           |
 | `trim`             | function  | `(value: string): string`                                                               |
 
 `BufferView` statics: `allocate(length)`, `concat(views)`, `join(...views)`, `from(string)`.
@@ -197,44 +200,42 @@ accessors (`readUint8`/`writeUint8`, `readInt8`, `readUint16`, `readInt16`, `rea
 
 ### `./utf`
 
-| Export      | Kind      |                              |
-| ----------- | --------- | ---------------------------- |
-| `Directory` | class     | UTF structure directory.     |
-| `Entry`     | interface | UTF entry structure.         |
-| `File`      | class     | File entry in UTF structure. |
-| `Header`    | interface | UTF header structure.        |
+| Export      | Kind     |                                                                      |
+| ----------- | -------- | -------------------------------------------------------------------- |
+| `Directory` | class    | UTF structure directory.                                             |
+| `File`      | class    | File entry in UTF structure.                                         |
+| `isUTF`     | function | Whether a buffer starts with the `UTF ` signature and version 0x101. |
 
 **`Directory` statics**
 
-| Member                | Description                                                 |
-| --------------------- | ----------------------------------------------------------- |
-| `read(bytes)`         | Parses a tree from a `Uint8Array`, BFS from the root entry. |
-| `SIGNATURE`           | Header magic (`UTF `, `0x20465455`).                        |
-| `VERSION`             | Only valid header version (`0x101`).                        |
-| `FILE`                | File attribute bit (`0x80`).                                |
-| `DIRECTORY`           | Directory attribute bit (`0x10`).                           |
-| `ENTRY_BYTE_LENGTH`   | Byte length of one tree entry (44, `0x2c`).                 |
-| `VERSION_BYTE_LENGTH` | Byte length of the version block (`0x8`).                   |
-| `HEADER_BYTE_LENGTH`  | Byte length of the header field block (`0x30`).             |
+| Member        | Description                                                 |
+| ------------- | ----------------------------------------------------------- |
+| `read(bytes)` | Parses a tree from a `Uint8Array`, BFS from the root entry. |
+
+The header and entry layouts — signature `0x20465455`, version `0x101`, the `0x80`/`0x10`
+attribute bits, 44-byte entries — are what `read` walks and `write` emits, and stay in
+`utf/data.ts`.
 
 **`Directory` instance**
 
-| Member                  | Description                                                                                     |
-| ----------------------- | ----------------------------------------------------------------------------------------------- |
-| `name`                  | Directory name.                                                                                 |
-| `children`              | Directories and files directly under this one.                                                  |
-| `directories`           | `children` filtered to subdirectories.                                                          |
-| `files`                 | `children` filtered to files.                                                                   |
-| `getDirectory(...path)` | Gets the existing directory at path, or `undefined`.                                            |
-| `setDirectory(...path)` | Gets the existing directory at path, inserting any missing directories.                         |
-| `getFile(...path)`      | Gets the existing file at path, or `undefined`.                                                 |
-| `setFile(...path)`      | Gets the existing file at path, inserting it (and any missing directories) empty.               |
-| `delete(...path)`       | Deletes the entry at path.                                                                      |
-| `append(...values)`     | Appends directories and files, replacing existing entries with matching names.                  |
-| `write()`               | Serializes the tree to a `Uint8Array`, rebuilding the dictionary and stamping fresh timestamps. |
+| Member                     | Description                                                                                     |
+| -------------------------- | ----------------------------------------------------------------------------------------------- |
+| `name`                     | Directory name.                                                                                 |
+| `children`                 | Directories and files directly under this one.                                                  |
+| `directories`              | `children` filtered to subdirectories.                                                          |
+| `files`                    | `children` filtered to files.                                                                   |
+| `getDirectory(...path)`    | Gets the existing directory at path, or `undefined`.                                            |
+| `ensureDirectory(...path)` | Gets the existing directory at path, inserting any missing directories.                         |
+| `getFile(...path)`         | Gets the existing file at path, or `undefined`.                                                 |
+| `ensureFile(...path)`      | Gets the existing file at path, inserting it (and any missing directories) empty.               |
+| `delete(...path)`          | Deletes every entry at path.                                                                    |
+| `set(...values)`           | Sets directories and files, replacing the entry of the same name or appending.                  |
+| `write()`                  | Serializes the tree to a `Uint8Array`, rebuilding the dictionary and stamping fresh timestamps. |
 
-Path lookups (`getDirectory`, `setDirectory`, `getFile`, `setFile`, `delete`) compare names by
-`getResourceId`, never by string, so they are case-insensitive.
+Path lookups (`getDirectory`, `ensureDirectory`, `getFile`, `ensureFile`, `delete`) compare names by
+`getResourceId`, never by string, so they are case-insensitive, and the ones that only look (`get*`,
+`delete`) take a CRC as readily as a name. The verbs are the library's own: `get` finds, `ensure`
+gets or creates, `set` replaces by name or appends, `delete` removes by name.
 
 **`File` instance**
 
@@ -246,12 +247,12 @@ Path lookups (`getDirectory`, `setDirectory`, `getFile`, `setFile`, `delete`) co
 | `byteOffset`               | Where the payload starts in `buffer`.                                                             |
 | `byteLength`               | Payload size in bytes.                                                                            |
 | `readIntegers()`           | Reads the payload as 32-bit signed integers; a non-multiple-of-4 tail reads as 16-bit then 8-bit. |
-| `writeIntegers(...values)` | Appends values as 32-bit signed integers.                                                         |
+| `setIntegers(...values)`   | Replaces the payload with values as 32-bit signed integers.                                       |
 | `readFloats()`             | Reads the payload as 32-bit floats.                                                               |
-| `writeFloats(...values)`   | Appends values as 32-bit floats.                                                                  |
+| `setFloats(...values)`     | Replaces the payload with values as 32-bit floats.                                                |
 | `readStrings()`            | Reads NUL-terminated strings until the payload ends.                                              |
-| `writeStrings(...values)`  | Appends values as NUL-terminated strings.                                                         |
-| `append(...chunks)`        | Appends buffer views to `data`.                                                                   |
+| `setStrings(...values)`    | Replaces the payload with values as NUL-terminated strings.                                       |
+| `append(...chunks)`        | Appends buffer views to `data`, keeping what it held.                                             |
 
 ## Corpus
 

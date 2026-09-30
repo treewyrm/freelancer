@@ -136,7 +136,7 @@ describe('writeGeometry', () => {
 describe('arrays', () => {
   it('rejects a file that is not a whole number of elements', () => {
     const directory = writeGeometry(geometry())
-    directory.setFile('Point_indices').data = new Uint8Array(3)
+    directory.ensureFile('Point_indices').data = new Uint8Array(3)
 
     throws(() => readGeometry(directory), /Point_indices/)
   })

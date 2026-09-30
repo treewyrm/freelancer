@@ -53,8 +53,8 @@ but a bind pose.
 
 Only two joint kinds occur: `Sphere` for a bone rotating in its socket, `Loose` for the root.
 
-`getBoneModel` assembles the constraints into the same `Model<T>` tree a rigid compound reads into,
-so `listTreeElements` and `getModelHardpoint` work on a skeleton unchanged.
+`getBoneModel` assembles the constraints into the same `CompoundNode<T>` tree a rigid compound reads
+into, so `listTreeElements` and `getCompoundHardpoint` work on a skeleton unchanged.
 
 The constraint chain is not the bind pose — see [The chain is not the bind
 pose](#the-chain-is-not-the-bind-pose).
@@ -150,7 +150,7 @@ Nothing is known to read them. They are carried because dropping them shrinks tw
 
 ### The chain is not the bind pose
 
-Composing `T(position) · R(rotation)` down the constraint tree gives each bone a world transform,
+Composing `T(position) · R(orientation)` down the constraint tree gives each bone a world transform,
 which is not the same thing as `Bone to root`. The corpus splits cleanly:
 
 | | Chain reproduces the bind pose |

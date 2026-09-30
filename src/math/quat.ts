@@ -164,7 +164,10 @@ const Quat = {
     )
   },
 
-  /** Normalised linear interpolation — cheaper than slerp, accurate for small angles. */
+  /**
+   * Normalised linear interpolation on the near hemisphere — cheaper than slerp, and what Freelancer's
+   * engine interpolates keyframed rotations with (`x86math.dll` `3DMathEngine +0x58`).
+   */
   nlerp(a: Vector4, b: Vector4, t: number): Vector4 {
     if (Vector4.dot(a, b) < 0) b = Vector4.multiplyScalar(b, -1)
     return Vector4.normalize({

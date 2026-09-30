@@ -6,8 +6,10 @@ import BufferView from '#/utility/bufferview.js'
 import {
   VertexFormat,
   Primitive,
+  TEXTURE_COUNT_SHIFT,
   getMapCount,
   readVMeshData,
+  setMapCount,
   vertexByteLength,
   writeVMeshData,
   type VMeshData,
@@ -20,9 +22,9 @@ const group = (materialId: number, vertexStart: number, vertexEnd: number, eleme
 /** Two groups over a six-vertex, twelve-index Position|Normal|Tex1 mesh. */
 const sample = (): VMeshData => ({
   name: 'body.lod0.vms',
-  type: 1,
+  version: 1,
   primitive: Primitive.TriangleList,
-  format: VertexFormat.Position | VertexFormat.Normal | VertexFormat.Texture1,
+  format: VertexFormat.Position | VertexFormat.Normal | (1 << TEXTURE_COUNT_SHIFT),
   groups: [group(0x11111111, 0, 2, 6), group(-1, 3, 5, 6)],
   indices: Uint16Array.from([0, 1, 2, 2, 1, 0, 3, 4, 5, 5, 4, 3]),
   vertices: Uint8Array.from({ length: 6 * 32 }, (_, i) => i & 0xff),
@@ -33,14 +35,30 @@ const wrap = (data: VMeshData) => new Directory('VMeshLibrary', [writeVMeshData(
 describe('getMapCount', () => {
   it('extracts the UV set count from bits 8..11', () => {
     strictEqual(getMapCount(VertexFormat.Position), 0)
-    strictEqual(getMapCount(VertexFormat.Position | VertexFormat.Texture1), 1)
-    strictEqual(getMapCount(VertexFormat.Position | VertexFormat.Texture2), 2)
-    strictEqual(getMapCount(VertexFormat.Position | VertexFormat.Texture8), 8)
+    strictEqual(getMapCount(VertexFormat.Position | (1 << TEXTURE_COUNT_SHIFT)), 1)
+    strictEqual(getMapCount(VertexFormat.Position | (2 << TEXTURE_COUNT_SHIFT)), 2)
+    strictEqual(getMapCount(VertexFormat.Position | (8 << TEXTURE_COUNT_SHIFT)), 8)
   })
 
   it('ignores the non-texture flags', () => {
-    const format = VertexFormat.Position | VertexFormat.Normal | VertexFormat.Diffuse | VertexFormat.Specular
-    strictEqual(getMapCount(format | VertexFormat.Texture3), 3)
+    const format =
+      VertexFormat.Position | VertexFormat.Normal | VertexFormat.Diffuse | VertexFormat.Specular
+    strictEqual(getMapCount(format | (3 << TEXTURE_COUNT_SHIFT)), 3)
+  })
+})
+
+describe('setMapCount', () => {
+  it('replaces the count and leaves the attribute bits alone', () => {
+    const format = VertexFormat.Position | VertexFormat.Normal | (3 << TEXTURE_COUNT_SHIFT)
+
+    strictEqual(setMapCount(format, 1), VertexFormat.Position | VertexFormat.Normal | 0x100)
+    strictEqual(getMapCount(setMapCount(format, 8)), 8)
+    strictEqual(setMapCount(format, 0), VertexFormat.Position | VertexFormat.Normal)
+  })
+
+  it('refuses a count D3D cannot hold', () => {
+    throws(() => setMapCount(VertexFormat.Position, 9), RangeError)
+    throws(() => setMapCount(VertexFormat.Position, -1), RangeError)
   })
 })
 
@@ -131,7 +149,7 @@ describe('readVMeshData', () => {
   it('reads a mesh with no groups and no geometry', () => {
     const data: VMeshData = {
       name: 'empty.vms',
-      type: 1,
+      version: 1,
       primitive: Primitive.TriangleList,
       format: VertexFormat.Position,
       groups: [],

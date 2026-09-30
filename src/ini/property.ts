@@ -42,8 +42,11 @@ export class Property {
     return fold(this.name)
   }
 
-  /** Values in specified types, positionally. */
-  format<T extends ValueType[]>(...types: [...T]): TypeValues<T> {
+  /**
+   * Values coerced to the requested types, positionally, the way the engine's typed accessors read
+   * them. `undefined` in a position the property has no value for.
+   */
+  coerce<T extends ValueType[]>(...types: [...T]): TypeValues<T> {
     let index = 0
     let value: Value | undefined
     let result = Array(types.length).fill(undefined)

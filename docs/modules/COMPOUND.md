@@ -3,9 +3,9 @@
 The `Cmpnd` layer. A compound is a flat set of named parts, each in its own UTF fragment directory,
 linked into a tree by **constraints** naming a parent, a child, and the **joint** between them.
 
-`Model<T>` is generic over the fragment payload: [RIGID.md](RIGID.md) supplies mesh parts, cameras
-and spheres; [DEFORMABLE.md](DEFORMABLE.md) supplies bones. Both formats share this layer byte for
-byte.
+`CompoundNode<T>` is generic over the fragment payload: [RIGID.md](RIGID.md) supplies mesh parts,
+cameras and spheres; [DEFORMABLE.md](DEFORMABLE.md) supplies bones. Both formats share this layer
+byte for byte.
 
 ## Layout
 
@@ -13,7 +13,7 @@ byte.
 Cmpnd (UTF directory)
   ├─ Root          ── Object name, Index, File name
   ├─ Part_<name>   ── Object name, Index, File name
-  └─ Cons          ── Fix / Rev / Pris / Cyl / Sphere / Loose constraint files
+  └─ Cons          ── Fix / Rev / Pris / Cyl / Sphere / Trans / Loose constraint files
 <File name> (one fragment directory per part, sibling of Cmpnd)
   └─ …             ── whatever the consuming format puts there
        Hardpoints
@@ -27,26 +27,27 @@ from the constraint list in `Cons`; directory nesting says nothing about it.
 ## The hierarchy
 
 ```ts
-interface Model<T> extends Tree<Model<T>> {
+interface CompoundNode<T> extends Tree<CompoundNode<T>> {
   type: 'compound'
   name: string        // part name ("Object name")
   index: number       // part index ("Index")
   filename: string    // fragment directory name ("File name")
   part: T             // fragment payload, produced by the reader callback
   joint?: Joint       // connection to parent; absent on the root
-  children: Model<T>[]
+  children: CompoundNode<T>[]
 }
 ```
 
-`readModel`/`writeModel` take a reader/writer pair for the fragment contents. `rigid.ts` supplies
-the rigid pair; `deformable/model.ts` builds the same tree from bones through
+Every part of the hierarchy is a node, and the root node is the compound: `readCompound` returns it.
+`readCompound`/`writeCompound` take a reader/writer pair for the fragment contents. `rigid.ts`
+supplies the rigid pair; `deformable/model.ts` builds the same tree from bones through
 `arrangeByConstraints` alone, since a `.dfm` keeps its geometry off the hierarchy.
 
 - Root is the `Root`-prefixed subdirectory; remaining `Part_*` subdirectories become descendants.
-- `readModel` throws when the `Cmpnd` directory, an `Object name`, a `File name`, the fragment
+- `readCompound` throws when the `Cmpnd` directory, an `Object name`, a `File name`, the fragment
   directory or the root object is missing.
-- `writeModel` names the root `Root` and every other part `Part_<name>`, writes each fragment as a
-  top-level directory beside `Cmpnd`, and throws on empty names, duplicate names, or a non-integer
+- `writeCompound` names the root `Root` and every other part `Part_<name>`, writes each fragment as
+  a top-level directory beside `Cmpnd`, and throws on empty names, duplicate names, or a non-integer
   `index`.
 - Constraint and hardpoint name matching goes through `getResourceId`, so lookups are
   case-insensitive.
@@ -55,18 +56,40 @@ the rigid pair; `deformable/model.ts` builds the same tree from bones through
 
 How a child part attaches to its parent, and which degrees of freedom animation may drive.
 
-| Type          | Fields                                                                           | Animation                                     |
-| ------------- | -------------------------------------------------------------------------------- | --------------------------------------------- |
-| `'fixed'`     | `position`, `rotation`                                                           | None — rigid attachment                       |
-| `'revolute'`  | `position`, `offset`, `rotation`, `axis`, `min`, `max`                           | Angle around `axis`, clamped to `min`/`max`   |
-| `'prismatic'` | `position`, `offset`, `rotation`, `axis`, `min`, `max`                           | Offset along `axis`, clamped to `min`/`max`   |
-| `'cylinder'`  | `position`, `offset`, `rotation`, `axis`, `minPris`/`maxPris`, `minRev`/`maxRev` | Rotation + slide; **not animatable**          |
-| `'sphere'`    | `position`, `offset`, `rotation`, `minX/maxX`, `minY/maxY`, `minZ/maxZ`          | Rotation by quaternion within per-axis limits |
-| `'loose'`     | `position`, `rotation`                                                           | Unconstrained motion (vector + rotation)      |
+| Type              | Interface            | Fields                                                                              | Animation                                    |
+| ----------------- | -------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------- |
+| `'fixed'`         | `FixedJoint`         | `position`, `orientation`                                                           | None — rigid attachment                      |
+| `'revolute'`      | `RevoluteJoint`      | `position`, `offset`, `orientation`, `axis`, `min`, `max`                           | Angle around `axis`, clamped to `min`/`max`  |
+| `'prismatic'`     | `PrismaticJoint`     | `position`, `offset`, `orientation`, `axis`, `min`, `max`                           | Offset along `axis`, clamped to `min`/`max`  |
+| `'cylinder'`      | `CylinderJoint`      | `position`, `offset`, `orientation`, `axis`, `minPris`/`maxPris`, `minRev`/`maxRev` | Rotation + slide; **not animatable**         |
+| `'sphere'`        | `SphereJoint`        | `position`, `offset`, `orientation`, `minX/maxX`, `minY/maxY`, `minZ/maxZ`          | Rotation by quaternion; limits never applied |
+| `'translational'` | `TranslationalJoint` | `position`, `orientation`                                                           | Unconstrained slide (vector)                 |
+| `'loose'`         | `LooseJoint`         | `position`, `orientation`                                                           | Unconstrained motion (vector + rotation)     |
 
-`position`/`offset`/`axis` are `Vector3`, `rotation` is a `Matrix3`. Keyframes driving these live in
-the `Animation` directory beside `Cmpnd` — see [ANIMATION.md](ANIMATION.md). Composition into a
-world transform is in [RENDERER.md §5.2](../refs/RENDERER.md#52-composing-a-joint).
+`position`/`offset`/`axis` are `Vector3`, `orientation` is a `Matrix3` — the same name and shape a
+hardpoint's frame has. `JointOf<'revolute'>` narrows `Joint` to one arm. Keyframes driving these
+live in the `Animation` directory beside `Cmpnd` — see [ANIMATION.md](ANIMATION.md). Composition
+into a world transform is in [RENDERER.md §5.2](../refs/RENDERER.md#52-composing-a-joint).
+
+`getJointMatrix(joint, state)` is the child's frame in its parent's for a joint driven to a state,
+computed the way retail `engbase.dll` computes it (per-type builders dispatched from `0x662aa84`):
+
+```
+fixed          T(position) · R(orientation)
+revolute       T(position) · R(axis, θ) · R(orientation) · T(-offset)        θ clamped to [min, max]
+prismatic      T(position + d·axis) · R(orientation) · T(-offset)            d clamped to [min, max]
+cylinder       T(position + d·axis) · R(axis, θ) · R(orientation) · T(-offset)
+sphere         T(position) · R(q) · R(orientation) · T(-offset)
+translational  T(position + p) · R(orientation)
+loose          T(position + p) · R(q) · R(orientation)
+```
+
+`JointState` is `{ value?, rotation?, position?, orientation? }` — a channel sample has the same
+shape — and anything absent stands at rest. The engine clamps a revolute or prismatic value when it
+is set (`0x66226e0`: below `min` first, then above `max`; NaN passes) and clamps nothing else; the
+sphere's and cylinder's limits are stored and never applied. A revolute axis is normalized before
+use, a prismatic one is not — travel is `d` times the stored vector. Retail's axes are all unit
+length, so the difference is for authored ones.
 
 `position` and `offset` are the two ends of one contact — `T(position) · R(…) · T(-offset)`, not a
 conjugating pivot pair. See [Position and offset](#position-and-offset).
@@ -87,14 +110,15 @@ interface Constraint {
 One file per joint kind in the `Cons` directory, each a packed array of records. A record is two
 64-byte NUL-padded names — parent, then child — followed by the joint payload.
 
-| File     | Joint type    | Record size |
-| -------- | ------------- | ----------- |
-| `Fix`    | `'fixed'`     | 176         |
-| `Rev`    | `'revolute'`  | 208         |
-| `Pris`   | `'prismatic'` | 208         |
-| `Cyl`    | `'cylinder'`  | 216         |
-| `Sphere` | `'sphere'`    | 212         |
-| `Loose`  | `'loose'`     | 176         |
+| File     | Joint type        | Record size |
+| -------- | ----------------- | ----------- |
+| `Fix`    | `'fixed'`         | 176         |
+| `Rev`    | `'revolute'`      | 208         |
+| `Pris`   | `'prismatic'`     | 208         |
+| `Cyl`    | `'cylinder'`      | 216         |
+| `Sphere` | `'sphere'`        | 212         |
+| `Trans`  | `'translational'` | 176         |
+| `Loose`  | `'loose'`         | 176         |
 
 A record carries no size of its own — the file name is the only thing that gives one, so an unknown
 constraint file is refused rather than skipped. Records are fixed size and the file holds nothing
@@ -111,22 +135,24 @@ Named attachment points — weapon mounts, engine nozzles, docking points — st
 parts carry them, as do the bones of a `.dfm`.
 
 ```ts
-type Hardpoint = Fixed | Revolute | Prismatic
+type Hardpoint = FixedHardpoint | RevoluteHardpoint
 
 interface Base<T> {
   type: T
-  name: string        // hardpoint directory name
-  position: Vector3   // Position file, defaults to origin
-  orientation: Matrix3 // Orientation file, defaults to identity
+  name: string          // hardpoint directory name
+  position?: Vector3    // Position file; absent when there is none, which places it at the origin
+  orientation: Matrix3  // Orientation file, defaults to identity
 }
-// Revolute and Prismatic add: axis: Vector3 (defaults to Y), min: number, max: number
+// RevoluteHardpoint adds: axis: Vector3 (defaults to Y), min: number, max: number
 ```
 
 Read from and written to the `Hardpoints/Fixed` and `Hardpoints/Revolute` groups.
-`getModelHardpoint` searches a whole model tree and returns the hardpoint with the part owning it.
+`getCompoundHardpoint` searches a whole compound and returns the hardpoint with the node owning it.
 
-Prismatic hardpoints exist in the type union but are neither read from nor written to the
-`Hardpoints` directory.
+`position` is left off rather than set to the origin when the file has no `Position`, so a
+hardpoint written back gains no file it did not have. One retail hardpoint of 12,053 is stored that
+way, in a stale fragment no part names ([Corpus](#corpus)). The orientation and axis defaults stay:
+no retail hardpoint omits either.
 
 ## Notes
 
@@ -136,8 +162,24 @@ The record fields are `parent_point` and `child_point` in the Conquest: Frontier
 point named in the child's frame lands on the point named in the parent's. So `offset` subtracts on
 the far right of the composition, `T(position) · R(…) · T(-offset)`, rather than conjugating.
 [RENDERER.md §5.2](../refs/RENDERER.md#52-composing-a-joint) carries the evidence. Retail leaves the field
-zero in all 3,699 records that have one, so this bears on authored assets only. `fixed` and `loose`
-record no second point.
+zero in all 3,699 records that have one, so this bears on authored assets only. `fixed`,
+`translational` and `loose` record no second point.
+
+The engine applies `offset` on every type that carries one, prismatic included (`0x6625730`:
+`t = position + d·axis − R·offset`), which closes the question RENDERER.md had left open.
+
+### Translational joints
+
+`Trans` is a joint kind retail's engine knows and retail's data never uses. The `Cons` loader
+(`0x6620a0e`) accepts it as joint type 5, between `Sphere` and `Loose`, and reads it with the same
+176-byte `Fix` layout — a position and an orientation, no limits. Its transform (`0x6625a80`) keeps
+the rest orientation and adds the driven vector to the rest position in the parent frame: a loose
+joint without the rotation, or a prismatic joint with three axes and no range. The state setter
+stores the vector unclamped (`0x66227cd`), and animation reaches it through a position-only channel,
+the one channel shape whose three floats match its state.
+
+Neither retail nor Discovery ships a `Trans` record, and `engbase.dll` is the only retail binary
+that names one.
 
 ### Where the records come from
 
@@ -161,40 +203,54 @@ assigns `min0 = in.min_trans`, siding with the struct.
 `Cyl` is implemented on the strength of the struct alone — no retail model ships one, so it is the
 only joint kind with no corpus backing.
 
-Two CFW joint kinds have no Freelancer counterpart and no `Joint` variant: `Spr` (damped spring)
-and `Trans` (translational). `readConstraints` refuses both.
+One CFW joint kind has no Freelancer counterpart and no `Joint` variant: `Spr` (damped spring),
+which `engbase.dll`'s `Cons` loader does not name. `readConstraints` refuses it. `Trans` is loaded —
+see [Translational joints](#translational-joints).
 
 ## API
 
 ### `./compound`
 
-| Export                 | Kind      |                                                                                  |
-| ---------------------- | --------- | -------------------------------------------------------------------------------- |
-| `arrangeByConstraints` | function  | Arranges compound objects into hierarchy from constraints.                       |
-| `Constraint`           | interface | `{ parent: string, child: string, joint: Joint }`.                               |
-| `getHardpoint`         | function  | `(hardpoints: Hardpoint[], name: Hashable): Hardpoint \| undefined`              |
-| `getModelHardpoint`    | function  | Finds a hardpoint anywhere in a model, returning it with the part that owns it.  |
-| `Hardpoint`            | type      | Attachment hardpoint. There is no prismatic form — only `Fixed` and `Revolute`.  |
-| `isCompoundModel`      | function  | `(directory: Directory): boolean`                                                |
-| `Joint`                | type      | Compound object child-to-parent connection joint.                                |
-| `Model`                | interface | `Model<T>` — a `Tree` node carrying `name`, `index`, filename and a payload `T`. |
-| `readConstraints`      | function  | Reads compound hierarchy constraints.                                            |
-| `readHardpoints`       | function  | Reads hardpoints from object directory.                                          |
-| `readModel`            | function  | Reads compound object from directory.                                            |
-| `writeConstraints`     | function  | Writes one file per constraint, for a caller to append together by name.         |
-| `writeHardpoints`      | function  | `(hardpoints: Iterable<Hardpoint>): Directory`                                   |
-| `writeModel`           | function  | Writes compound object into directory.                                           |
+| Export                 | Kind      |                                                                                         |
+| ---------------------- | --------- | --------------------------------------------------------------------------------------- |
+| `arrangeByConstraints` | function  | Arranges compound objects into hierarchy from constraints.                              |
+| `CompoundNode`         | interface | `CompoundNode<T>` — a `Tree` node carrying `name`, `index`, filename and a payload `T`. |
+| `Constraint`           | interface | `{ parent: string, child: string, joint: Joint }`.                                      |
+| `CylinderJoint`        | interface | Revolute and prismatic on one shared axis; reads and writes, never animated.            |
+| `FixedHardpoint`       | interface | `{ type: 'fixed', name, position?, orientation }`.                                      |
+| `FixedJoint`           | interface | `{ type: 'fixed', position, orientation }` — a rigid attachment.                        |
+| `getCompoundHardpoint` | function  | Finds a hardpoint anywhere in a compound, returning it with the node that owns it.      |
+| `getHardpoint`         | function  | `(hardpoints: Hardpoint[], name: Hashable): Hardpoint \| undefined`                     |
+| `getJointMatrix`       | function  | The child's frame in its parent's for a driven joint, as the engine computes it.        |
+| `Hardpoint`            | type      | `FixedHardpoint \| RevoluteHardpoint`. There is no prismatic form.                      |
+| `isCompound`           | function  | `(directory: Directory): boolean` — whether a file root holds a `Cmpnd`.                |
+| `Joint`                | type      | Compound object child-to-parent connection joint, one of seven arms.                    |
+| `JointOf`              | type      | Narrows `Joint` to the arm of a given `type`.                                           |
+| `JointState`           | interface | `{ value?, rotation?, position?, orientation? }` — what drives a joint.                 |
+| `LooseJoint`           | interface | `{ type: 'loose', position, orientation }` — unconstrained.                             |
+| `PrismaticJoint`       | interface | A slide along `axis` between `min` and `max`.                                           |
+| `readCompound`         | function  | Reads a compound from a file root, returning its root node.                             |
+| `readConstraints`      | function  | `(files: Iterable<File>): Constraint[]` — reads compound hierarchy constraints.         |
+| `readHardpoints`       | function  | `(parent: Directory): Hardpoint[]` — empty when the part carries none.                  |
+| `RevoluteHardpoint`    | interface | A fixed hardpoint plus `axis`, `min` and `max`.                                         |
+| `RevoluteJoint`        | interface | A turn about `axis` between `min` and `max`.                                            |
+| `SphereJoint`          | interface | A rotation by quaternion; per-axis limits stored, never applied.                        |
+| `TranslationalJoint`   | interface | `{ type: 'translational', position, orientation }` — a free slide.                      |
+| `writeCompound`        | function  | Writes a compound into a file root.                                                     |
+| `writeConstraints`     | function  | `(constraints: Iterable<Constraint>): File[]` — one file per constraint.                |
+| `writeHardpoints`      | function  | `(hardpoints: Iterable<Hardpoint>): Directory`                                          |
 
 ## Corpus
 
 | | Count |
 | --- | --- |
+| Hardpoints without a `Position`, of 12,053 | 1 — `bw_vheavy_fighter.cmp`'s stale `bw_port_wing02_lod1020911031436.3db` fragment, which no part names |
 | Constraint records in rigid `.cmp` models | 5,316 |
 | Constraint records in deformable `.dfm` models | 9,096 |
 | `Cons` files across both | 1,024, all capitalized |
 
 Joint kinds across both corpora: `loose` 6,343, `fixed` 4,370, `sphere` 2,770, `prismatic` 504,
-`revolute` 425, `cylinder` **0**.
+`revolute` 425, `cylinder` **0**, `translational` **0**.
 
 ### Constraints round-trip by value, not byte for byte
 

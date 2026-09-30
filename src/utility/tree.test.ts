@@ -82,20 +82,20 @@ describe('findTreeElement', () => {
 })
 
 describe('reduceTree', () => {
-  it('calls the reducer for the root with a null parent, before any child', () => {
-    const calls: [string, string | null][] = []
+  it('calls the reducer for the root with no parent, before any child', () => {
+    const calls: [string, string | undefined][] = []
 
     reduceTree(
       root,
       (accumulator, child, parent) => {
-        calls.push([child.name, parent?.name ?? null])
+        calls.push([child.name, parent?.name])
         return accumulator
       },
-      null,
+      undefined,
     )
 
     deepStrictEqual(calls, [
-      ['a', null],
+      ['a', undefined],
       ['b', 'a'],
       ['d', 'b'],
       ['e', 'b'],

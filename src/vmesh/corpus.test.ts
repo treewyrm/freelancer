@@ -7,7 +7,7 @@ import BufferView from '#/utility/bufferview.js'
 import { getResourceId } from '#/hash.js'
 import { VertexFormat, Primitive, readVMeshData, vertexByteLength } from './data.js'
 import { getMesh, getMeshDraw, readVMeshLibrary, writeVMeshLibrary } from './library.js'
-import { readMultiLevel } from './multilevel.js'
+import { readMultiLevel, writeMultiLevel } from './multilevel.js'
 import { readVMeshPart, writeVMeshPart } from './part.js'
 import { readVMeshWire, writeVMeshWire } from './wireframe.js'
 
@@ -223,8 +223,11 @@ describe('retail asset corpus', { skip }, () => {
           const part = readVMeshPart(directory)
           if (!part) continue
 
-          const { a, b } = part.reference.boundingBox
-          ok(a.x <= b.x && a.y <= b.y && a.z <= b.z, `${path}/${directory.name}: box inverted`)
+          const { min, max } = part.reference.boundingBox
+          ok(
+            min.x <= max.x && min.y <= max.y && min.z <= max.z,
+            `${path}/${directory.name}: box inverted`,
+          )
         }
     })
 
@@ -361,6 +364,13 @@ describe('retail asset corpus', { skip }, () => {
 
           ok(original && result, `${path}/${directory.name}`)
           deepStrictEqual(bytes(result), bytes(original), `${path}/${directory.name}`)
+
+          // The file is the directory's whole content, which is why the model has no wrapper.
+          deepStrictEqual(
+            directory.getDirectory('VMeshWire')!.children.map(({ name }) => name),
+            ['VWireData'],
+            `${path}/${directory.name}`,
+          )
           wires++
         }
 
@@ -373,7 +383,7 @@ describe('retail asset corpus', { skip }, () => {
           const wire = readVMeshWire(directory)
           if (!wire) continue
 
-          strictEqual(wire.data.indices.length % 2, 0, `${path}/${directory.name}`)
+          strictEqual(wire.indices.length % 2, 0, `${path}/${directory.name}`)
         }
     })
   })
@@ -385,20 +395,39 @@ describe('retail asset corpus', { skip }, () => {
       for (const { path, root } of assets())
         for (const directory of walk(root)) {
           const level = readMultiLevel(directory)
-          if (!level?.levels.length) continue
+          if (!level?.ranges) continue
 
           strictEqual(level.ranges.length, level.levels.length + 1, `${path}/${directory.name}`)
           found++
         }
 
-      ok(found > 1000, `expected the full LOD corpus, read ${found}`)
+      strictEqual(found, 1146)
+    })
+
+    // Four rigid directories carry no Switch2, and no level with a VMeshPart in it either. The
+    // reader leaves ranges off rather than filling in the game's default, so none of them gains a
+    // file on the way out. A `.dfm`'s MultiLevel is the deformable one, switched by Fractions
+    // instead.
+    it('leaves ranges off the four that carry no Switch2', () => {
+      const bare: number[] = []
+
+      for (const { root } of load('cmp', '3db'))
+        for (const directory of walk(root)) {
+          const level = readMultiLevel(directory)
+          if (!level || level.ranges) continue
+
+          bare.push(level.levels.length)
+          strictEqual(writeMultiLevel(level).getFile('Switch2'), undefined)
+        }
+
+      deepStrictEqual(bare, [0, 0, 0, 0])
     })
 
     it('always starts its breakpoints at zero', () => {
       for (const { path, root } of assets())
         for (const directory of walk(root)) {
           const level = readMultiLevel(directory)
-          if (!level?.levels.length) continue
+          if (!level?.ranges) continue
 
           strictEqual(level.ranges[0], 0, `${path}/${directory.name}`)
         }
@@ -412,11 +441,10 @@ describe('retail asset corpus', { skip }, () => {
 
       for (const { path, root } of assets())
         for (const directory of walk(root)) {
-          const level = readMultiLevel(directory)
-          if (!level?.levels.length) continue
+          const ranges = readMultiLevel(directory)?.ranges
+          if (!ranges) continue
 
-          for (let i = 1; i < level.ranges.length; i++)
-            if (!(level.ranges[i]! > level.ranges[i - 1]!)) junk.add(path)
+          for (let i = 1; i < ranges.length; i++) if (!(ranges[i]! > ranges[i - 1]!)) junk.add(path)
         }
 
       ok(junk.size > 0, 'expected the known capital ship Switch2 defects')

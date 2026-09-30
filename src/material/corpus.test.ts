@@ -4,11 +4,11 @@ import { load, skip } from '#/corpus.js'
 import type Directory from '#/utf/directory.js'
 import type File from '#/utf/file.js'
 import { getResourceId } from '#/hash.js'
-import { readTextures } from '#/texture/library.js'
+import { readTextureLibrary } from '#/texture/library.js'
 import BufferView from '#/utility/bufferview.js'
-import { readMaterials, writeMaterials } from './library.js'
+import { readMaterialLibrary, writeMaterialLibrary } from './library.js'
 import { readMaterial, writeMaterial } from './material.js'
-import { TextureFlags, defaultNomadTextureName, materialTypes, type Material } from './types.js'
+import { TextureFlags, DEFAULT_NOMAD_TEXTURE_NAME, MATERIAL_TYPES, type Material } from './types.js'
 
 /** Texture slots, as the `<slot>_name`/`<slot>_flags` prefix and the property they read into. */
 const slots = [
@@ -253,7 +253,7 @@ describe('material corpus', { skip }, () => {
     const wrong: string[] = []
 
     for (const { path, library } of libraries()) {
-      const written = writeMaterials(library.directories.map((entry) => readMaterial(entry)))
+      const written = writeMaterialLibrary(library.directories.map((entry) => readMaterial(entry)))
 
       if (
         written.directories.length !== library.directories.length ||
@@ -269,13 +269,13 @@ describe('material corpus', { skip }, () => {
     deepStrictEqual(wrong.sort(), [])
   })
 
-  it('reads a library through readMaterials the same way', () => {
+  it('reads a library through readMaterialLibrary the same way', () => {
     for (const { root } of assets().slice(0, 50)) {
       const library = root.getDirectory('Material library')
       if (!library) continue
 
       deepStrictEqual(
-        [...readMaterials(root)],
+        readMaterialLibrary(root),
         library.directories.map((entry) => readMaterial(entry)),
       )
     }
@@ -296,9 +296,9 @@ describe('material corpus', { skip }, () => {
   it('names every material type in the corpus', () => {
     const used = new Set(entries().map(({ material }) => material.type))
 
-    deepStrictEqual([...used].filter((type) => !materialTypes.includes(type as never)).sort(), [])
+    deepStrictEqual([...used].filter((type) => !MATERIAL_TYPES.includes(type as never)).sort(), [])
     deepStrictEqual(
-      materialTypes.filter((type) => !used.has(type)),
+      MATERIAL_TYPES.filter((type) => !used.has(type)),
       [],
     )
   })
@@ -359,19 +359,19 @@ describe('material corpus', { skip }, () => {
    * material names it — the default is the only way a nomad hull reaches it.
    */
   it('resolves the default nomad texture to exactly one library entry', () => {
-    const id = getResourceId(defaultNomadTextureName)
+    const id = getResourceId(DEFAULT_NOMAD_TEXTURE_NAME)
     const found: string[] = []
 
     for (const { path, root } of load(...extensions, 'txm'))
-      for (const texture of readTextures(root))
-        if (getResourceId(texture.name) === id)
-          found.push(`${path} :: ${texture.name} ${texture.type}`)
+      for (const texture of readTextureLibrary(root))
+        if (getResourceId(texture.name) === id && texture.type !== 'animated')
+          found.push(`${path} :: ${texture.name} ${texture.format}`)
 
     deepStrictEqual(found, ['SHIPS/NOMAD/nomad_fx.txm :: NomadRGB1_NomadAlpha1 rgba32_8888'])
   })
 
   it('has no material naming the default nomad texture', () => {
-    const id = getResourceId(defaultNomadTextureName)
+    const id = getResourceId(DEFAULT_NOMAD_TEXTURE_NAME)
 
     deepStrictEqual(
       named(

@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
-import { getMaterial, readMaterials, writeMaterials } from './library.js'
+import { getMaterial, readMaterialLibrary, writeMaterialLibrary } from './library.js'
 import { readMaterial, writeMaterial } from './material.js'
 import { TextureFlags, type Material } from './types.js'
 
@@ -14,9 +14,9 @@ const entry = (name: string, files: Record<string, File>) =>
     Object.entries(files).map(([key, file]) => ((file.name = key), file)),
   )
 
-const string = (value: string) => new File('').writeStrings(value)
-const float = (...values: number[]) => new File('').writeFloats(...values)
-const integer = (...values: number[]) => new File('').writeIntegers(...values)
+const string = (value: string) => new File('').setStrings(value)
+const float = (...values: number[]) => new File('').setFloats(...values)
+const integer = (...values: number[]) => new File('').setIntegers(...values)
 
 const names = (directory: Directory) => directory.files.map(({ name }) => name)
 
@@ -227,27 +227,24 @@ describe('writeMaterial', () => {
   })
 })
 
-describe('readMaterials', () => {
+describe('readMaterialLibrary', () => {
   it('yields nothing when there is no library', () => {
-    deepStrictEqual([...readMaterials(new Directory())], [])
+    deepStrictEqual(readMaterialLibrary(new Directory()), [])
   })
 
   it('reads every material and ignores the count file', () => {
     const root = new Directory('\\', [
       new Directory('Material library', [
-        new File('Material count').writeIntegers(99),
+        new File('Material count').setIntegers(99),
         entry('a', { Type: string('DcDt') }),
         entry('b', { Type: string('DcDtTwo') }),
       ]),
     ])
 
-    deepStrictEqual(
-      [...readMaterials(root)],
-      [
-        { name: 'a', type: 'DcDt' },
-        { name: 'b', type: 'DcDtTwo' },
-      ],
-    )
+    deepStrictEqual(readMaterialLibrary(root), [
+      { name: 'a', type: 'DcDt' },
+      { name: 'b', type: 'DcDtTwo' },
+    ])
   })
 
   it('does not reach a library nested below the root', () => {
@@ -257,13 +254,13 @@ describe('readMaterials', () => {
       ]),
     ])
 
-    deepStrictEqual([...readMaterials(root)], [])
+    deepStrictEqual(readMaterialLibrary(root), [])
   })
 })
 
-describe('writeMaterials', () => {
+describe('writeMaterialLibrary', () => {
   it('leads with a derived Material count', () => {
-    const library = writeMaterials([
+    const library = writeMaterialLibrary([
       { name: 'a', type: 'DcDt' },
       { name: 'b', type: 'DcDt' },
       { name: 'c', type: 'DcDt' },
@@ -279,7 +276,7 @@ describe('writeMaterials', () => {
   })
 
   it('writes a count of zero for an empty library', () => {
-    const library = writeMaterials([])
+    const library = writeMaterialLibrary([])
 
     strictEqual(BufferView.from(library.getFile('Material count')!.data).readInt32(), 0)
   })
@@ -290,7 +287,10 @@ describe('writeMaterials', () => {
       { name: 'glass', type: 'DcDtOcOt', opacity: 0.625 },
     ]
 
-    deepStrictEqual([...readMaterials(new Directory('\\', [writeMaterials(materials)]))], materials)
+    deepStrictEqual(
+      readMaterialLibrary(new Directory('\\', [writeMaterialLibrary(materials)])),
+      materials,
+    )
   })
 })
 

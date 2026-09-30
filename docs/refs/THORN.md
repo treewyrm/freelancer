@@ -433,10 +433,10 @@ breakpoints.
   duration does nothing else. Stopping **kills** the effect at once (`Freelancer.exe` `0x5574a0`):
   particles do not live out, so `duration` is the effect's visible life.
 - **A `PSYS` entity is placed like any other**: an attach's writes go to the host as a world
-  position, then a world orientation. The host caches both and hands the effect `[R | p]` at its next
-  advance, as the placement override on its `DefaultId` root (`0x45403c`), so an effect trails its
-  attach by one engine step. It never reads `psysprops.sparam` and starts every effect at its default
-  `sparam`, so a `sparam` set before `START_PSYS` is lost.
+  position, then a world orientation. The host caches both and hands the effect `[R | p]` at its
+  next advance, as the placement override on its `CONTROL_ROOT_ID` root (`0x45403c`), so an effect
+  trails its attach by one engine step. It never reads `psysprops.sparam` and starts every effect at
+  its default `sparam`, so a `sparam` set before `START_PSYS` is lost.
 - **`START_PSYS_PROP_ANIM`** takes the last `sparam` set on the entity as its start value and moves
   it to `psysprops.sparam` over `duration`, as `from + (to − from)·u`, `u` being elapsed over
   duration — linear and unclamped — or the event's `param_curve`. A zero duration is an instant set.

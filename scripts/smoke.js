@@ -11,8 +11,8 @@
  * Three things, each guarding a decision in `package.json`:
  *
  * 1. Every subpath in `exports` imports from the installed package.
- * 2. `docs/` arrives — the knowledge is half the product, and `files` is an allowlist that
- *    silently drops whatever nobody listed.
+ * 2. Every document under `docs/` arrives — the knowledge is half the product, and `files` is an
+ *    allowlist that silently drops whatever nobody listed.
  * 3. No `.d.ts.map` arrives — they point at a `src/` the tarball does not carry, so shipping them
  *    sends editors to files that are not there.
  *
@@ -123,13 +123,19 @@ try {
     failures.push('one or more subpaths failed to import')
   }
 
-  // 2. The documents shipped.
-  const documents = existsSync(join(installed, 'docs'))
-    ? readdirSync(join(installed, 'docs')).filter((name) => name.endsWith('.md'))
-    : []
+  // 2. The documents shipped — every one the repository has, compared path for path. They live in
+  //    `docs/modules/` and `docs/refs/`, so the walk is recursive; a top-level listing finds none.
+  const markdown = (directory) =>
+    existsSync(directory) ? [...walk(directory)].filter((path) => path.endsWith('.md')) : []
 
-  if (documents.length === 0) failures.push('no documents under docs/ — check `files`')
-  else console.log(`\nok   docs/ — ${documents.length} documents`)
+  const expected = markdown(join(root, 'docs'))
+  const shipped = new Set(markdown(join(installed, 'docs')))
+  const missing = expected.filter((path) => !shipped.has(path))
+
+  if (expected.length === 0) failures.push('no documents under docs/ in the repository')
+  else if (missing.length > 0)
+    failures.push(`${missing.length} documents missing from docs/ — check \`files\`: ${missing}`)
+  else console.log(`\nok   docs/ — ${expected.length} documents`)
 
   // 3. No declaration maps, which would point at a src/ this tarball does not carry.
   const dangling = [...walk(join(installed, 'dist'))].filter((path) => path.endsWith('.d.ts.map'))

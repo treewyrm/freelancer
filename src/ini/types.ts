@@ -25,6 +25,9 @@ export type Value =
   | { readonly type: 'float'; readonly value: number }
   | { readonly type: 'string'; readonly value: string }
 
+/** Narrows to the value of a given type, so a consumer can filter without a cast. */
+export type ValueOf<T extends ValueType> = Extract<Value, { type: T }>
+
 /**
  * A verbatim source line the parser did not interpret — blank, comment-only, or unrecognized.
  *

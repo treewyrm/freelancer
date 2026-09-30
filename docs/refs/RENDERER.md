@@ -279,8 +279,9 @@ have exactly one), so the win is modest; sorting draws by material across parts 
 
 ### 3.5 The wireframe overlay
 
-`VMeshWire`/`VWireData` is the line overlay drawn over a ship in the scanner and dealer views. It
-addresses the same `VMeshLibrary` mesh by CRC but supplies its own `LineList` index buffer.
+`VMeshWire` (the `VWireData` file) is the line overlay drawn over a ship in the scanner and dealer
+views. It addresses the same `VMeshLibrary` mesh by CRC but supplies its own `LineList` index
+buffer.
 
 It has the same base offset problem, and it bites harder: 2,330 of 3,539 wires have a non-zero
 `vertexStart`, and its indices are likewise relative to it. `vertexStart`/`vertexRange` are the
@@ -291,10 +292,11 @@ separate element buffer.
 
 A rigid part holds either a bare `VMeshPart` or a `MultiLevel` of them:
 
-- `Switch2` holds N+1 breakpoints for N levels; `ranges[0]` is 0 in every retail model.
-- `atRange(multiLevel, distance)` returns the level whose `[ranges[i], ranges[i+1])` contains the
+- `Switch2` holds N+1 breakpoints for N levels; `ranges[0]` is 0 in every retail model. A part with
+  no `Switch2` has no `ranges`, and the game assumes `[0, 1000]`.
+- `getLevel(multiLevel, distance)` returns the level whose `[ranges[i], ranges[i+1])` contains the
   camera distance, or `undefined` past the last breakpoint — the model's cue to vanish, not a bug to
-  clamp away.
+  clamp away. It applies the `[0, 1000]` default itself.
 - LOD is per part, not per model. Each part carries its own `MultiLevel`, and a large ship's parts
   switch at different distances.
 - Four capital ships carry denormal junk in the middle of `Switch2`. The reader hands the breakpoints
@@ -309,24 +311,25 @@ character.
 
 ### 5.1 Building the tree
 
-`readModel` returns the root `Model<RigidPart>`; children hang off `children`, each with the `joint`
-that attaches it to its parent. The hierarchy comes from the `Cons` constraint list, not from
-directory nesting — the fragment directories are all flat siblings of `Cmpnd`. Names are matched by
-`getResourceId`, and part names may carry leading or trailing spaces.
+`readCompound` returns the root `CompoundNode<RigidPart>`; children hang off `children`, each with
+the `joint` that attaches it to its parent. The hierarchy comes from the `Cons` constraint list, not
+from directory nesting — the fragment directories are all flat siblings of `Cmpnd`. Names are
+matched by `getResourceId`, and part names may carry leading or trailing spaces.
 
 `trade_turret01.cmp` constrains a part it never declares; `arrangeByConstraints` drops the unresolved
 constraint and assembles the rest. A renderer should do the same rather than refuse the model.
 
 Joint records across the rigid and deformable corpus:
 
-| Type        | Records | Driven by                                                             |
-| ----------- | ------- | --------------------------------------------------------------------- |
-| `loose`     | 6,343   | position + rotation                                                   |
-| `fixed`     | 4,370   | nothing                                                               |
-| `sphere`    | 2,770   | rotation                                                              |
-| `prismatic` | 504     | one float, offset along `axis`                                        |
-| `revolute`  | 425     | one float, angle about `axis`                                         |
-| `cylinder`  | 0       | cannot be animated at all — see [COMPOUND.md](../modules/COMPOUND.md) |
+| Type            | Records | Driven by                                                             |
+| --------------- | ------- | --------------------------------------------------------------------- |
+| `loose`         | 6,343   | position + rotation                                                   |
+| `fixed`         | 4,370   | nothing                                                               |
+| `sphere`        | 2,770   | rotation                                                              |
+| `prismatic`     | 504     | one float, offset along `axis`                                        |
+| `revolute`      | 425     | one float, angle about `axis`                                         |
+| `cylinder`      | 0       | cannot be animated at all — see [COMPOUND.md](../modules/COMPOUND.md) |
+| `translational` | 0       | position; loaded by the engine, never shipped                         |
 
 ### 5.2 Composing a joint
 
@@ -343,13 +346,19 @@ far right of the product, past the rest rotation and past whatever degree of fre
 driven through:
 
 ```
-fixed, loose   L      = T(position) · R(rotation)
-revolute       L(θ)   = T(position) · R(axis, θ) · R(rotation) · T(-offset)    θ ∈ [min, max]
-prismatic      L(d)   = T(position) · T(axis · d) · R(rotation) · T(-offset)   d ∈ [min, max]
-cylinder       L(θ,d) = T(position) · T(axis · d) · R(axis, θ) · R(rotation) · T(-offset)
-sphere         L(q)   = T(position) · R(q) · R(rotation) · T(-offset)
+fixed, loose   L      = T(position) · R(orientation)
+revolute       L(θ)   = T(position) · R(axis, θ) · R(orientation) · T(-offset)    θ ∈ [min, max]
+prismatic      L(d)   = T(position) · T(axis · d) · R(orientation) · T(-offset)   d ∈ [min, max]
+cylinder       L(θ,d) = T(position) · T(axis · d) · R(axis, θ) · R(orientation) · T(-offset)
+sphere         L(q)   = T(position) · R(q) · R(orientation) · T(-offset)
+translational  L(p)   = T(position + p) · R(orientation)
 world          W_child = W_parent · L_child
 ```
+
+These are `engbase.dll`'s own builders (dispatch table `0x662aa84`), and `getJointMatrix` in
+[COMPOUND.md](../modules/COMPOUND.md#joints) computes them. The engine clamps θ and d to `[min, max]`
+when it sets them and clamps nothing else; a revolute axis is normalized, a prismatic one is taken
+as stored.
 
 `fixed` and `loose` have no second point in the record. Because `offset` is zero in every retail
 record, all four of the others reduce on retail data to a translation, the rest rotation and the
@@ -359,36 +368,39 @@ driven degree of freedom — the trailing factor is there for authored assets.
 *parent* frame, which is what the `Cyl` struct comment inherited from Conquest: Frontier Wars says.
 The two orders coincide only where the rest rotation is identity, true for just 294 of the 929 driven
 joints, so 635 come out visibly wrong under the other. Nothing in the files separates them; settled
-by playing retail scripts under both orders.
+by playing retail scripts under both orders, and since confirmed in the engine, which builds
+`R(q) · R(orientation)` with `3DMathEngine +0x20`, a plain row-major product.
 
 **`offset` is a contact point, not a pivot.** MAXLancer's `scripts/Transform.ms` composes its axis
 and spheric joint controllers as `preTranslate (translate R position) -offset`, which in
 column-vector order is `T(position) · R · T(-offset)` — the offset *inside* the rotation, one
 trailing factor, not a conjugating pair. A pivot would leave the child's contact point where it
-already was; this moves it onto the parent's. Whether the engine reads it on a `Pris` at all is open
-— see [TODO](#todo).
+already was; this moves it onto the parent's. The engine applies it on a `Pris` as on the others
+(`0x6625730`).
 
 ### 5.3 Animation
 
 `Animation/Script/<name>` holds maps; a `.cmp` embeds them beside `Cmpnd`, a `.dfm` keeps them in a
 standalone `.anm`. Both parse through the same `readAnimationLibrary(root)`.
 
-- An **`ObjectMap`** names one object (`Parent name`) and moves the model root in its own space.
-  Position and rotation only.
+- An **`ObjectMap`** names one object (`Parent name`) and moves the model root **from where it
+  stood** when the script started, and on a loop from where the last cycle ended.
+  `sampleObjectMap(map, time)` returns that relative transform; compose it onto the start pose.
 - A **`JointMap`** names `Parent name` and `Child name` and drives the joint between them. Which
-  field of the sample applies follows the joint type: `value` for revolute and prismatic, `rotation`
-  for sphere, both `position` and `rotation` for loose.
+  field of the sample applies follows the joint type: `value` for revolute and prismatic,
+  `orientation` for sphere, `position` for translational, both `position` and `orientation` for
+  loose. A sample has the shape `getJointMatrix` takes.
 
-`sampleChannel(channel, time)` lerps position, slerps rotation and lerps the scalar. A channel with a
-negative `interval` stores a timestamp per keyframe; otherwise keyframes are evenly spaced at
-`i * interval`.
+`sampleChannel(channel, time)` lerps position and the scalar and interpolates rotation by
+normalized lerp, as the engine does. A channel with a negative `interval` stores a timestamp per
+keyframe; otherwise keyframes are evenly spaced at `i * interval`.
 
 **Every sample is a delta on the joint's rest, loose included.** §5.2's composition takes the driven
 factor to the left of the rest rotation, and a loose channel's *position* goes the same way — added
 to the rest origin in the parent's frame, not substituted for it:
 
 ```
-loose  L(p, q) = T(position + p) · R(q) · R(rotation)
+loose  L(p, q) = T(position + p) · R(q) · R(orientation)
 ```
 
 No retail `.cmp` script drives a loose joint, so only `.anm` data settles it, and it does: 1,955,761
@@ -396,28 +408,28 @@ position keyframes nearer zero than their joint's rest origin against 1,854 near
 1,904,934 rotations nearer the identity against 4,713. See [ANIMATION.md](../modules/ANIMATION.md). Read as a
 replacement, every head bone in the game collapses onto its parent's origin.
 
-**A revolute channel's scalar is an angle and must be interpolated as one, where its storage is
-wrapped.** All 414 retail revolute channels keep the angle inside (-π, π], so `sampleChannel`'s plain
-lerp runs an almost-full turn backwards wherever a keyframe pair steps across the seam — 150 of them
-do. Take the short way round: `a + wrap(b - a) · span`, with `wrap(d) = d - 2π·round(d / 2π)`, which
-drops the direction reversals across retail from 492 to 155. Test the channel first: wrapped means no
-value leaves the band, and a channel that does leave it is stating a real sweep past half a turn.
-Retail never does; mods do. **Never do this to a prismatic channel**, whose scalar is metres on a
-line; 370 of 543 of those step over π and every one means it. `ChannelType.Angle` is a single bit
-shared by both, so only the joint says which — see [ANIMATION.md](../modules/ANIMATION.md).
+**A revolute channel's scalar is an angle, and the engine interpolates it as one.** All 414 retail
+revolute channels keep the angle inside (-π, π], and 150 step across the seam somewhere; a plain lerp
+runs an almost-full turn backwards there. The engine moves the far keyframe by one turn whenever a
+pair is more than half a turn apart, for every revolute channel, whatever it stores — pass `true` as
+`sampleChannel`'s third argument for the same. A sweep authored past half a turn between two
+keyframes therefore plays the short way in game too. **Never do this to a prismatic channel**, whose
+scalar is metres on a line; the engine does not. `ChannelType.Angle` is a single bit shared by both,
+so only the joint says which — see [ANIMATION.md](../modules/ANIMATION.md#a-revolute-angle-is-an-angle-and-one-bit-cannot-say-so).
 
 **Channels loop at their own lengths, not the script's.** `getScriptDuration` is the longest map, and
 a shorter channel cycles inside it rather than holding — `rift_pylon.cmp` gives one script channels
 of 2, 4, 8 and 16 seconds. 14 of retail's 186 multi-map `.cmp` scripts mix lengths. Keep the playback
-clock on the script and wrap per channel underneath it.
+clock on the script and wrap per channel underneath it — `getChannelTime(channel, time, mode)` does
+the wrap, for the engine's three modes.
 
 **`getScriptDuration` is the last keyframe's own key, not the key after it**, so a clock that reads
 `t mod duration` lands on zero at exactly the end. Looping wants that; *holding* on the last frame
 does not, and gets the first frame instead — a door left open at the end of its closing animation.
 Wrap in the clock, where the choice is known, and clamp at the sampler.
 
-Rotations arrive in four encodings — full float W-X-Y-Z, implied identity, and two `int16`
-quantizations — all decoded to a `Quat` by `readChannel`. Convert with `Matrix3.fromQuaternion` and
+Rotations arrive in five encodings — full float W-X-Y-Z, implied identity, and three `int16`
+quantizations, one of which no retail file uses — all decoded to a `Quat` by `readChannel`. Convert with `Matrix3.fromQuaternion` and
 compose in matrix space, per §2.
 
 ### 5.4 Traversal
@@ -428,14 +440,16 @@ have a median of 1 and a 95th percentile of 32 — so per-draw uniform uploads a
 **Hardpoints** compose the same way: `T(position) · R(orientation)` in their owning part's space,
 then the part's world transform. All 12,053 have determinant +1, so an attached model never mirrors.
 
-`orientation` takes the same transpose as a joint's `rotation` (§2); reading the two with different
-conventions cancels along the chain, so a mounted gun can point the right way for the wrong reason.
+A hardpoint's `orientation` takes the same transpose as a joint's (§2); reading the two with
+different conventions cancels along the chain, so a mounted gun can point the right way for the
+wrong reason.
 
 ## 6. Materials
 
-`readMaterials(root)` yields a flat list resolved by CRC from a group's `materialId`. A material is a
-shader name plus an open set of properties — the type does not determine which properties are
-present, so read what is there and default nothing (see [MATERIAL.md](../modules/MATERIAL.md)).
+`readMaterialLibrary(root)` returns a flat list resolved by CRC from a group's `materialId`. A
+material is a shader name plus an open set of properties — the type does not determine which
+properties are present, so read what is there and default nothing (see
+[MATERIAL.md](../modules/MATERIAL.md)).
 
 The `Type` string is the shader selector, and its tokens name the inputs:
 
@@ -471,7 +485,8 @@ which matters, because sampled UVs run well outside 0..1 (measured range roughly
 −34..810 in V). WebGL2 allows `REPEAT` on any texture, power-of-two or not.
 
 `Nt_name` is the one property with a compiled-in default, `NomadRGB1_NomadAlpha1`, exported as
-`defaultNomadTextureName`. No retail material carries the slot, so apply the default at bind time.
+`DEFAULT_NOMAD_TEXTURE_NAME`. No retail material carries the slot, so apply the default at bind
+time.
 
 **`MaterialAnim`** (root-level sibling of `Cmpnd`, rigid models only) animates a material's UV
 transform: per-segment offset and scale velocities, with `MAKeys` giving the transform each segment
@@ -482,14 +497,15 @@ always loops. Feed it as a uniform; it changes per material per frame, not per v
 
 ## 7. Textures
 
-`readTextures(root)` yields `TextureEntry` — narrow on `type === 'animated'` first, then on
-`storage`. The three storage forms map to three different upload calls:
+`readTextureLibrary(root)` returns `TextureEntry`s — narrow on `type` (`'image'`, `'cube'`,
+`'animated'`), then a flat texture on `storage`, and read the pixel layout from `format`. The three
+forms that carry pixels map to three different upload calls:
 
-| `storage` | Retail count | Upload                                                                              |
-| --------- | ------------ | ----------------------------------------------------------------------------------- |
-| `dds`     | 4,447        | `compressedTexImage2D` per level (block formats) or `texImage2D` (uncompressed DDS) |
-| `targa`   | 2,400        | `texImage2D` per level                                                              |
-| `cube`    | 2            | six faces, `+X -X +Y -Y +Z -Z`, in that order                                       |
+| Form               | Retail count | Upload                                                                              |
+| ------------------ | ------------ | ----------------------------------------------------------------------------------- |
+| `storage: 'dds'`   | 4,447        | `compressedTexImage2D` per level (block formats) or `texImage2D` (uncompressed DDS) |
+| `storage: 'targa'` | 2,400        | `texImage2D` per level                                                              |
+| `type: 'cube'`     | 2            | six faces, `+X -X +Y -Y +Z -Z`, in that order                                       |
 
 Pixel formats present: `dxt1` 4,230, `rgb24_888` 1,789, `rgba32_8888` 615, `dxt3` 129, `dxt5` 42,
 `rgba16_5551` 24, `rgb16_565` 20.
@@ -525,19 +541,19 @@ Things that will bite:
 ## 8. Deformable models
 
 A `.dfm` is one skinned mesh per detail level plus a bone tree. The compound layer is byte-for-byte
-the rigid one, so §5 applies unchanged — `getBoneModel` returns the same `Model<T>` tree.
+the rigid one, so §5 applies unchanged — `getBoneModel` returns the same `CompoundNode<T>` tree.
 
 - **Bones are an ordered table**, and `Index` is the bone's directory position. That position, not
   the name, is what `Bone_id_chain` skins to.
-- **`Bone to root` is stored as the *inverse* bind — read it, do not invert it.** The skinning matrix
-  is `pose(bone) · inverse(bindPose)`, and what the file holds under that name is already
+- **`Bone to root` is stored as the *inverse* bind — read it, do not invert it.** The skinning
+  matrix is `pose(bone) · inverse(bindPose)`, and what the file holds under that name is already
   `inverse(bindPose)`: reading the nine floats as rows and the three that follow as a translation,
   the matrix maps root space **into** bone space. So with a `Bone` as this library reads it the
-  product is `pose(bone) · Matrix4.fromRotationTranslation(bone.rotation, bone.position)`, with no
-  inversion anywhere, and the forward bind pose — where a bone actually sits, and where a debug gizmo
-  goes — is that matrix inverted. All bone rotations have determinant +1, so the inverse is
-  `[Rᵀ | -Rᵀt]`. Librelancer names the same matrix the other way round — see
-  [Librelancer's `BoneToRoot`](#librelancers-bonetoroot).
+  product is `pose(bone) · Matrix4.fromRotationTranslation(bone.orientation, bone.position)`, with
+  no inversion anywhere, and the forward bind pose — where a bone actually sits, and where a debug
+  gizmo goes — is that matrix inverted. All bone rotations have determinant +1, so the inverse is
+  `[Rᵀ | -Rᵀt]`. Librelancer names the same matrix the other way round — see [Librelancer's
+  `BoneToRoot`](#librelancers-bonetoroot).
 
   Measured: composing `bindPose(bone) · asRead(bone)` over all 9,456 retail
   bones gives the identity to 8.88e-16, and skinning every one of the 855,377 drawn vertices with the
@@ -602,13 +618,12 @@ Four resolution rules, each of which produces a working renderer that draws the 
   names are defined in more than one file and 111 of those disagree**, so 219 references land on a
   name whose meaning depends on load order, and the consumer's load order is what settles them.
   Resolving one file at a time hides that rather than avoiding it.
-- **`flags` decides whether an instance names a node; `ControlRootId` decides where the effect is
+- **`flags` decides whether an instance names a node; `CONTROL_ROOT_ID` decides where the effect is
   placed.** An instance with `flags` set is a container, built without looking its CRC up. The
-  container whose CRC is `0xee223b51`, the hash of `Control Root`, is the effect's **control
-  root**, and the placement matrix
-  the host gives the effect is applied to that node alone. Retail sets both on all 1,143 containers,
-  so either test recognizes one. See
-  [ALCHEMY.md](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-controlrootid-makes-it-the-root).
+  container whose CRC is `0xee223b51`, the hash of `Control Root`, is the effect's **control root**,
+  and the placement matrix the host gives the effect is applied to that node alone. Retail sets both
+  on all 1,143 containers, so either test recognizes one. See
+  [ALCHEMY.md](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-control_root_id-makes-it-the-root).
 - **Place the root, not the effect.** Nodes under the root move with the placement; a node at the
   top level beside it does not. Particles are stored in their appearance's frame, so an emitter
   under the root and its appearance beside it leave a trail: every birth comes out where the emitter
@@ -718,7 +733,7 @@ Folding those to scalars at load removes most sampling work under any draw strat
 option-C lookup table to the handful of nodes that genuinely animate.
 
 One hazard if the evaluator is ported to GLSL: Hermite tangents are stored per unit of key, not per
-unit of span. `hermiteAt` scales by `delta = end.key - start.key`, and 9,322 of 9,324 retail
+unit of span. `hermiteWhen` scales by `delta = end.key - start.key`, and 9,322 of 9,324 retail
 intervals are not 1 wide, so dropping the scale overshoots by roughly the reciprocal of a typical
 0.03 interval. Only 562 of 25,081 keyframes carry a non-zero tangent, so the mistake stays invisible
 across most of the corpus.
@@ -749,8 +764,8 @@ orientation rule.
 
 ### 9.7 Culling
 
-A version 1.1 `Effect` carries a bounding sphere — `center` in the effect's space and `radius`
-([ALCHEMY.md](../modules/ALCHEMY.md#effect-library-versions)) — but
+A version 1.1 `Effect` carries `bounds`, a bounding sphere — `center` in the effect's space and
+`radius` ([ALCHEMY.md](../modules/ALCHEMY.md#effect-library-versions)) — but
 **only 272 of 972 effects set it, and the game culls on none of it**: it tests a sphere at the
 effect's position with the `radius` of its `[EffectType]` in `FX/effect_types.ini`. A renderer can
 frame or cull on the stated sphere where it is non-zero, and must derive a bound from the emitters
@@ -771,7 +786,7 @@ find:
 6. `vertexEnd` treated as exclusive — the last vertex of every group missing (§3.2).
 7. A `Matrix3` uploaded untransposed — every part whose rest rotation is not identity assembles
    rotated backwards, which reads as a broken model rather than as a mirror (§2).
-8. A joint's `rotation` and a hardpoint's `orientation` read with different conventions — the error
+8. A joint's `orientation` and a hardpoint's read with different conventions — the error
    cancels along a chain that uses both, so it can hide, or frame the wrong suspect (§2).
 9. UV `v` flipped in some paths and not others — textures upside down only on the Targa half of a
    model (§7).
@@ -788,8 +803,9 @@ find:
     shows its first, so a closing door ends open (§5.3).
 16. A revolute angle lerped on a line instead of round a circle — 150 of 414 retail channels whip
     backwards through a seam, and the other 264 look perfect (§5.3).
-17. …or lerped round a circle unconditionally, which reverses any channel that stores a sweep past
-    half a turn. No retail channel does; a mod's will (§5.3).
+17. …or lerped round the circle only where the channel stays inside (-π, π] — the engine wraps every
+    revolute pair unconditionally, so a mod's sweep past half a turn plays the short way in game,
+    and a renderer honouring the sweep disagrees with it (§5.3).
 18. Every channel of a script run to the script's duration — the short ones freeze while the long
     ones play, on 14 of retail's 186 multi-map scripts (§5.3).
 
@@ -875,28 +891,18 @@ Three sweeps are this document's alone:
 
 ## TODO
 
-Four open questions reach the renderer. None blocks a correct-looking image — each is a place where
+Three open questions reach the renderer. None blocks a correct-looking image — each is a place where
 this document picks the reading that cannot go visibly wrong.
 
 | Question                                                          | Taken here as                                                              | Settled by                                                             |
 | ----------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Whether a **prismatic** joint's `offset` is applied at all (§5.2) | applied, the same as on the other three types                              | Author a `Pris` joint with a non-zero `child_point` and load the model |
 | Texture flag bits 4 and 6 — the wrap mode field (§6)              | ignored; bit 4 is probably "sample UV1", which would matter on detail maps | [MATERIAL.md § TODO](../modules/MATERIAL.md#todo)                      |
 | `Edge_angles` on two deformable models                            | ignored                                                                    | [DEFORMABLE.md § TODO](../modules/DEFORMABLE.md#todo)                  |
 | The four version-1.1 `Effect` floats (§9.7)                       | unused; no effect culling                                                  | [ALCHEMY.md § TODO](../modules/ALCHEMY.md#todo)                        |
 
 The joint composition order (§5.2) is **closed**: playing retail scripts under both orders answered
-it, and the driven factor goes before the rest rotation.
-
-**The prismatic row is a suspicion with a source behind it.** MAXLancer's `scripts/Transform.ms`
-applies `offset` in its revolute, cylinder and spheric branches and not in its prismatic one, with a
-`(?)` on the comment saying so. §5.2 applies it, because the two points mean the same thing in a
-`Pris` record as in a `Rev` one and nothing in the format distinguishes them; but a `Pris` joint
-whose slide axis already carries the displacement has no obvious need for a second one. Retail cannot
-say — all 3,699 records that carry an offset leave it zero, prismatic ones included — so this needs a
-hand-authored `.cmp`: one `Pris` joint, a non-zero `child_point`, and a look at whether the child
-sits where the offset puts it. A null result means dropping the trailing factor from the prismatic
-row of §5.2's table alone.
+it, the driven factor goes before the rest rotation, and `engbase.dll` builds it that way. So is the
+prismatic `offset`: the engine applies it (`0x6625730`).
 
 Bit 4 is the one with teeth: a detail map sampling the wrong coordinate set tiles at the wrong rate
 rather than vanishing, which is exactly the kind of error §10 is about.

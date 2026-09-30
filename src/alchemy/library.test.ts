@@ -2,9 +2,8 @@ import { deepStrictEqual, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
-import { ControlRootId, type EffectLibrary } from './effect.js'
+import { CONTROL_ROOT_ID, type EffectLibrary } from './effect.js'
 import { writeNodeLibrary, type NodeLibrary } from './node.js'
-import { PropertyType } from './property.js'
 import { hasAlchemy, readAlchemy, writeAlchemy, type Alchemy } from './library.js'
 
 /**
@@ -17,7 +16,7 @@ const nodes: NodeLibrary = {
   nodes: [
     {
       type: 'FxSphereEmitter',
-      properties: [{ name: 'Node_Name', type: PropertyType.String, value: 'sphere_emitter' }],
+      properties: [{ name: 'Node_Name', type: 'string', value: 'sphere_emitter' }],
     },
   ],
 }
@@ -27,9 +26,7 @@ const effects: EffectLibrary = {
   effects: [
     {
       name: 'fx_test',
-      center: { x: 0, y: 0, z: 0 },
-      radius: 0,
-      children: [{ crc: ControlRootId, flags: 1, sort: 0, id: 7, children: [], targets: [] }],
+      children: [{ crc: CONTROL_ROOT_ID, flags: 1, sort: 0, id: 7, children: [], targets: [] }],
     },
   ],
 }
@@ -48,13 +45,15 @@ describe('hasAlchemy', () => {
     strictEqual(hasAlchemy(new Directory('\\')), false)
   })
 
-  // The node library is the half a `.3db` could plausibly carry on its own; the effect library is
-  // what makes the container a `.ale`.
-  it('keys off the effect library rather than the node library', () => {
-    const directory = wrap()
-    directory.delete('ALEffectLib')
+  // It answers exactly what `readAlchemy` would, and that needs both halves.
+  it('requires both libraries, as readAlchemy does', () => {
+    for (const name of ['ALEffectLib', 'AlchemyNodeLibrary']) {
+      const directory = wrap()
+      directory.delete(name)
 
-    strictEqual(hasAlchemy(directory), false)
+      strictEqual(hasAlchemy(directory), false)
+      strictEqual(readAlchemy(directory), undefined)
+    }
   })
 })
 
@@ -102,7 +101,7 @@ describe('readAlchemy', () => {
     strictEqual(readAlchemy(directory), undefined)
   })
 
-  it('searches only the root level, as readMaterials and readTextures do', () => {
+  it('searches only the root level, as readMaterialLibrary and readTextureLibrary do', () => {
     const nested = new Directory('\\', [new Directory('Nested', writeAlchemy(sample()))])
 
     strictEqual(readAlchemy(nested), undefined)
@@ -132,7 +131,7 @@ describe('readAlchemy', () => {
     strictEqual(effect?.name, 'fx_test')
     deepStrictEqual(
       effect.children.map(({ crc }) => crc),
-      [ControlRootId],
+      [CONTROL_ROOT_ID],
     )
   })
 })

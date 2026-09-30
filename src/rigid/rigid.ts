@@ -3,7 +3,7 @@ import { readMultiLevel, writeMultiLevel, type MultiLevel } from '#/vmesh/multil
 import { readVMeshPart, writeVMeshPart, type VMeshPart } from '#/vmesh/part.js'
 import { readVMeshWire, writeVMeshWire, type VMeshWire } from '#/vmesh/wireframe.js'
 import { isCamera, readCamera, writeCamera, type Camera } from './camera.js'
-import { isCompoundModel, type Model, readModel, writeModel } from '#/compound/model.js'
+import { isCompound, type CompoundNode, readCompound, writeCompound } from '#/compound/model.js'
 import { readHardpoints, writeHardpoints, type Hardpoint } from '#/compound/hardpoint.js'
 import { isSphere, readSphere, writeSphere, type Sphere } from './sphere.js'
 
@@ -30,7 +30,7 @@ export type RigidPart = Rigid | Camera | Sphere
  * A rigid model in either form the container allows: a `Cmpnd` hierarchy of parts for a `.cmp`, or
  * the single part a `.3db` or `.sph` writes straight to the file root.
  */
-export type RigidModel = Model<RigidPart> | RigidPart
+export type RigidModel = CompoundNode<RigidPart> | RigidPart
 
 /**
  * Reads a geometry part: its hardpoints, its mesh source and its wireframe overlay.
@@ -43,7 +43,7 @@ export type RigidModel = Model<RigidPart> | RigidPart
  * undefined, so the keys a part has are exactly the pieces it was stored with.
  */
 function readRigid(parent: Directory): Rigid {
-  const rigid: Rigid = { type: 'rigid', hardpoints: [...readHardpoints(parent)] }
+  const rigid: Rigid = { type: 'rigid', hardpoints: readHardpoints(parent) }
 
   const part = readMultiLevel(parent) ?? readVMeshPart(parent)
   const wire = readVMeshWire(parent)
@@ -117,7 +117,7 @@ function writePart(part: RigidPart): Directory {
  * @param parent File root directory
  */
 export function readRigidModel(parent: Directory): RigidModel {
-  if (isCompoundModel(parent)) return readModel(parent, readPart)
+  if (isCompound(parent)) return readCompound(parent, readPart)
   return readPart(parent)
 }
 
@@ -130,7 +130,7 @@ export function writeRigidModel(model: RigidModel): Directory {
     case 'rigid':
       return writeRigid(model)
     case 'compound':
-      return writeModel(model, writePart)
+      return writeCompound(model, writePart)
     case 'camera':
     case 'sphere':
       return writePart(model)

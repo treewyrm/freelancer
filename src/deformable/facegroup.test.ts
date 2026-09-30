@@ -7,26 +7,26 @@ import { writeFloat32Array, writeUint16Array } from './arrays.js'
 
 const group = (values: Partial<FaceGroup> = {}): FaceGroup => ({
   material: 'skin',
-  type: 'strip',
+  primitive: 'strip',
   indices: Uint16Array.from([0, 1, 2, 3]),
   ...values,
 })
 
 const directory = (...files: File[]) =>
-  new Directory('Group0', [new File('Material_name').writeStrings('skin'), ...files])
+  new Directory('Group0', [new File('Material_name').setStrings('skin'), ...files])
 
 describe('readFaceGroup', () => {
   it('reads a triangle strip', () => {
     const value = readFaceGroup(directory(writeUint16Array('Tristrip_indices', [0, 1, 2])))
 
-    strictEqual(value.type, 'strip')
+    strictEqual(value.primitive, 'strip')
     deepStrictEqual([...value.indices], [0, 1, 2])
   })
 
   it('reads a triangle list', () => {
     const value = readFaceGroup(directory(writeUint16Array('Face_indices', [0, 1, 2])))
 
-    strictEqual(value.type, 'list')
+    strictEqual(value.primitive, 'list')
     deepStrictEqual([...value.indices], [0, 1, 2])
   })
 
@@ -39,7 +39,7 @@ describe('readFaceGroup', () => {
           writeUint16Array('Tristrip_indices', [0, 1, 2]),
           writeUint16Array('Face_indices', [3, 4, 5]),
         ),
-      ).type,
+      ).primitive,
       'strip',
     )
   })
@@ -103,7 +103,7 @@ describe('writeFaceGroup', () => {
   })
 
   it('round-trips a list group', () => {
-    const value = group({ type: 'list' })
+    const value = group({ primitive: 'list' })
 
     deepStrictEqual(readFaceGroup(writeFaceGroup(value)), value)
   })

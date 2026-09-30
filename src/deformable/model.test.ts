@@ -17,7 +17,7 @@ import {
 const bone = (filename: string, name?: string): Bone => ({
   filename,
   name,
-  rotation: Matrix3.copy(Matrix3.identity),
+  orientation: Matrix3.copy(Matrix3.identity),
   position: Vector3.copy({}),
   levels: 0x3f,
   hardpoints: [],
@@ -30,7 +30,7 @@ const sphere = (parent: string, child: string): Constraint => ({
     type: 'sphere',
     position: Vector3.copy({}),
     offset: Vector3.copy({}),
-    rotation: Matrix3.copy(Matrix3.identity),
+    orientation: Matrix3.copy(Matrix3.identity),
     minX: -1,
     maxX: 1,
     minY: -1,
@@ -76,18 +76,18 @@ describe('readDeformableModel', () => {
    */
   it('throws when a part index disagrees with its bone position', () => {
     const root = writeDeformableModel(model())
-    root.setFile('Cmpnd', 'Part_Head', 'Index').data = new Uint8Array()
-    root.setFile('Cmpnd', 'Part_Head', 'Index').writeIntegers(7)
+    root.ensureFile('Cmpnd', 'Part_Head', 'Index').data = new Uint8Array()
+    root.ensureFile('Cmpnd', 'Part_Head', 'Index').setIntegers(7)
 
     throws(() => readDeformableModel(root), /index/i)
   })
 
   it('throws when two parts claim the same bone directory', () => {
     const root = writeDeformableModel(model())
-    root.setFile('Cmpnd', 'Part_Head', 'File name').data = new Uint8Array()
-    root.setFile('Cmpnd', 'Part_Head', 'File name').writeStrings('Spine.3db')
-    root.setFile('Cmpnd', 'Part_Head', 'Index').data = new Uint8Array()
-    root.setFile('Cmpnd', 'Part_Head', 'Index').writeIntegers(1)
+    root.ensureFile('Cmpnd', 'Part_Head', 'File name').data = new Uint8Array()
+    root.ensureFile('Cmpnd', 'Part_Head', 'File name').setStrings('Spine.3db')
+    root.ensureFile('Cmpnd', 'Part_Head', 'Index').data = new Uint8Array()
+    root.ensureFile('Cmpnd', 'Part_Head', 'Index').setIntegers(1)
 
     throws(() => readDeformableModel(root), /claimed by both/)
   })
@@ -151,7 +151,7 @@ describe('writeDeformableModel', () => {
           joint: {
             type: 'loose',
             position: Vector3.copy({}),
-            rotation: Matrix3.copy(Matrix3.identity),
+            orientation: Matrix3.copy(Matrix3.identity),
           },
         },
         sphere('Spine', 'Head'),

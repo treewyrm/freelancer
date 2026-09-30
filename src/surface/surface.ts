@@ -90,16 +90,16 @@ function getMassCenter(hulls: Iterable<Hull>, points: readonly Vector3[]) {
   if (determinant > scale * scale * scale * 1e-9)
     return { massCenter: Vector3.divideScalar(sum, determinant), estimate: 0 }
 
-  const { minimum, maximum } = getExtent(
+  const { min, max } = getExtent(
     [...getTriangles(hulls, points)].flatMap((triangle) => [...triangle]),
   )
 
   // IVP takes the geometric centre and estimates the inertia from the bounding sphere. All 84
   // retail parts that reach this path carry exactly what it produces, uniform across the three
   // axes — so a uniform inertia is what Freelancer ships and is not worth perturbing away from.
-  const radius = Vector3.distance(minimum, maximum) / 2
+  const radius = Vector3.distance(min, max) / 2
 
-  return { massCenter: Vector3.lerp(minimum, maximum, 0.5), estimate: radius * radius * 0.5 }
+  return { massCenter: Vector3.lerp(min, max, 0.5), estimate: radius * radius * 0.5 }
 }
 
 /**
@@ -311,46 +311,33 @@ const subView = (view: BufferView, length: number): BufferView => {
 }
 
 /**
- * Reads a `surf` chunk into a part, in place — the mass properties, the node hierarchy, the hulls
- * and the shared point list.
+ * Reads a `surf` chunk — the mass properties, the node hierarchy, the hulls and the shared point
+ * list.
  *
  * The chunk is a verbatim memory image, so it is navigated by offset rather than read straight
  * through: nodes carry relative offsets to their right child and their hull, and the point list is
  * found through whichever hull was read last. Every offset is bounds-checked against the block, so
  * a truncated or hand-edited file throws rather than reading past itself.
- * @param surface Part to fill; every field is overwritten.
- * @throws RangeError when a node offset falls outside the block, or no hull pointed at the points.
+ * @throws RangeError when a node offset falls outside the block, no node was read, or no hull
+ * pointed at the points.
  */
-export function readSurface(view: BufferView, surface: Surface): void {
+export function readSurface(view: BufferView): Surface {
   view = subView(view, view.readUint32())
 
-  surface.massCenter = {
-    x: view.readFloat32(),
-    y: view.readFloat32(),
-    z: view.readFloat32(),
-  }
-
-  surface.rotationInertia = {
-    x: view.readFloat32(),
-    y: view.readFloat32(),
-    z: view.readFloat32(),
-  }
-
-  surface.radius = view.readFloat32()
+  const massCenter = { x: view.readFloat32(), y: view.readFloat32(), z: view.readFloat32() }
+  const rotationInertia = { x: view.readFloat32(), y: view.readFloat32(), z: view.readFloat32() }
+  const radius = view.readFloat32()
 
   const header = view.readUint32()
-
-  surface.surfaceDeviation = (header & 0xff) / DEVIATION_STEPS
+  const surfaceDeviation = (header & 0xff) / DEVIATION_STEPS
 
   /** Size of the whole block, so also one past its last valid offset. */
   const endOffset = header >>> 8
   const startOffset = view.readInt32()
 
-  surface.padding = {
-    x: view.readInt32(),
-    y: view.readInt32(),
-    z: view.readInt32(),
-  }
+  const padding = { x: view.readInt32(), y: view.readInt32(), z: view.readInt32() }
+  const points: Point[] = []
+  let root: Node | undefined
 
   const queue: [offset: number, parent?: Node][] = [[startOffset]]
 
@@ -373,7 +360,7 @@ export function readSurface(view: BufferView, surface: Surface): void {
 
     const node = readNode(view)
 
-    !parent ? (surface.root = node) : !parent.left ? (parent.left = node) : (parent.right = node)
+    !parent ? (root = node) : !parent.left ? (parent.left = node) : (parent.right = node)
 
     const leftOffset = view.offset
 
@@ -389,12 +376,15 @@ export function readSurface(view: BufferView, surface: Surface): void {
     }
   }
 
+  if (!root) throw new RangeError('Surface part has no nodes')
   if (!pointsOffset) throw new RangeError('Invalid offset to points.')
 
   view.offset = pointsOffset
 
   // Read points.
-  while (view.offset < startOffset) surface.points.push(readPoint(view))
+  while (view.offset < startOffset) points.push(readPoint(view))
+
+  return { massCenter, rotationInertia, radius, surfaceDeviation, points, root, padding }
 }
 
 /**
@@ -425,13 +415,13 @@ export function writeSurface(surface: Surface): BufferView {
     hullOffsets.set(hull, view.offset)
 
     view.offset += Int32Array.BYTES_PER_ELEMENT
-    writeHull(view, hull)
+    view.writeBuffer(writeHull(hull))
   }
 
   /** Points block start offset. */
   const pointsOffset = view.offset
 
-  for (const point of points) writePoint(view, point)
+  for (const point of points) view.writeBuffer(writePoint(point))
 
   /** Nodes block start offset, and the value of `offset_ledgetree_root`. */
   const nodesOffset = view.offset
@@ -459,7 +449,7 @@ export function writeSurface(surface: Surface): BufferView {
 
     view.writeInt32(0) // Offset to right child.
     view.writeInt32(node.hull ? (hullOffsets.get(node.hull) ?? 0) - offset : 0) // Offset to hull.
-    writeNode(view, node)
+    view.writeBuffer(writeNode(node))
 
     if (node.right) queue.push([offset, node.right])
     if (node.left) queue.push([0, node.left])

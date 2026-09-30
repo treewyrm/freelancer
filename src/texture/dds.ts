@@ -32,9 +32,9 @@ const DDS_CAPS2_CUBEMAP_ALL_FACES = DDS_CAPS2_CUBEMAP_FACES.reduce((bits, bit) =
 /** How many faces a cubemap holds. */
 export const CUBEMAP_FACES = DDS_CAPS2_CUBEMAP_FACES.length
 
-/** `DDPF_FOURCC` code of a surface's pixel format, or `NONE` for an uncompressed one. */
+/** `DDPF_FOURCC` code of a surface's pixel format, or `None` for an uncompressed one. */
 export enum Compression {
-  NONE = 0,
+  None = 0,
   DXT1 = 0x31545844,
   DXT3 = 0x33545844,
   DXT5 = 0x35545844,
@@ -91,7 +91,7 @@ const levelByteLength = (
   bitCount: number,
 ): number => {
   switch (compression) {
-    case Compression.NONE:
+    case Compression.None:
       return (Math.max(1, width) * Math.max(1, height) * bitCount) >>> 3
     case Compression.DXT1:
       return blocks(width, height, 8)
@@ -137,7 +137,7 @@ export const readDirectDrawSurface = (view: BufferView): DirectDrawSurface => {
   let compression: Compression = view.readInt32()
   let bitCount = view.readInt32()
 
-  if (!(pixelFlags & DDS_PIXELS_FOURCC)) compression = Compression.NONE
+  if (!(pixelFlags & DDS_PIXELS_FOURCC)) compression = Compression.None
 
   const mask: ColorMask = { r: 0, g: 0, b: 0, a: 0 }
 
@@ -227,7 +227,7 @@ export const writeDirectDrawSurface = ({
   const levels = surfaces[0]!.length
   if (!levels) throw new RangeError('DirectDrawSurface has no mipmap levels')
 
-  const compressed = compression !== Compression.NONE
+  const compressed = compression !== Compression.None
 
   // One header describes every face, so the chains have to agree on their length, and every
   // level is sized from the surface dimensions — a chain that does not follow them would write

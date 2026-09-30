@@ -3,14 +3,14 @@ import { hermite, lerp, quadIn, quadOut, smooth } from '#/math/scalar.js'
 import type Vector3 from '#/math/vector3.js'
 import {
   EaseType,
-  WrapFlags,
+  WrapMode,
   type AnimatedColor,
   type AnimatedCurve,
   type AnimatedFloat,
   type EaseAnimation,
   type FloatKeyframe,
   type LoopAnimation,
-  type Transform,
+  type AnimatedTransform,
   type TransformPoint,
   type VectorKeyframe,
 } from './animation.js'
@@ -106,20 +106,25 @@ export function sparamLevel<T extends Keyframe>(
 }
 
 /**
- * Folds a key outside a looped curve's range back into it, by the curve's {@link WrapFlags} mode on
- * that side (`0x6246a52`..`0x6246c7a`).
+ * Folds a key outside a looped curve's range back into it, by the curve's {@link WrapMode} on that
+ * side (`0x6246a52`..`0x6246c7a`).
  *
  * `count` is what cycle-with-offset needs: the number of whole ranges the key ran past, which the
  * caller multiplies by the curve's total rise. Hold and linear return the key clamped to the end;
- * linear's value is not a folded key, so `hermiteAt` handles it before calling this.
+ * linear's value is not a folded key, so `hermiteWhen` handles it before calling this.
  * @returns The key folded into `[start, end]`, and how many ranges it overshot.
  */
-export function limit(flags: WrapFlags, start: number, end: number, key: number) {
+export function wrapKey(
+  animation: Pick<LoopAnimation<Keyframe>, 'before' | 'after'>,
+  start: number,
+  end: number,
+  key: number,
+): { key: number; count: number } {
   const before = key < start
 
   if (!before && !(key > end)) return { key, count: 0 }
 
-  const mode = before ? flags & 0xf : (flags >> 4) & 0xf
+  const mode = before ? animation.before : animation.after
   const range = end - start
 
   // Keyframes all on one key span nothing, and the DLL divides by that range regardless — its
@@ -136,13 +141,12 @@ export function limit(flags: WrapFlags, start: number, end: number, key: number)
   const count = Math.trunc(before ? quotient - 1 : quotient)
   const cycled = (before ? end : start) + wrapped
 
-  // The `Before` members are the bare mode numbers, so they name either nibble once shifted.
   switch (mode) {
-    case WrapFlags.BeforeCycle:
+    case WrapMode.Cycle:
       return { key: cycled, count: 0 }
-    case WrapFlags.BeforeCycleOffset:
+    case WrapMode.CycleOffset:
       return { key: cycled, count }
-    case WrapFlags.BeforeOscillate:
+    case WrapMode.Oscillate:
       return { key: count & 1 ? (before ? start : end) - wrapped : cycled, count: 0 }
 
     // Hold, linear, and the nibbles past 4 that the DLL leaves undefined.
@@ -221,7 +225,7 @@ const unpack = (rgb: number): Vector3 => ({
  * Every retail colour is a whole number of 255ths, so only the interior of a span differs from a
  * float lerp, and by under one 255th.
  */
-export function vectorWhen(animation: EaseAnimation<VectorKeyframe>, key: number): Vector3 {
+export function colorWhen(animation: EaseAnimation<VectorKeyframe>, key: number): Vector3 {
   const last = animation.keyframes.at(-1)
   if (!last) return { x: 0, y: 0, z: 0 }
   if (key >= last.key) return unpack(pack(last.value))
@@ -243,7 +247,7 @@ export function vectorWhen(animation: EaseAnimation<VectorKeyframe>, key: number
 
 /**
  * Samples an {@link AnimatedColor}, as {@link floatAt}. The vector is RGB, not a position. The inner
- * lists ease in bytes ({@link vectorWhen}); the sparam level blends their results in float, and its
+ * lists ease in bytes ({@link colorWhen}); the sparam level blends their results in float, and its
  * `Auto` compares the two colours' component sums (`0x6207fde`).
  * @param p Sparam — the external control value the engine blends animation states with.
  * @param t The inner key. What it is belongs to the caller: see [Two clocks] in ALCHEMY.md.
@@ -253,10 +257,10 @@ export function colorAt(animation: AnimatedColor, p: number, t: number): Vector3
   if (!level) return { x: 0, y: 0, z: 0 }
 
   const { lower, upper, span, easing } = level
-  if (lower === upper) return vectorWhen(lower, t)
+  if (lower === upper) return colorWhen(lower, t)
 
-  const a = vectorWhen(lower, t)
-  const b = vectorWhen(upper, t)
+  const a = colorWhen(lower, t)
+  const b = colorWhen(upper, t)
 
   if (easing === EaseType.Step) return a
 
@@ -266,7 +270,7 @@ export function colorAt(animation: AnimatedColor, p: number, t: number): Vector3
 
 /**
  * Samples one inner curve of an {@link AnimatedCurve} as a Hermite spline (`FxAnimatedSingle`,
- * `0x62469f0`), wrapping the key by the curve's {@link WrapFlags} first.
+ * `0x62469f0`), wrapping the key by the curve's {@link WrapMode}s first.
  *
  * A keyframe's vector is not a point: `x` is the value, `y` the in-tangent and `z` the out-tangent,
  * so a span reads `z` off the keyframe it leaves and `y` off the one it arrives at. They are used
@@ -274,29 +278,33 @@ export function colorAt(animation: AnimatedColor, p: number, t: number): Vector3
  * @returns The sampled value, plus the accumulated rise of any whole ranges a cycle-with-offset key
  * ran past.
  */
-export function hermiteAt(animation: LoopAnimation<VectorKeyframe>, key: number): number {
-  const { flags, keyframes } = animation
+export function hermiteWhen(animation: LoopAnimation<VectorKeyframe>, key: number): number {
+  const { keyframes } = animation
   const first = keyframes.at(0)
   const last = keyframes.at(-1)
 
-  // No keyframes: the default, which is otherwise ignored (`0x62430e0`).
-  if (!first || !last) return animation.default
+  // No keyframes: the fallback, which is otherwise ignored (`0x62430e0`).
+  if (!first || !last) return animation.fallback
 
   // Past an end, hold returns that end's value and linear runs along its own tangent — in-tangent
   // before, out-tangent after (`0x6246aa6`, `0x6246b99`, `0x6246bc9`, `0x6246c7a`). A single
   // keyframe obeys only these two (`0x6246a11`); the three cycling modes need a range.
   const before = key < first.key
   const after = key > last.key
-  const mode = before ? flags & 0xf : after ? (flags >> 4) & 0xf : 0
-  const cycles = keyframes.length > 1 && mode >= 1 && mode <= 3
+  const mode = before ? animation.before : after ? animation.after : WrapMode.Hold
+  const cycles =
+    keyframes.length > 1 &&
+    (mode === WrapMode.Cycle || mode === WrapMode.CycleOffset || mode === WrapMode.Oscillate)
 
   if (before && !cycles)
-    return mode === 4 ? first.value.x + (key - first.key) * first.value.y : first.value.x
+    return mode === WrapMode.Linear
+      ? first.value.x + (key - first.key) * first.value.y
+      : first.value.x
 
   if (after && !cycles)
-    return mode === 4 ? last.value.x + (key - last.key) * last.value.z : last.value.x
+    return mode === WrapMode.Linear ? last.value.x + (key - last.key) * last.value.z : last.value.x
 
-  const folded = limit(flags, first.key, last.key, key)
+  const folded = wrapKey(animation, first.key, last.key, key)
   const accumulate = (last.value.x - first.value.x) * folded.count
 
   // The last keyframe at or before the key, and the one after it (`0x6246b48`..`0x6246caf`). On
@@ -329,7 +337,7 @@ export function hermiteAt(animation: LoopAnimation<VectorKeyframe>, key: number)
 
 /**
  * Samples an {@link AnimatedCurve}, as {@link floatAt}, except that the inner lists are Hermite
- * curves sampled by {@link hermiteAt} rather than eased keyframe lists.
+ * curves sampled by {@link hermiteWhen} rather than eased keyframe lists.
  * @param p Sparam — the external control value the engine blends animation states with.
  * @param t The inner key. What it is belongs to the caller: see [Two clocks] in ALCHEMY.md.
  */
@@ -338,9 +346,9 @@ export function curveAt(animation: AnimatedCurve, p: number, t: number): number 
   if (!level) return 0
 
   const { lower, upper, span, easing } = level
-  if (lower === upper) return hermiteAt(lower, t)
+  if (lower === upper) return hermiteWhen(lower, t)
 
-  return ease(easing, hermiteAt(lower, t), hermiteAt(upper, t), span)
+  return ease(easing, hermiteWhen(lower, t), hermiteWhen(upper, t), span)
 }
 
 /** Samples the three curves of a {@link TransformPoint} into a vector. */
@@ -354,26 +362,33 @@ export function transformPointAt(point: TransformPoint, p: number, t: number): V
   }
 }
 
-/** A {@link Transform} sampled at one point on both axes. Every component is present. */
-export interface TransformAt {
+/** An {@link AnimatedTransform} sampled at one point on both axes. Every component is present. */
+export interface SampledTransform {
   position: Vector3
   rotation: Vector3
   scale: Vector3
 }
 
 /**
- * Samples a node's whole {@link Transform}. An absent component is not animated and falls back to
- * its neutral value — zero for position and rotation, one for scale — so the result is always
- * complete. The order bytes are not consulted: `alchemy.dll`'s builder never reads them.
+ * Samples a node's whole {@link AnimatedTransform}. Without curves it is not animated and falls
+ * back to the neutral values — zero for position and rotation, one for scale — so the result is
+ * always complete. The order bytes are not consulted: `alchemy.dll`'s builder never reads them.
  * @param p Sparam — the external control value the engine blends animation states with.
  * @param t The inner key. What it is belongs to the caller: see [Two clocks] in ALCHEMY.md.
  */
-export function transformAt(point: Transform, p: number, t: number): TransformAt {
-  const { position, rotation, scale } = point
+export function transformAt(transform: AnimatedTransform, p: number, t: number): SampledTransform {
+  const { curves } = transform
+
+  if (!curves)
+    return {
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+    }
 
   return {
-    position: position ? transformPointAt(position, p, t) : { x: 0, y: 0, z: 0 },
-    rotation: rotation ? transformPointAt(rotation, p, t) : { x: 0, y: 0, z: 0 },
-    scale: scale ? transformPointAt(scale, p, t) : { x: 1, y: 1, z: 1 },
+    position: transformPointAt(curves.position, p, t),
+    rotation: transformPointAt(curves.rotation, p, t),
+    scale: transformPointAt(curves.scale, p, t),
   }
 }

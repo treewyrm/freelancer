@@ -5,7 +5,7 @@ import type Directory from '#/utf/directory.js'
 import type File from '#/utf/file.js'
 import { getResourceId } from '#/hash.js'
 import type { AnimatedTexture } from './animation.js'
-import { readTextures } from './library.js'
+import { readTextureLibrary } from './library.js'
 import { readTexture, writeTexture } from './library.js'
 import type { CubeTexture, Texture, TextureEntry } from './types.js'
 
@@ -62,15 +62,12 @@ const entries = () =>
 const images = () =>
   entries().filter((entry): entry is Entry & { texture: Texture } => {
     const { texture } = entry
-    return texture !== undefined && texture.type !== 'animated' && texture.storage !== 'cube'
+    return texture?.type === 'image'
   })
 
 const cubemaps = () =>
   entries().filter(
-    (entry): entry is Entry & { texture: CubeTexture } =>
-      entry.texture !== undefined &&
-      entry.texture.type !== 'animated' &&
-      entry.texture.storage === 'cube',
+    (entry): entry is Entry & { texture: CubeTexture } => entry.texture?.type === 'cube',
   )
 
 const named = (list: { where: string }[]) => list.map(({ where }) => where).sort()
@@ -201,7 +198,7 @@ describe('retail asset corpus', { skip }, () => {
     })
 
     // 1413 sit at the file root; the remaining four are nested inside an `openFLAME 3D N-mesh`
-    // tree, which is why `readTextures` — which only looks at the root — cannot see them.
+    // tree, which is why `readTextureLibrary` — which only looks at the root — cannot see them.
     it('sits at the file root except inside the openFLAME leftovers', () => {
       const nested = [...libraries()].filter(
         ({ path }) =>
@@ -229,10 +226,10 @@ describe('retail asset corpus', { skip }, () => {
       }
     })
 
-    it('yields every root-level texture through readTextures without throwing', () => {
+    it('reads every root-level texture through readTextureLibrary without throwing', () => {
       let count = 0
 
-      for (const { root } of assets()) count += [...readTextures(root)].length
+      for (const { root } of assets()) count += readTextureLibrary(root).length
 
       strictEqual(count, 6861)
     })
@@ -244,11 +241,14 @@ describe('retail asset corpus', { skip }, () => {
       ok(entries().length > 6000)
     })
 
-    it('decodes into the eight pixel formats retail actually authored', () => {
+    it('decodes into the seven pixel formats retail authored, beside the animated entries', () => {
       const kinds = new Map<string, number>()
 
       for (const { texture } of entries())
-        if (texture) kinds.set(texture.type, (kinds.get(texture.type) ?? 0) + 1)
+        if (texture) {
+          const kind = texture.type === 'animated' ? texture.type : texture.format
+          kinds.set(kind, (kinds.get(kind) ?? 0) + 1)
+        }
 
       deepStrictEqual(Object.fromEntries([...kinds].sort()), {
         animated: 12,
@@ -339,7 +339,7 @@ describe('retail asset corpus', { skip }, () => {
   })
 
   /**
-   * Pins the reason {@link import('./types.js').TextureType} has no `dxt1a` member: the container
+   * Pins the reason {@link import('./types.js').TextureFormat} has no `dxt1a` member: the container
    * cannot distinguish it, and almost nothing in retail is transparent anyway.
    */
   describe('DXT1 punch-through transparency', () => {
@@ -373,7 +373,7 @@ describe('retail asset corpus', { skip }, () => {
         'SOLAR/solar_mat_tlr.mat :: x_pnl_a.tga',
       ])
 
-      for (const { where, texture } of transparent) strictEqual(texture.type, 'dxt1', where)
+      for (const { where, texture } of transparent) strictEqual(texture.format, 'dxt1', where)
     })
   })
 
@@ -519,7 +519,7 @@ describe('retail asset corpus', { skip }, () => {
         ({ where }) => where === 'FX/standardeffects.txm :: XP_HERM_0',
       )!.texture
 
-      strictEqual(atlas.type, 'rgba32_8888')
+      strictEqual(atlas.format, 'rgba32_8888')
 
       const { width, height } = atlas
       const bitmap = atlas.levels[0]!
@@ -584,8 +584,7 @@ describe('retail asset corpus', { skip }, () => {
      */
     it('reproduces the Targa chains that were already uncompressed RGB', () => {
       const chains = rewritten().filter(
-        ({ entry, texture }) =>
-          texture.type !== 'animated' && texture.storage !== 'cube' && !entry.getFile('MIPS'),
+        ({ entry, texture }) => texture.type === 'image' && !entry.getFile('MIPS'),
       )
 
       strictEqual(chains.length, 2400)
@@ -646,14 +645,16 @@ describe('retail asset corpus', { skip }, () => {
         strictEqual(reread.name, texture.name, where)
 
         if (reread.type !== 'animated' && texture.type !== 'animated') {
-          strictEqual(reread.storage, texture.storage, where)
+          strictEqual(reread.format, texture.format, where)
+          if (reread.type === 'image' && texture.type === 'image')
+            strictEqual(reread.storage, texture.storage, where)
           strictEqual(reread.width, texture.width, where)
           strictEqual(reread.height, texture.height, where)
           strictEqual(reread.flip, texture.flip, where)
 
           // Compared as chains so a cubemap's six are all checked, not just the first.
-          const before = texture.storage === 'cube' ? texture.faces : [texture.levels]
-          const after = reread.storage === 'cube' ? reread.faces : [reread.levels]
+          const before = texture.type === 'cube' ? texture.faces : [texture.levels]
+          const after = reread.type === 'cube' ? reread.faces : [reread.levels]
 
           strictEqual(after.length, before.length, where)
 
@@ -697,7 +698,7 @@ describe('retail asset corpus', { skip }, () => {
         strictEqual(caps2, 0xfe00, where)
         strictEqual(payload, 6 * 64 * 64 * 4, `${where}: expected six uncompressed faces`)
 
-        strictEqual(texture.type, 'rgba32_8888', where)
+        strictEqual(texture.format, 'rgba32_8888', where)
         strictEqual(texture.width, 64, where)
         strictEqual(texture.height, 64, where)
         ok(texture.flip, where)

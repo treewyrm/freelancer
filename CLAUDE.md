@@ -13,12 +13,12 @@ measured from the retail install and pinned back by the corpus suites; see
 [RETAIL.md](docs/refs/RETAIL.md).
 
 **Read [ARCHITECTURE.md](docs/refs/ARCHITECTURE.md) first** — commands, the three-layer model, the
-six invariants, directory structure, documentation conventions and code style all live there rather
-than here.
+six invariants, directory structure, documentation conventions, code style and the naming and shape
+rules all live there rather than here.
 
 ## Entry points
 
-**496 exports across 22 entry points.** Each doc's `## API` section is resolved from `src/` with
+**525 exports across 22 entry points.** Each doc's `## API` section is resolved from `src/` with
 the TypeScript checker and checked by `src/api.test.ts` — a drifted table fails the suite, not just
 a reader.
 
@@ -26,18 +26,18 @@ a reader.
 | ----------------- | ------- | --------------------------------------------- |
 | `.`               | 12      | [UTF.md](docs/modules/UTF.md#hashing)        |
 | `./utility`       | 30      | [UTF.md](docs/modules/UTF.md#utilities)      |
-| `./math`          | 31      | [MATH.md](docs/modules/MATH.md)              |
-| `./utf`           | 4       | [UTF.md](docs/modules/UTF.md)                |
-| `./alchemy`       | 53      | [ALCHEMY.md](docs/modules/ALCHEMY.md)        |
-| `./animation`     | 36      | [ANIMATION.md](docs/modules/ANIMATION.md)    |
+| `./math`          | 33      | [MATH.md](docs/modules/MATH.md)              |
+| `./utf`           | 3       | [UTF.md](docs/modules/UTF.md)                |
+| `./alchemy`       | 55      | [ALCHEMY.md](docs/modules/ALCHEMY.md)        |
+| `./animation`     | 47      | [ANIMATION.md](docs/modules/ANIMATION.md)    |
 | `./vmesh`         | 32      | [VMESH.md](docs/modules/VMESH.md)            |
-| `./compound`      | 14      | [COMPOUND.md](docs/modules/COMPOUND.md)      |
+| `./compound`      | 26      | [COMPOUND.md](docs/modules/COMPOUND.md)      |
 | `./rigid`         | 24      | [RIGID.md](docs/modules/RIGID.md)            |
 | `./surface`       | 32      | [SURFACE.md](docs/modules/SURFACE.md)        |
-| `./texture`       | 40      | [TEXTURE.md](docs/modules/TEXTURE.md)        |
-| `./material`      | 13      | [MATERIAL.md](docs/modules/MATERIAL.md)      |
+| `./texture`       | 41      | [TEXTURE.md](docs/modules/TEXTURE.md)        |
+| `./material`      | 14      | [MATERIAL.md](docs/modules/MATERIAL.md)      |
 | `./deformable`    | 22      | [DEFORMABLE.md](docs/modules/DEFORMABLE.md)  |
-| `./ini`           | 12      | [INI.md](docs/modules/INI.md)                |
+| `./ini`           | 13      | [INI.md](docs/modules/INI.md)                |
 | `./ini/text`      | 4       | [INI.md](docs/modules/INI.md)                |
 | `./ini/binary`    | 8       | [INI.md](docs/modules/INI.md)                |
 | `./ini/save`      | 4       | [INI.md](docs/modules/INI.md)                |
@@ -66,4 +66,4 @@ Not tied to one module's source: vocabularies, corpora, and consumer-facing mapp
 | [COSTUME.md](docs/refs/COSTUME.md)           | How the four `.dfm` files of a character join                      |
 | [RENDERER.md](docs/refs/RENDERER.md)         | Mapping these structures onto a WebGL2 renderer                    |
 | [RETAIL.md](docs/refs/RETAIL.md)             | The corpus, measurements, quirks, and every open question          |
-| [ARCHITECTURE.md](docs/refs/ARCHITECTURE.md) | Commands, invariants, layering, directory structure, code style    |
+| [ARCHITECTURE.md](docs/refs/ARCHITECTURE.md) | Commands, invariants, layering, structure, code style, naming      |

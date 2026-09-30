@@ -31,31 +31,20 @@ export interface TargaBitmap extends TargaPixels {
   flip: boolean
 }
 
-/** Decoding options, threaded through every Targa reader. */
-export interface TargaOptions {
-  /**
-   * Leave the bitmap in Targa's own BGR order instead of swapping it to RGB.
-   *
-   * **Currently inert** — the option is accepted and passed down but no reader consults it, so
-   * every image comes back channel-swapped regardless.
-   */
-  reverseChannels?: boolean
-}
-
 /**
  * Targa image type, from the header's second byte. Only `COLORMAP` and `RGB` occur in retail; the
  * run-length forms are listed for completeness and are rejected by the reader.
  */
 export enum ImageType {
-  NONE = 0,
-  COLORMAP = 1,
+  None = 0,
+  ColorMap = 1,
   RGB = 2,
-  GREYSCALE = 3,
-  RLE_COLORMAP = 9,
-  RLE_RGB = 10,
-  COMPRESSED_GREYSCALE = 11,
-  COMPRESSED_COLORMAP = 32,
-  COMPRESSED_COLORMAP_QUAD = 33,
+  Greyscale = 3,
+  RLEColorMap = 9,
+  RLERGB = 10,
+  RLEGreyscale = 11,
+  CompressedColorMap = 32,
+  CompressedColorMapQuad = 33,
 }
 
 /**
@@ -89,7 +78,6 @@ export const swapBGRtoRGB = (array: Uint8Array, depth: number) => {
  * @param indexDepth Indices bit depth (usually 8)
  * @param paletteCount Palette color count
  * @param paletteDepth Palette bit depth
- * @param options Image options
  * @returns
  */
 function readUncompressedColorMap(
@@ -99,7 +87,6 @@ function readUncompressedColorMap(
   indexDepth: number,
   paletteCount: number,
   paletteDepth: number,
-  options?: TargaOptions,
 ): TargaPixels {
   const pixelCount = width * height
 
@@ -156,7 +143,6 @@ function readUncompressedColorMap(
  * @param width Image width
  * @param height Image height
  * @param depth Image bit depth
- * @param options Image options
  * @returns
  */
 function readUncompressedRGB(
@@ -164,7 +150,6 @@ function readUncompressedRGB(
   width: number,
   height: number,
   depth: number,
-  options?: TargaOptions,
 ): TargaPixels {
   let bitmap = new Uint8Array((width * height * depth) >> 3)
   view.readBuffer(bitmap)
@@ -241,10 +226,9 @@ export function writeTargaImage({ width, height, depth, bitmap, flip }: TargaBit
 /**
  * Reads bitmap from targa file.
  * @param view Input buffer view
- * @param options Image options
  * @returns
  */
-export function readTargaImage(view: BufferView, options?: TargaOptions): TargaBitmap {
+export function readTargaImage(view: BufferView): TargaBitmap {
   /** Text section length. */
   const textLength = view.readUint8()
 
@@ -288,23 +272,15 @@ export function readTargaImage(view: BufferView, options?: TargaOptions): TargaB
   const flip = (descriptor & 0x20) !== 0
 
   switch (imageType) {
-    case ImageType.COLORMAP:
+    case ImageType.ColorMap:
       if (!colorMapType) throw new RangeError('Color-mapped image is missing color map type flag')
 
       return {
-        ...readUncompressedColorMap(
-          view,
-          width,
-          height,
-          depth,
-          paletteCount,
-          paletteDepth,
-          options,
-        ),
+        ...readUncompressedColorMap(view, width, height, depth, paletteCount, paletteDepth),
         flip,
       }
     case ImageType.RGB:
-      return { ...readUncompressedRGB(view, width, height, depth, options), flip }
+      return { ...readUncompressedRGB(view, width, height, depth), flip }
     default:
       throw new RangeError(`Unsupported targa image type: ${imageType}`)
   }

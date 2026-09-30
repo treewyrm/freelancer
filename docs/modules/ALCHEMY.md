@@ -55,39 +55,46 @@ and round-trips.
 
 ### `PropertyType`
 
-| Value   | Name            |
+| Code    | `type`          |
 | ------- | --------------- |
-| `0x000` | `None`          |
-| `0x001` | `Boolean`       |
-| `0x002` | `Integer`       |
-| `0x003` | `Float`         |
-| `0x103` | `String`        |
-| `0x104` | `Blending`      |
-| `0x105` | `Transform`     |
-| `0x200` | `AnimatedFloat` |
-| `0x201` | `AnimatedColor` |
-| `0x202` | `AnimatedCurve` |
+| `0x001` | `boolean`       |
+| `0x002` | `integer`       |
+| `0x003` | `float`         |
+| `0x103` | `string`        |
+| `0x104` | `blending`      |
+| `0x105` | `transform`     |
+| `0x200` | `animatedFloat` |
+| `0x201` | `animatedColor` |
+| `0x202` | `animatedCurve` |
 
 Each property is prefixed by a `uint16` type field and an `int32` name CRC. Boolean values have no
-payload — the value is packed into bit 15 (`0x8000`) of the type field. A property list is terminated
-by a `uint16` of zero.
+payload — the value is packed into bit 15 (`0x8000`) of the type field. A property list is
+terminated by a `uint16` of zero, which `readProperty` reports as `undefined`.
+
+The codes are the codec's: a `Property` is told apart by a string `type`, the same way an INI
+`Value` is, and `PropertyType` is the union of those strings. A code the reader does not know
+throws, since its payload length is unknown.
 
 Known names are resolved to their string form via a lookup table; unknown ones are preserved as hex
 strings (e.g. `"0xdeadbeef"`), so an unrecognized property survives a round trip.
 
 ```ts
 type Property = { name: PropertyName } & (
-  | { type: PropertyType.Boolean; value: boolean }
-  | { type: PropertyType.Integer; value: number }
-  | { type: PropertyType.Float; value: number }
-  | { type: PropertyType.String; value: string }
-  | ({ type: PropertyType.Blending } & Blending)
-  | ({ type: PropertyType.Transform } & Transform)
-  | ({ type: PropertyType.AnimatedFloat } & AnimatedFloat)
-  | ({ type: PropertyType.AnimatedColor } & AnimatedColor)
-  | ({ type: PropertyType.AnimatedCurve } & AnimatedCurve)
+  | { type: 'boolean'; value: boolean }
+  | { type: 'integer'; value: number }
+  | { type: 'float'; value: number }
+  | { type: 'string'; value: string }
+  | { type: 'blending'; value: Blending }
+  | { type: 'transform'; value: AnimatedTransform }
+  | { type: 'animatedFloat'; value: AnimatedFloat }
+  | { type: 'animatedColor'; value: AnimatedColor }
+  | { type: 'animatedCurve'; value: AnimatedCurve }
 )
 ```
+
+The payload sits under `value` whatever the type, so retyping a property means replacing it and
+nothing of the previous type's payload can ride along. `PropertyOf<'animatedCurve'>` narrows to one
+arm.
 
 ### Known names
 
@@ -110,78 +117,78 @@ Common — every node carries all three:
 
 | Name             | Type        | Description                                                                                                                                                 |
 | ---------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Node_Name`      | `String`    | The node's identity, unique within its library and what an instance references by CRC                                                                       |
-| `Node_LifeSpan`  | `Float`     | Seconds the node *works* for, counted from the start of the effect — not the life of anything it produces. Default 3. `FLT_MAX` and `Infinity` both stand for "never" |
-| `Node_Transform` | `Transform` | Position, rotation and scale as nine curves, rotation in **degrees**, composed `T · S · Rz · Rx · Ry` on column vectors — scale after rotation, so a non-uniform scale on a turned node shears. See [`Transform`](#transform) |
+| `Node_Name`      | `string`    | The node's identity, unique within its library and what an instance references by CRC                                                                       |
+| `Node_LifeSpan`  | `float`     | Seconds the node *works* for, counted from the start of the effect — not the life of anything it produces. Default 3. `FLT_MAX` and `Infinity` both stand for "never" |
+| `Node_Transform` | `transform` | Position, rotation and scale as nine curves, rotation in **degrees**, composed `T · S · Rz · Rx · Ry` on column vectors — scale after rotation, so a non-uniform scale on a turned node shears. See [`AnimatedTransform`](#animatedtransform) |
 
 Emitters — the `Emitter_` block is identical on all three emitter types, and **an emitter fires along
 its local +Y**:
 
 | Name                       | Type            | Description                                                                                    |
 | -------------------------- | --------------- | -------------------------------------------------------------------------------------------------- |
-| `Emitter_Frequency`        | `AnimatedCurve` | Particles per second, **truncated every frame** with the fraction dropped, so the rate depends on the frame rate. Default 100 |
-| `Emitter_EmitCount`        | `AnimatedCurve` | **A list of bursts**, not a rate: each keyframe of the first sparam list whose key falls in this frame adds its value, truncated, to the count. Never evaluated as a curve. Not inert, as it once read |
-| `Emitter_InitialParticles` | `Integer`       | Added to the count on the emitter's first update                                               |
-| `Emitter_MaxParticles`     | `AnimatedCurve` | Cap on the particles the **appearance** holds, not the emitter; births past it are dropped. Default 10,000, and the one optional emitter property |
-| `Emitter_InitLifeSpan`     | `AnimatedCurve` | The particle's own lifetime, in seconds, handed to it at birth. Default 2                       |
-| `Emitter_Pressure`         | `AnimatedCurve` | Initial speed along the spawn heading, through the emitter's matrix with its scale. Default 10  |
-| `Emitter_VelocityApproach` | `AnimatedCurve` | Share of the **emitter's own motion** since its last emission lent to each birth, divided among that frame's births. Default 0. Not the parent object's velocity, as it once read |
-| `Emitter_LODCurve`         | `AnimatedFloat` | Multiplies the count, keyed on an LOD value the host sets (1 unless it moves it); the fraction carries to the next frame |
+| `Emitter_Frequency`        | `animatedCurve` | Particles per second, **truncated every frame** with the fraction dropped, so the rate depends on the frame rate. Default 100 |
+| `Emitter_EmitCount`        | `animatedCurve` | **A list of bursts**, not a rate: each keyframe of the first sparam list whose key falls in this frame adds its value, truncated, to the count. Never evaluated as a curve. Not inert, as it once read |
+| `Emitter_InitialParticles` | `integer`       | Added to the count on the emitter's first update                                               |
+| `Emitter_MaxParticles`     | `animatedCurve` | Cap on the particles the **appearance** holds, not the emitter; births past it are dropped. Default 10,000, and the one optional emitter property |
+| `Emitter_InitLifeSpan`     | `animatedCurve` | The particle's own lifetime, in seconds, handed to it at birth. Default 2                       |
+| `Emitter_Pressure`         | `animatedCurve` | Initial speed along the spawn heading, through the emitter's matrix with its scale. Default 10  |
+| `Emitter_VelocityApproach` | `animatedCurve` | Share of the **emitter's own motion** since its last emission lent to each birth, divided among that frame's births. Default 0. Not the parent object's velocity, as it once read |
+| `Emitter_LODCurve`         | `animatedFloat` | Multiplies the count, keyed on an LOD value the host sets (1 unless it moves it); the fraction carries to the next frame |
 
 Emitter geometry — the box or shell a particle appears in, and the cone it leaves along:
 
 | Name                      | Type            | Description                                                                             |
 | ------------------------- | --------------- | ------------------------------------------------------------------------------------------- |
-| `CubeEmitter_Width`       | `AnimatedCurve` | **Half-extent** along local X — a particle appears within ±Width. Default 5              |
-| `CubeEmitter_Height`      | `AnimatedCurve` | Half-extent along local Y, the axis particles leave along. Default 5                     |
-| `CubeEmitter_Depth`       | `AnimatedCurve` | Half-extent along local Z. Default 5                                                     |
-| `CubeEmitter_MinSpread`   | `AnimatedCurve` | Inner polar angle of the heading off +Y, in degrees — where a particle appears and which way it leaves are independent |
-| `CubeEmitter_MaxSpread`   | `AnimatedCurve` | Outer polar angle; the heading is drawn linear in angle between the two. Never above 90 across all 377 |
-| `SphereEmitter_MinRadius` | `AnimatedCurve` | Inner radius of the shell a particle appears in, drawn linear between the two            |
-| `SphereEmitter_MaxRadius` | `AnimatedCurve` | Outer radius. The heading is radial from a point of the cube [−1, 1]³ normalized, so it leans toward the diagonals |
-| `ConeEmitter_MinRadius`   | `AnimatedCurve` | Inner radius of the same shell — a cone emitter is a sphere emitter with a cone carved out of it. Default 0 |
-| `ConeEmitter_MaxRadius`   | `AnimatedCurve` | Outer radius. Default 1                                                                 |
-| `ConeEmitter_MinSpread`   | `AnimatedCurve` | Inner polar angle off +Y, in degrees                                                     |
-| `ConeEmitter_MaxSpread`   | `AnimatedCurve` | Outer polar angle. Never above 90 across all 804, and a great many sit exactly on it     |
+| `CubeEmitter_Width`       | `animatedCurve` | **Half-extent** along local X — a particle appears within ±Width. Default 5              |
+| `CubeEmitter_Height`      | `animatedCurve` | Half-extent along local Y, the axis particles leave along. Default 5                     |
+| `CubeEmitter_Depth`       | `animatedCurve` | Half-extent along local Z. Default 5                                                     |
+| `CubeEmitter_MinSpread`   | `animatedCurve` | Inner polar angle of the heading off +Y, in degrees — where a particle appears and which way it leaves are independent |
+| `CubeEmitter_MaxSpread`   | `animatedCurve` | Outer polar angle; the heading is drawn linear in angle between the two. Never above 90 across all 377 |
+| `SphereEmitter_MinRadius` | `animatedCurve` | Inner radius of the shell a particle appears in, drawn linear between the two            |
+| `SphereEmitter_MaxRadius` | `animatedCurve` | Outer radius. The heading is radial from a point of the cube [−1, 1]³ normalized, so it leans toward the diagonals |
+| `ConeEmitter_MinRadius`   | `animatedCurve` | Inner radius of the same shell — a cone emitter is a sphere emitter with a cone carved out of it. Default 0 |
+| `ConeEmitter_MaxRadius`   | `animatedCurve` | Outer radius. Default 1                                                                 |
+| `ConeEmitter_MinSpread`   | `animatedCurve` | Inner polar angle off +Y, in degrees                                                     |
+| `ConeEmitter_MaxSpread`   | `animatedCurve` | Outer polar angle. Never above 90 across all 804, and a great many sit exactly on it     |
 
 Appearances — the `BasicApp_` set is the textured sprite, carried by five of the seven appearance
 types:
 
 | Name                         | Type            | Description                                                                                         |
 | ---------------------------- | --------------- | ------------------------------------------------------------------------------------------------------- |
-| `Appearance_LODCurve`        | `AnimatedFloat` | Multiplies every extent, keyed on the host's LOD value; zero draws nothing                          |
-| `BasicApp_Color`             | `AnimatedColor` | RGB over the particle's age, 0…1 per channel. Absent, it is 0.8 grey                                |
-| `BasicApp_Alpha`             | `AnimatedFloat` | Opacity over the particle's age, packed into a byte **without a clamp, so past 1 it wraps**. Default 1 |
-| `BasicApp_Size`              | `AnimatedFloat` | On a basic quad **the half-extent**, on its triangle the inradius; on a perp the **full** extent. Default 1 |
-| `BasicApp_HToVAspect`        | `AnimatedFloat` | Multiplies the **horizontal** half-extent only, and on the quad only. Default 1                     |
-| `BasicApp_Rotate`            | `AnimatedFloat` | Roll about the view axis over the particle's age, in **radians**, a positive angle clockwise on screen. Not read under `MotionBlur` |
-| `BasicApp_TexName`           | `String`        | Names an entry in the texture library. 21 nodes name `""`, which draws flat colour rather than being an omission |
-| `BasicApp_BlendInfo`         | `Blending`      | Source and destination blend factors. Default `SourceAlpha` / `One`                                 |
-| `BasicApp_TexFrame`          | `AnimatedFloat` | A **0…1 position through the frame table** over the particle's age: frame `trunc(position × (count − 1))`, within the one atlas the appearance has bound |
-| `BasicApp_CommonTexFrame`    | `AnimatedCurve` | The same position on the appearance's own clock, once per frame, so every particle shows the same frame; it picks the atlas bound too, so it animates across sibling entries |
-| `BasicApp_UseCommonTexFrame` | `Boolean`       | Which of the two is read                                                                            |
-| `BasicApp_FlipTexU`          | `Boolean`       | Swap the frame's `u0` and `u1`                                                                      |
-| `BasicApp_FlipTexV`          | `Boolean`       | Swap its `v0` and `v1`                                                                              |
-| `BasicApp_TriTexture`        | `Boolean`       | Only when `QuadTexture` is clear: which texture mapping the triangle takes, a right triangle of the frame instead of the centred one |
-| `BasicApp_QuadTexture`       | `Boolean`       | **Picks the shape**: a quad when set, an equilateral triangle when clear. Tested alone, which is why all four combinations with `TriTexture` occur. On a beam it fans each segment round a centre vertex, and defaults to true |
-| `BasicApp_MotionBlur`        | `Boolean`       | On a basic quad, **a stretch** from where the particle was a thirtieth of a second ago, as seen, to `Size` past it — no roll. On a rect, a thirtieth of a second of travel added to its length. **Not** a random roll, as it once read |
+| `Appearance_LODCurve`        | `animatedFloat` | Multiplies every extent, keyed on the host's LOD value; zero draws nothing                          |
+| `BasicApp_Color`             | `animatedColor` | RGB over the particle's age, 0…1 per channel. Absent, it is 0.8 grey                                |
+| `BasicApp_Alpha`             | `animatedFloat` | Opacity over the particle's age, packed into a byte **without a clamp, so past 1 it wraps**. Default 1 |
+| `BasicApp_Size`              | `animatedFloat` | On a basic quad **the half-extent**, on its triangle the inradius; on a perp the **full** extent. Default 1 |
+| `BasicApp_HToVAspect`        | `animatedFloat` | Multiplies the **horizontal** half-extent only, and on the quad only. Default 1                     |
+| `BasicApp_Rotate`            | `animatedFloat` | Roll about the view axis over the particle's age, in **radians**, a positive angle clockwise on screen. Not read under `MotionBlur` |
+| `BasicApp_TexName`           | `string`        | Names an entry in the texture library. 21 nodes name `""`, which draws flat colour rather than being an omission |
+| `BasicApp_BlendInfo`         | `blending`      | Source and destination blend factors. Default `SourceAlpha` / `One`                                 |
+| `BasicApp_TexFrame`          | `animatedFloat` | A **0…1 position through the frame table** over the particle's age: frame `trunc(position × (count − 1))`, within the one atlas the appearance has bound |
+| `BasicApp_CommonTexFrame`    | `animatedCurve` | The same position on the appearance's own clock, once per frame, so every particle shows the same frame; it picks the atlas bound too, so it animates across sibling entries |
+| `BasicApp_UseCommonTexFrame` | `boolean`       | Which of the two is read                                                                            |
+| `BasicApp_FlipTexU`          | `boolean`       | Swap the frame's `u0` and `u1`                                                                      |
+| `BasicApp_FlipTexV`          | `boolean`       | Swap its `v0` and `v1`                                                                              |
+| `BasicApp_TriTexture`        | `boolean`       | Only when `QuadTexture` is clear: which texture mapping the triangle takes, a right triangle of the frame instead of the centred one |
+| `BasicApp_QuadTexture`       | `boolean`       | **Picks the shape**: a quad when set, an equilateral triangle when clear. Tested alone, which is why all four combinations with `TriTexture` occur. On a beam it fans each segment round a centre vertex, and defaults to true |
+| `BasicApp_MotionBlur`        | `boolean`       | On a basic quad, **a stretch** from where the particle was a thirtieth of a second ago, as seen, to `Size` past it — no roll. On a rect, a thirtieth of a second of travel added to its length. **Not** a random roll, as it once read |
 | `OrientedApp_Width`          | —               | Half-width in the appearance's own frame, × `RectApp_Scale` — the type is never used in retail      |
 | `OrientedApp_Height`         | —               | Half-height, likewise                                                                               |
-| `ParticleApp_LifeName`       | `String`        | An effect started per particle and carried at it for its life; this appearance draws nothing itself. **No name, or one no library defines, and no particle is born** |
-| `ParticleApp_DeathName`      | `String`        | An effect started where a particle dies, unrotated. 16 of 18 name `""`                              |
-| `ParticleApp_UseDynamicRotation` | `Boolean`   | Turns the life effect's +Y onto the particle's velocity. True on 1 of the 17 that carry it          |
-| `ParticleApp_SmoothRotation` | `Boolean`       | Under the above, eases toward that turn by `speed × dt` of the way each frame instead of snapping. True on 1 of 17 |
-| `MeshApp_MeshName`           | `String`        | Meant to name `FX\MISC\<name>.3db`: `TLRtube` and three `beryl_asteroid*`. The game's mesh factory never reads it, and **every** `FxMeshAppearance` crashes the game when it spawns |
-| `MeshApp_MeshId`             | `Integer`       | Handed to the game beside the name and never read by it. `0` on all four                            |
-| `MeshApp_UseParticleTransform` | `Boolean`     | Whether `ParticleTransform` places the mesh. True on all four                                       |
-| `MeshApp_ParticleTransform`  | `Transform`     | The mesh's transform about the particle, sampled at its age over its life                           |
-| `RectApp_Scale`              | `AnimatedFloat` | Multiplies length and width. Default 1                                                              |
-| `RectApp_Length`             | `AnimatedFloat` | Full extent along the particle's velocity in space. Default 1. A beam never reads it               |
-| `RectApp_Width`              | `AnimatedFloat` | Full extent across it. Default 1                                                                    |
-| `RectApp_CenterOnPos`        | `Boolean`       | Set, the particle is the rectangle's centre; clear, its trailing edge, the rectangle reaching a full length ahead |
-| `RectApp_ViewingAngleFade`   | `Boolean`       | Fades as the rect turns end-on, or the perp edge-on: alpha falls between 30° and 10° off that line, and within 10° nothing is drawn |
-| `BeamApp_DisablePlaceHolder` | `Boolean`       | With no `FLBeamField` anchoring the beam, a head point is added where a particle of age zero would be, extrapolated from the two newest; this turns that off. True on 39 of the 128 that carry it |
-| `BeamApp_DupeFirstParticle`  | `Boolean`       | What the head point carries. Set, it copies the newest particle's width and colour. Clear, positions shift one place against properties and the oldest position is not drawn. True on 1 of 128 |
+| `ParticleApp_LifeName`       | `string`        | An effect started per particle and carried at it for its life; this appearance draws nothing itself. **No name, or one no library defines, and no particle is born** |
+| `ParticleApp_DeathName`      | `string`        | An effect started where a particle dies, unrotated. 16 of 18 name `""`                              |
+| `ParticleApp_UseDynamicRotation` | `boolean`   | Turns the life effect's +Y onto the particle's velocity. True on 1 of the 17 that carry it          |
+| `ParticleApp_SmoothRotation` | `boolean`       | Under the above, eases toward that turn by `speed × dt` of the way each frame instead of snapping. True on 1 of 17 |
+| `MeshApp_MeshName`           | `string`        | Meant to name `FX\MISC\<name>.3db`: `TLRtube` and three `beryl_asteroid*`. The game's mesh factory never reads it, and **every** `FxMeshAppearance` crashes the game when it spawns |
+| `MeshApp_MeshId`             | `integer`       | Handed to the game beside the name and never read by it. `0` on all four                            |
+| `MeshApp_UseParticleTransform` | `boolean`     | Whether `ParticleTransform` places the mesh. True on all four                                       |
+| `MeshApp_ParticleTransform`  | `transform`     | The mesh's transform about the particle, sampled at its age over its life                           |
+| `RectApp_Scale`              | `animatedFloat` | Multiplies length and width. Default 1                                                              |
+| `RectApp_Length`             | `animatedFloat` | Full extent along the particle's velocity in space. Default 1. A beam never reads it               |
+| `RectApp_Width`              | `animatedFloat` | Full extent across it. Default 1                                                                    |
+| `RectApp_CenterOnPos`        | `boolean`       | Set, the particle is the rectangle's centre; clear, its trailing edge, the rectangle reaching a full length ahead |
+| `RectApp_ViewingAngleFade`   | `boolean`       | Fades as the rect turns end-on, or the perp edge-on: alpha falls between 30° and 10° off that line, and within 10° nothing is drawn |
+| `BeamApp_DisablePlaceHolder` | `boolean`       | With no `FLBeamField` anchoring the beam, a head point is added where a particle of age zero would be, extrapolated from the two newest; this turns that off. True on 39 of the 128 that carry it |
+| `BeamApp_DupeFirstParticle`  | `boolean`       | What the head point carries. Set, it copies the newest particle's width and colour. Clear, positions shift one place against properties and the oldest position is not drawn. True on 1 of 128 |
 | `BeamApp_LineAppearance`     | —               | Set by nothing under its own hash. Librelancer gives the name to `0x1C65B7B9`, which draws the beam as untextured wireframe |
 
 `FLBeamAppearance` draws no sprite of its own: it chains its emitter's particles, newest first, into
@@ -193,18 +200,18 @@ Fields — each acts on the particles of the appearances that link it, before th
 
 | Name                        | Type            | Description                                                              |
 | --------------------------- | --------------- | ---------------------------------------------------------------------------- |
-| `RadialField_Radius`        | `AnimatedCurve` | The distance the attenuation is spread over. **Nothing is cut off at it**: beyond, a particle is pushed at the attenuation's last value |
-| `RadialField_Magnitude`     | `AnimatedCurve` | Target velocity per unit of distance from the node, positive outward: `v → D × Magnitude × Attenuation` |
-| `RadialField_Attenuation`   | `AnimatedFloat` | A curve over the distance divided by `Radius`, clamped at 1 — keyed on distance, not time. The one field property that is not a curve |
-| `RadialField_Approach`      | `AnimatedCurve` | How fast a particle's velocity converges on that target, per second: `v += (target − v) × k` |
-| `GravityField_Gravity`      | `AnimatedCurve` | Acceleration along the node's local −Y, **accumulated** — there is no approach                         |
-| `AirField_Magnitude`        | `AnimatedCurve` | A target velocity along the node's local +Y                                                            |
-| `AirField_Approach`         | `AnimatedCurve` | How fast a particle converges on it, as the radial field's                                             |
-| `TurbulenceField_Magnitude` | `AnimatedCurve` | The largest speed of a target drawn **at random per particle per frame** — there is no noise field     |
-| `TurbulenceField_Approach`  | `AnimatedCurve` | How fast a particle converges on that target                                                           |
-| `CollideField_Reflectivity` | `AnimatedCurve` | Scales the mirrored velocity of a particle turned back by the node's local XZ plane. The plane is **unbounded** and catches only a five-unit skin behind it |
-| `CollideField_Width`        | `AnimatedCurve` | **Never read** — not even sampled                                          |
-| `CollideField_Height`       | `AnimatedCurve` | **Never read**                                                             |
+| `RadialField_Radius`        | `animatedCurve` | The distance the attenuation is spread over. **Nothing is cut off at it**: beyond, a particle is pushed at the attenuation's last value |
+| `RadialField_Magnitude`     | `animatedCurve` | Target velocity per unit of distance from the node, positive outward: `v → D × Magnitude × Attenuation` |
+| `RadialField_Attenuation`   | `animatedFloat` | A curve over the distance divided by `Radius`, clamped at 1 — keyed on distance, not time. The one field property that is not a curve |
+| `RadialField_Approach`      | `animatedCurve` | How fast a particle's velocity converges on that target, per second: `v += (target − v) × k` |
+| `GravityField_Gravity`      | `animatedCurve` | Acceleration along the node's local −Y, **accumulated** — there is no approach                         |
+| `AirField_Magnitude`        | `animatedCurve` | A target velocity along the node's local +Y                                                            |
+| `AirField_Approach`         | `animatedCurve` | How fast a particle converges on it, as the radial field's                                             |
+| `TurbulenceField_Magnitude` | `animatedCurve` | The largest speed of a target drawn **at random per particle per frame** — there is no noise field     |
+| `TurbulenceField_Approach`  | `animatedCurve` | How fast a particle converges on that target                                                           |
+| `CollideField_Reflectivity` | `animatedCurve` | Scales the mirrored velocity of a particle turned back by the node's local XZ plane. The plane is **unbounded** and catches only a five-unit skin behind it |
+| `CollideField_Width`        | `animatedCurve` | **Never read** — not even sampled                                          |
+| `CollideField_Height`       | `animatedCurve` | **Never read**                                                             |
 
 `FLDustField` takes `SphereEmitter_MaxRadius` as its radius and **writes each particle's age** from
 where it sits in that sphere, the back rim faded, and kills it outside — so a dust particle's curves
@@ -280,22 +287,24 @@ The byte indexes a table of seven easing functions in retail `alchemy.dll` (`0x6
 
 A byte past 6 indexes off the end of the table. See [Easing outside the enum](#easing-outside-the-enum).
 
-### `WrapFlags`
+### `WrapMode`
 
-What a looped curve does past each end. **It is two four-bit modes, not a bitfield**: the low nibble
-governs keys before the first keyframe, the next nibble keys after the last, and `alchemy.dll`
-switches on each (`0x6246b00`, `0x6246c2f`):
+What a looped curve does past each end. **The file stores two four-bit modes, not a bitfield**: the
+low nibble governs keys before the first keyframe, the next nibble keys after the last, and
+`alchemy.dll` switches on each (`0x6246b00`, `0x6246c2f`). A `LoopAnimation` carries them apart, as
+`before` and `after`:
 
-| Mode | Before              | After              | Past the end                                                    |
-| ---- | ------------------- | ------------------ | --------------------------------------------------------------- |
-| 0    | —                   | —                  | Hold that end's value                                           |
-| 1    | `BeforeCycle`       | `AfterCycle`       | Wrap the key back through the range                             |
-| 2    | `BeforeCycleOffset` | `AfterCycleOffset` | Wrap, and add the curve's total rise once per range overrun      |
-| 3    | `BeforeOscillate`   | `AfterOscillate`   | Wrap, reflecting every other range                              |
-| 4    | `BeforeLinear`      | `AfterLinear`      | Extend along that end's tangent — in-tangent before, out after  |
+| Mode | `WrapMode`    | Past the end                                                   |
+| ---- | ------------- | -------------------------------------------------------------- |
+| 0    | `Hold`        | Hold that end's value                                          |
+| 1    | `Cycle`       | Wrap the key back through the range                            |
+| 2    | `CycleOffset` | Wrap, and add the curve's total rise once per range overrun    |
+| 3    | `Oscillate`   | Wrap, reflecting every other range                             |
+| 4    | `Linear`      | Extend along that end's tangent — in-tangent before, out after |
 
 A nibble past 4 falls through into the in-range search with an out-of-range key, which is undefined;
-`hermiteAt` holds. The word is 16 bits on disk and only its low byte is read.
+`hermiteWhen` holds, and the nibble is carried as read. The word is 16 bits on disk and only its low
+byte is read; the high byte is kept as `reserved` when it is non-zero, which no retail list is.
 
 The earlier reading — repeat, mirror, clamp and continue as independent bits — agrees with this one
 only on `0x01` and `0x10`. See [Corpus](#wrap-words).
@@ -305,7 +314,8 @@ only on `0x01` and `0x10`. See [Corpus](#wrap-words).
 - **`FloatKeyframe`** — `{ key, value }`
 - **`VectorKeyframe`** — `{ key, x, y, z }`
 - **`EaseAnimation<T>`** — `{ easing: EaseType, keyframes: T[] }`
-- **`LoopAnimation<T>`** — `{ default: number, flags: WrapFlags, keyframes: T[] }`
+- **`LoopAnimation<T>`** — `{ fallback, before: WrapMode, after: WrapMode, reserved?, keyframes: T[]
+  }`
 
 | Type            | Structure                                                                                                                                                                                                                        |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -313,29 +323,34 @@ only on `0x01` and `0x10`. See [Corpus](#wrap-words).
 | `AnimatedColor` | The same, with `VectorKeyframe` (RGB) inner keyframes                                                                                                                                                                            |
 | `AnimatedCurve` | Outer ease animation; inner keyframes are `LoopAnimation<VectorKeyframe>` evaluated as Hermite splines. `x` = position, `y` = in-tangent, `z` = out-tangent — a span reads `z` off the keyframe it leaves and `y` off the one it arrives at |
 
-### `Transform`
+### `AnimatedTransform`
 
 ```ts
-interface Transform {
+interface AnimatedTransform {
   order: TransformOrder // [number, number, number]
-  position?: TransformPoint // x, y, z as AnimatedCurve
-  rotation?: TransformPoint
-  scale?: TransformPoint
+  curves?: TransformCurves // all nine curves, or none
+}
+
+interface TransformCurves {
+  position: TransformPoint // x, y, z as AnimatedCurve
+  rotation: TransformPoint
+  scale: TransformPoint
 }
 ```
 
 The header is **four bytes, not a flag word**. `alchemy.dll`'s reader (`0x62280a0`) takes the first
 three as signed order bytes and packs them into one nibble word, `b0 << 8 | b1 << 4 | b2`; retail's
-`04 03 05` is the DLL's own default `0x435`, exported as `DefaultTransformOrder`. Nothing evaluates
-that word — only a copy, the reader and the writer touch it, and the transform builder applies
-`T · S · Rz · Rx · Ry` regardless — so `transformAt` ignores it too. What the three values name is
-the authoring tool's business; read as x = 3, y = 4, z = 5 they spell the builder's own order, y then
-x then z, but nothing in the DLL says so.
+`04 03 05` is the DLL's own default `0x435`, exported as `DEFAULT_TRANSFORM_ORDER`. Nothing
+evaluates that word — only a copy, the reader and the writer touch it, and the transform builder
+applies `T · S · Rz · Rx · Ry` regardless — so `transformAt` ignores it too. What the three values
+name is the authoring tool's business; read as x = 3, y = 4, z = 5 they spell the builder's own
+order, y then x then z, but nothing in the DLL says so.
 
-Of the fourth byte the reader tests **only the sign bit**: set, nine curves follow; clear, none do and
-the transform is the identity. The DLL's writer (`0x6227ef0`) derives it rather than storing it —
-`0x80` and the curves when any channel differs from its default, `0x00` alone when none does — and so
-does `writeTransform`: `0x80` when all three points are present, `0x00` otherwise. The other seven
+Of the fourth byte the reader tests **only the sign bit**: set, nine curves follow; clear, none do
+and the transform is the identity. The DLL's writer (`0x6227ef0`) derives it rather than storing it
+— `0x80` and the curves when any channel differs from its default, `0x00` alone when none does — and
+so does `writeTransform`: `0x80` when `curves` is present, `0x00` otherwise. The curves are one
+optional field rather than three because the file has no way to store some of them. The other seven
 bits are written as zero and never read, so they are not kept.
 
 ## Evaluation
@@ -351,7 +366,7 @@ Every rule below is ported from retail `alchemy.dll`, which evaluates in three p
 | ------------------------- | ------------------ | ----------- | -------------------------- |
 | Sparam (outer)            | `AnimatedFloat` / `AnimatedColor` / `AnimatedCurve` | `0x6207740` / `0x6207ef0` / `0x6206f90` | Holds the first or last inner list |
 | Eased list (inner)        | `FxRampSingle`, `FxRampColor` | `0x6242b10`, `0x62424b0` | Holds the first or last value |
-| Looped list (inner)       | `FxAnimatedSingle` | `0x62469f0` | By [`WrapFlags`](#wrapflags) |
+| Looped list (inner)       | `FxAnimatedSingle` | `0x62469f0` | By [`WrapMode`](#wrapmode) |
 
 - **A key on or past the last keyframe returns that keyframe's value**, at both eased levels, before
   any easing runs — so a `Step` list reaches its last value exactly on its last key.
@@ -386,19 +401,19 @@ enough to matter, and none may produce `NaN` or throw — the game loads all of 
 | ------------------------------ | ----------------------------------- |
 | Looped list spanning no range  | The single value, or the last of several on one key |
 | Easing byte outside `EaseType` | Linear — undefined in the game, see below |
-| Empty keyframe list            | `default`, or zero                  |
+| Empty keyframe list            | `fallback`, or zero                 |
 
-A list of one keyframe, or of several sharing a key, spans no range, and `limit` remapping the
-sampling key through it is a division by zero. `limit` returns the point itself before remapping.
+A list of one keyframe, or of several sharing a key, spans no range, and `wrapKey` remapping the
+sampling key through it is a division by zero. `wrapKey` returns the point itself before remapping.
 
-An empty looped list falls back to its `default` field, as the DLL does. An eased list has no such
+An empty looped list falls back to its `fallback` field, as the DLL does. An eased list has no such
 field, so an empty one contributes zero here — the DLL has no guard for one at all.
 
 ### Tangents scale with the interval
 
 A `VectorKeyframe`'s tangents are stored per unit of key, and the standard Hermite basis is over a
-normalized parameter, so it wants them per unit of span. The two convert by the width of the interval
-being crossed, and `hermiteAt` scales by `delta = end.key - start.key`.
+normalized parameter, so it wants them per unit of span. The two convert by the width of the
+interval being crossed, and `hermiteWhen` scales by `delta = end.key - start.key`.
 
 The DLL multiplies both tangents by the interval (`0x62469bf`). Retail key axes are almost never one
 unit wide, so dropping the conversion multiplies every tangent by `1/delta` — on a typical 0.03-wide interval, an overshoot of thirty times. What keeps the mistake
@@ -423,9 +438,9 @@ The two 6s once counted here are the table's seventh entry, `AutoInverse`.
 
 ```ts
 interface NodeInstance {
-  crc: number      // CRC of the referenced node name, case-sensitive; ControlRootId on the control root
+  crc: number      // CRC of the referenced node name, case-sensitive; CONTROL_ROOT_ID on the root
   flags: number    // non-zero marks a container that references no node
-  sort: number     // serialization order
+  sort?: number    // on-disk entry position
   id?: number      // on-disk entry identifier
   children: NodeInstance[]
   targets: NodeInstance[]
@@ -433,8 +448,7 @@ interface NodeInstance {
 
 interface Effect {
   name: string
-  center?: Vector3 // float32 × 3, version > 1 only: bounding sphere centre, effect space
-  radius?: number // float32, version > 1 only: 0 where not stated
+  bounds?: BoundingSphere // version > 1 only: float32 × 4, centre in effect space then radius
   children: NodeInstance[]
 }
 
@@ -452,14 +466,17 @@ Each effect is serialized as:
 4. `int32` pair count + flat `Pair[]` array
 
 The flat `Entry` structure `{ flags, crc, parentId, childId }` is reassembled into the tree using
-`assemble`/`flatten` from `hierarchy.ts`. `parentId >= WorldId (0x8000)` means the instance is a root
-child.
+`assemble`/`flatten` from `hierarchy.ts`. `parentId >= WORLD_ID (0x8000)` means the instance is a
+root child.
+
+`sort` and `id` are both round-trip bookkeeping, and both optional. The writer puts entries with a
+`sort` in that order and the rest after them, breadth-first; a tree built by hand needs neither.
 
 Instances form a tree via `children`; cross-tree links — an appearance bound to an emitter — are
 `targets`, serialized as the separate flat `Pair` records. Walking only `children` finds the nodes
 and none of the pairings.
 
-### Two fields, two jobs: `flags` makes a container, `ControlRootId` makes it the root
+### Two fields, two jobs: `flags` makes a container, `CONTROL_ROOT_ID` makes it the root
 
 **Both fields matter, and they decide different things.** `alchemy.dll`'s effect build
 (`0x621efbc`–`0x621f0a0`) reads each entry and branches on `flags` alone:
@@ -544,18 +561,20 @@ implementation detail. Reading those INIs is the consumer's.
 | `AnimatedColor`      | type      | `EaseAnimation<Keyframe & EaseAnimation<VectorKeyframe>>` — a colour over param and over age.      |
 | `AnimatedCurve`      | type      | `EaseAnimation<Keyframe & LoopAnimation<VectorKeyframe>>` — the looping form.                      |
 | `AnimatedFloat`      | type      | `EaseAnimation<Keyframe & EaseAnimation<FloatKeyframe>>`.                                          |
+| `AnimatedTransform`  | interface | `{ order, curves? }` — an animated transform, its nine curves all present or all absent.           |
 | `Animation`          | interface | `{ keyframes: T[] }`, the base of both animation forms.                                            |
 | `Blending`           | interface | `{ source: BlendingMode, target: BlendingMode }`.                                                  |
 | `BlendingMode`       | enum      | Blend factor, which is `D3DBLEND` verbatim.                                                        |
 | `colorAt`            | function  | `(animation: AnimatedColor, p, t): Vector3`                                                        |
-| `ControlRootId`      | const     | CRC of `Control Root`, which makes a container the root a placement reaches.                       |
+| `colorWhen`          | function  | `(animation: EaseAnimation<VectorKeyframe>, key): Vector3` — a colour list, eased in bytes.        |
+| `CONTROL_ROOT_ID`    | const     | CRC of `Control Root`, which makes a container the root a placement reaches.                       |
 | `curveAt`            | function  | `(animation: AnimatedCurve, p, t): number`                                                         |
-| `DefaultTransformOrder` | const  | The order bytes every retail transform carries, and `alchemy.dll`'s own default (`0x435`).         |
+| `DEFAULT_TRANSFORM_ORDER` | const | The order bytes every retail transform carries, and `alchemy.dll`'s own default (`0x435`).       |
 | `ease`               | function  | `(type: EaseType, a, b, t): number`                                                                |
 | `EaseAnimation`      | interface | An `Animation` with an `easing` type.                                                              |
 | `EaseType`           | enum      | Easing animation type. The list may be incomplete.                                                 |
 | `easeVector`         | function  | `(type: EaseType, a: Vector3, b: Vector3, t): Vector3`                                             |
-| `Effect`             | interface | One named effect: a tree of `NodeInstance` children, plus four undecoded fields.                   |
+| `Effect`             | interface | One named effect: a tree of `NodeInstance` children, and its version 1.1 `bounds`.                 |
 | `EffectLibrary`      | interface | Effect library.                                                                                    |
 | `floatAt`            | function  | `(animation: AnimatedFloat, p, t): number`                                                         |
 | `FloatKeyframe`      | interface | `Keyframe & { value: number }`.                                                                    |
@@ -563,33 +582,33 @@ implementation detail. Reading those INIs is the consumer's.
 | `getNodeByCRC`       | function  | Finds node by CRC.                                                                                 |
 | `getNodeByName`      | function  | Finds node by name.                                                                                |
 | `getNodeName`        | function  | Retrieves alchemy node name from property `Node_Name`.                                             |
-| `hasAlchemy`         | function  | Whether the directory carries an effect library, asked before reading it.                          |
-| `hermiteAt`          | function  | `(animation: LoopAnimation<VectorKeyframe>, key): number`                                          |
-| `limit`              | function  | `(flags: WrapFlags, start, end, key): { key, count }`                                              |
-| `LoopAnimation`      | interface | An `Animation` with a `default` and `WrapFlags`.                                                   |
+| `hasAlchemy`         | function  | Whether the directory carries both libraries: exactly when `readAlchemy` returns something.        |
+| `hermiteWhen`        | function  | `(animation: LoopAnimation<VectorKeyframe>, key): number` — one looped list, as a Hermite spline.  |
+| `LoopAnimation`      | interface | An `Animation` with a `fallback`, and a `WrapMode` for each end.                                   |
 | `Node`               | interface | Alchemy node. Type determines how it is used.                                                      |
-| `NodeInstance`       | interface | One placement of a node inside an effect: `crc`, `flags`, `sort`, children.                        |
+| `NodeInstance`       | interface | One placement of a node inside an effect: `crc`, `flags`, children and targets.                    |
 | `NodeLibrary`        | interface | Alchemy node library.                                                                              |
 | `NodeType`           | type      | Known alchemy node types.                                                                          |
 | `Property`           | type      | Alchemy node property.                                                                             |
 | `PropertyName`       | type      | Known alchemy node property names.                                                                 |
-| `PropertyType`       | enum      | Alchemy node property type.                                                                        |
+| `PropertyOf`         | type      | Narrows `Property` to the arm of a given `type`.                                                   |
+| `PropertyType`       | type      | Which of the nine kinds a property is: `'boolean'` … `'animatedCurve'`.                            |
 | `readAlchemy`        | function  | Reads both libraries from a directory, looking for the two names within.                           |
 | `readEffectLibrary`  | function  | Reads effect library.                                                                              |
 | `readNodeLibrary`    | function  | Reads node library.                                                                                |
+| `SampledTransform`   | interface | A sampled transform: `position`, `rotation`, `scale`.                                              |
 | `setNodeName`        | function  | Assigns alchemy node name.                                                                         |
 | `sparamLevel`        | function  | `(animation: EaseAnimation<T>, p): SparamLevel<T> \| undefined` — the sparam level alone.          |
 | `SparamLevel`        | interface | `{ lower, upper, span, easing }`: the two inner lists `p` lands between, and how they blend.       |
-| `Transform`          | interface | Animated transform.                                                                                |
-| `transformAt`        | function  | `(point: Transform, p, t): TransformAt`                                                            |
-| `TransformAt`        | interface | A sampled transform: `position`, `rotation`, `scale`.                                              |
+| `transformAt`        | function  | `(transform: AnimatedTransform, p, t): SampledTransform`                                           |
+| `TransformCurves`    | interface | `{ position, rotation, scale }` — the nine curves, as three `TransformPoint`s.                     |
 | `TransformOrder`     | type      | The three order bytes a transform opens with, stored but never evaluated.                          |
 | `TransformPoint`     | interface | Animated transform point — three `AnimatedCurve`s.                                                 |
 | `transformPointAt`   | function  | `(point: TransformPoint, p, t): Vector3`                                                           |
 | `VectorKeyframe`     | interface | `Keyframe & { value: Vector3 }`.                                                                    |
-| `vectorWhen`         | function  | Empty vector list, as `floatWhen`.                                                                 |
-| `WorldId`            | const     | Parent identifier standing in for the world, i.e. the instance is a root.                          |
-| `WrapFlags`          | enum      | Looped animation out-of-bounds toggles.                                                            |
+| `WORLD_ID`           | const     | Parent identifier standing in for the world, i.e. the instance is a root.                          |
+| `wrapKey`            | function  | `(animation: { before, after }, start, end, key): { key, count }`                                  |
+| `WrapMode`           | enum      | What a looped curve does past one end: hold, cycle, cycle with offset, oscillate, linear.          |
 | `writeAlchemy`       | function  | Writes both libraries as the two sibling directories they are.                                     |
 | `writeEffectLibrary` | function  | Writes effect library.                                                                             |
 | `writeNodeLibrary`   | function  | Writes node library.                                                                               |
@@ -648,7 +667,7 @@ one or two each. `FX/EXPLOSIONS/gf_small_damage.ale`'s `gf_small_damage_smoke2.a
 Across the 6,648 instances, `flags` takes only the values 0 (5,505 times) and 1 (1,143 times), every
 flagged instance carries `0xee223b51`, and no unflagged one does. The two conditions coincide
 perfectly, and each does its own job in the DLL: the flag makes the container and the CRC makes it
-the root ([above](#two-fields-two-jobs-flags-makes-a-container-controlrootid-makes-it-the-root)).
+the root ([above](#two-fields-two-jobs-flags-makes-a-container-control_root_id-makes-it-the-root)).
 
 The container occurs 1,143 times, always at root, never as either end of a link, and its direct
 children always have `flags` 0; 1,143 of the 1,213 effects have exactly one and the remaining 70 have
@@ -671,16 +690,16 @@ keeps it on the effect (`+0x34`), and hands it back only to its own library writ
 thing the tool did: sizing a view.
 
 **272 of the 972 effects in 1.1 libraries set it**, nearly all of them weapons; the rest hold four
-zeros, and a centre is never set without a radius. The radius ranges up to 56. On a version 1 library
-the block is absent and reads back as zero — and the DLL's writer always writes 1.1, so a version 1
-library it saves comes back 1.1 with zeros.
+zeros, and a centre is never set without a radius. The radius ranges up to 56. On a version 1
+library the block is absent, which the DLL takes as zero and the reader leaves as no `bounds` at all
+— and the DLL's writer always writes 1.1, so a version 1 library it saves comes back 1.1 with zeros.
 
 ### Degenerate animation data
 
 The 27,662 looped lists behind the 26,617 `AnimatedCurve` properties break down as 14,127 empty,
-11,791 holding a single keyframe, and 1,744 holding more — 40 of which put every keyframe on the same
-key. Before `limit` was fixed, the division by zero put `NaN` into 10,831 of the 26,617 curve
-properties and 1,155 of the 1,289 enabled transforms; wrap flags that clamp masked it.
+11,791 holding a single keyframe, and 1,744 holding more — 40 of which put every keyframe on the
+same key. Before `wrapKey` was fixed, the division by zero put `NaN` into 10,831 of the 26,617 curve
+properties and 1,155 of the 1,289 enabled transforms; wrap modes that clamp masked it.
 
 Seven retail properties hold an empty eased list: three where it is the only list (`BasicApp_Rotate`
 on the rain appearances, so the property is zero throughout), and four in `no_engine.app` where it
@@ -754,7 +773,7 @@ Both curves are a fade in, a hold, and a fade out, with the outer easing set to 
 ### Wrap words
 
 Across every looped list in the corpus — `AnimatedCurve` properties and the nine curves of each
-enabled transform — six words occur:
+enabled transform — six words occur, and none sets the high byte, so no list carries `reserved`:
 
 | Word   | Before      | After       | Lists  | Spanning a range |
 | ------ | ----------- | ----------- | ------ | ---------------- |
@@ -806,11 +825,11 @@ write correctly — only the labels are missing.
 
 | Hash         | Type            | Node type          | Observed values |
 | ------------ | --------------- | ------------------ | --------------- |
-| `0x1C65B7B9` | `Boolean`       | `FLBeamAppearance` | always `false`  |
-| `0x03503B61` | `Boolean`       | `FLBeamAppearance` | always `true`   |
-| `0x0ABE0402` | `Boolean`       | `FLBeamAppearance` | always `false`  |
-| `0x0BA0B3BB` | `Transform`     | `FLBeamAppearance` | —               |
-| `0xE63AA248` | `AnimatedCurve` | `FLDustField`      | —               |
+| `0x1C65B7B9` | `boolean`       | `FLBeamAppearance` | always `false`  |
+| `0x03503B61` | `boolean`       | `FLBeamAppearance` | always `true`   |
+| `0x0ABE0402` | `boolean`       | `FLBeamAppearance` | always `false`  |
+| `0x0BA0B3BB` | `transform`     | `FLBeamAppearance` | —               |
+| `0xE63AA248` | `animatedCurve` | `FLDustField`      | —               |
 
 `BeamApp_LineAppearance`, which the name list does carry, never appears in retail under its own hash
 — `getResourceId('BeamApp_LineAppearance', true)` is `0xED1AC1D7`, which is none of the five. That

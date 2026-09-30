@@ -1,11 +1,16 @@
 # Math
 
-`Vector3`, `Vector4`, `Quat`, `Matrix3`, `Matrix4` and `Transform` are each an interface plus a
-companion `const` namespace of the same name carrying the operations —
+`Vector3`, `Vector4`, `Quat`, `Matrix3`, `Matrix4`, `Transform`, `BoundingBox` and
+`BoundingSphere` are each an interface plus a companion `const` namespace of the same name carrying
+the operations —
 [Invariant 5](../refs/ARCHITECTURE.md#invariants): math is opt-in, never built into the type design.
 `generateConvexHull` is the one piece of geometry construction that lives here rather than in
 [SURFACE.md](SURFACE.md#convex-hull), because a convex hull is a fact about a point set, not a
 policy; `createHullGeometry` in that module is the bridge back.
+
+The two bounding volumes are shared rather than declared per format: `VMeshRef`'s box and sphere,
+a surface part's extent and an Alchemy effect's sphere are the same two shapes, `{ min, max }` and
+`{ center, radius }`, whatever order each file stores their components in.
 
 ## API
 
@@ -16,6 +21,8 @@ policy; `createHullGeometry` in that module is the bridge back.
 | `AnimationRange`     | interface | Animation query result: the keyframes either side of a key, and the blend. |
 | `at`                 | function  | `<T extends Keyframe>(keyframes, key): AnimationRange<T>`                  |
 | `AxisAngle`          | interface | `{ axis: Vector3, angle: number }`                                         |
+| `BoundingBox`        | interface | Axis-aligned box `{ min, max }`, and the namespace of operations on it.    |
+| `BoundingSphere`     | interface | Sphere `{ center, radius }`, and the namespace of operations on it.        |
 | `clamp`              | function  | `(a, min?, max?): number`                                                  |
 | `ConvexHull`         | interface | A convex hull, holding only the points that are on it.                     |
 | `ConvexHullOptions`  | interface | What a caller decides about a hull: a point budget and a tolerance.        |
@@ -45,7 +52,7 @@ policy; `createHullGeometry` in that module is the bridge back.
 | `Vector3`            | interface | 3D vector, and the namespace of operations on it.                          |
 | `Vector4`            | interface | 4D vector, and the namespace of operations on it.                          |
 
-The six namespaces carry the work, and none of it is reachable from the type name alone:
+The eight namespaces carry the work, and none of it is reachable from the type name alone:
 
 | Namespace   | Members                                                                                                                                                                                                                                                                                              |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -55,6 +62,8 @@ The six namespaces carry the work, and none of it is reachable from the type nam
 | `Matrix3`   | `identity`, `is`, `isNaN`, `isFinite`, `equal`, `transform`, `copy`, `determinant`, `transpose`, `invert`, `multiply`, `axisAngle`, `fromQuaternion`, `lookAt`, `push`, `read`, `write`                                                                                                              |
 | `Matrix4`   | `identity`, `is`, `isNaN`, `isFinite`, `equal`, `copy`, `fromRotationTranslation`, `fromTRS`, `fromTransform`, `translation`, `scaling`, `transform`, `transformPoint`, `transformDirection`, `multiply`, `transpose`, `determinant`, `invert`, `toMatrix3`, `toTransform`, `decompose`, `toArray`, `toArray3`, `fromArray`, `perspectiveLH`, `orthographicLH`, `lookAtLH`, `push` |
 | `Transform` | `identity`, `copy`, `transform`, `revert`, `multiply`, `interpolate`, `push`                                                                                                                                                                                                                         |
+| `BoundingBox` | `copy`, `fromPoints`                                                                                                                                                                                                                                                                               |
+| `BoundingSphere` | `copy`                                                                                                                                                                                                                                                                                          |
 
 **`Vector4` mirrors `Vector3` except where four dimensions have no counterpart:**
 

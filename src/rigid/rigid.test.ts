@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import Directory from '#/utf/directory.js'
 import Matrix3 from '#/math/matrix3.js'
 import { listTreeElements } from '#/utility/tree.js'
-import { isCompoundModel, type Model } from '#/compound/model.js'
+import { isCompound, type CompoundNode } from '#/compound/model.js'
 import type { Hardpoint } from '#/compound/hardpoint.js'
 import type { Joint } from '#/compound/joint.js'
 import type { MultiLevel } from '#/vmesh/multilevel.js'
@@ -23,7 +23,7 @@ const reference = (meshId: number): VMeshRef => ({
   indexCount: 36,
   groupStart: 0,
   groupCount: 1,
-  boundingBox: { a: { x: -1, y: -1, z: -1 }, b: { x: 1, y: 1, z: 1 } },
+  boundingBox: { min: { x: -1, y: -1, z: -1 }, max: { x: 1, y: 1, z: 1 } },
   boundingSphere: { center: { x: 0, y: 0, z: 0 }, radius: 1.75 },
 })
 
@@ -39,13 +39,11 @@ const multiLevel = (name: string): MultiLevel => ({
 })
 
 const wireframe = (name: string): VMeshWire => ({
-  data: {
-    meshId: getResourceId(`${name}.vms`),
-    vertexStart: 0,
-    vertexCount: 8,
-    vertexRange: 8,
-    indices: new Uint16Array([0, 1, 1, 2, 2, 3, 3, 0]),
-  },
+  meshId: getResourceId(`${name}.vms`),
+  vertexStart: 0,
+  vertexCount: 8,
+  vertexRange: 8,
+  indices: new Uint16Array([0, 1, 1, 2, 2, 3, 3, 0]),
 })
 
 const orientation = Matrix3.copy({ x: { x: 0, y: 1, z: 0 }, y: { x: -1, y: 0, z: 0 } })
@@ -83,13 +81,13 @@ const rigid = ({ hardpoints = [], part, wireframe }: Partial<Rigid> = {}): Rigid
 
 const camera = (): Camera => ({ type: 'camera', fovX: 0.75, fovY: 0.5, zNear: 0.25, zFar: 1000 })
 
-const fixed: Joint = { type: 'fixed', position: { x: 0, y: 0, z: 0 }, rotation: orientation }
+const fixed: Joint = { type: 'fixed', position: { x: 0, y: 0, z: 0 }, orientation }
 
 const revolute: Joint = {
   type: 'revolute',
   position: { x: 1, y: 0, z: -2 },
   offset: { x: 0, y: 0, z: 0 },
-  rotation: orientation,
+  orientation,
   axis: { x: 0, y: 1, z: 0 },
   min: 0,
   max: 1.5,
@@ -98,14 +96,14 @@ const revolute: Joint = {
 interface PartOptions {
   index?: number
   joint?: Joint
-  children?: Model<Rigid | Camera | Sphere>[]
+  children?: CompoundNode<Rigid | Camera | Sphere>[]
 }
 
 const compoundPart = (
   name: string,
   part: Rigid | Camera | Sphere,
   { index = 0, joint, children = [] }: PartOptions = {},
-): Model<Rigid | Camera | Sphere> => ({
+): CompoundNode<Rigid | Camera | Sphere> => ({
   type: 'compound',
   name,
   index,
@@ -120,7 +118,7 @@ const compoundPart = (
  * a revolute joint carrying the hardpoint that drives it, and a cockpit camera hanging off the
  * root — the three fragment kinds in one document.
  */
-const model = (): Model<Rigid | Camera | Sphere> =>
+const model = (): CompoundNode<Rigid | Camera | Sphere> =>
   compoundPart(
     'Root',
     rigid({
@@ -210,20 +208,22 @@ describe('a compound document, the shape a .cmp has', () => {
   })
 
   it('writes a document a compound reader recognises', () => {
-    strictEqual(isCompoundModel(writeRigidModel(model())), true)
+    strictEqual(isCompound(writeRigidModel(model())), true)
   })
 
   it('keeps the hierarchy the constraints describe', () => {
     const result = roundTrip(model())
 
     deepStrictEqual(
-      [...listTreeElements(result as Model<Rigid | Camera | Sphere>)].map(({ name }) => name),
+      [...listTreeElements(result as CompoundNode<Rigid | Camera | Sphere>)].map(
+        ({ name }) => name,
+      ),
       ['Root', 'baydoor01', 'cockpit_cam'],
     )
   })
 
   it('carries each joint onto the part it constrains', () => {
-    const result = roundTrip(model()) as Model<Rigid | Camera | Sphere>
+    const result = roundTrip(model()) as CompoundNode<Rigid | Camera | Sphere>
 
     deepStrictEqual(
       result.children.map(({ joint }) => joint?.type),
@@ -242,7 +242,7 @@ describe('a compound document, the shape a .cmp has', () => {
   // The three fragment kinds are dispatched on what the directory holds, and geometry is the one
   // with no marker of its own — so a camera or sphere misread as geometry is a silent empty part.
   it('reads each fragment back as the kind it was written as', () => {
-    const result = roundTrip(model()) as Model<Rigid | Camera | Sphere>
+    const result = roundTrip(model()) as CompoundNode<Rigid | Camera | Sphere>
 
     deepStrictEqual(
       [...listTreeElements(result)].map(({ name, part }) => `${name}:${part.type}`),
@@ -251,14 +251,14 @@ describe('a compound document, the shape a .cmp has', () => {
   })
 
   it('round-trips a camera part inside a hierarchy, wrapper included', () => {
-    const result = roundTrip(model()) as Model<Rigid | Camera | Sphere>
+    const result = roundTrip(model()) as CompoundNode<Rigid | Camera | Sphere>
     const cockpit = result.children.find(({ name }) => name === 'cockpit_cam')
 
     deepStrictEqual(cockpit?.part, camera())
   })
 
   it('round-trips the revolute hardpoint that drives the moving part', () => {
-    const result = roundTrip(model()) as Model<Rigid | Camera | Sphere>
+    const result = roundTrip(model()) as CompoundNode<Rigid | Camera | Sphere>
     const door = result.children.find(({ name }) => name === 'baydoor01')
 
     strictEqual(door?.part.type, 'rigid')

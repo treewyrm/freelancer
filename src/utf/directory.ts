@@ -1,9 +1,18 @@
 import BufferView from '#/utility/bufferview.js'
 import Dictionary from '#/utility/dictionary.js'
 import File from './file.js'
-import { getResource, type Hashable, setResource } from '#/hash.js'
+import { getResource, getResourceId, type Hashable, setResource } from '#/hash.js'
 import { fromDOSTimestamp, fromFileTime, toDOSTimestamp, toFileTime } from '#/utility/timestamp.js'
 import { toHex } from '#/utility/string.js'
+import {
+  DIRECTORY_ATTRIBUTE,
+  ENTRY_BYTE_LENGTH,
+  FILE_ATTRIBUTE,
+  HEADER_BYTE_LENGTH,
+  SIGNATURE,
+  VERSION,
+  VERSION_BYTE_LENGTH,
+} from './data.js'
 import { type Entry } from './types.js'
 
 /** One pending entry in the breadth-first read, and the directory it belongs under. */
@@ -33,29 +42,30 @@ interface WriteQueueItem {
   previous?: Partial<Entry>
 }
 
-/** UTF structure directory.  */
+/**
+ * Whether a buffer starts with the UTF signature and version. Check this, never the file extension.
+ * @param data File bytes.
+ */
+export const isUTF = (data: ArrayBufferView | ArrayBufferLike): boolean => {
+  const view = ArrayBuffer.isView(data)
+    ? new DataView(data.buffer, data.byteOffset, data.byteLength)
+    : new DataView(data)
+
+  return (
+    view.byteLength >= VERSION_BYTE_LENGTH &&
+    view.getUint32(0, true) === SIGNATURE &&
+    view.getUint32(4, true) === VERSION
+  )
+}
+
+/**
+ * UTF structure directory.
+ *
+ * Lookups (`getDirectory`, `getFile`, `delete`) take names or hashes and compare by
+ * {@link getResourceId}, the way the game resolves a UTF name. The methods that create entries
+ * (`ensureDirectory`, `ensureFile`) need a name to give them, so they take strings.
+ */
 export default class Directory {
-  /** Header signature bytes. */
-  static readonly SIGNATURE = 0x20465455
-
-  /** Header version. It's the only known version. */
-  static readonly VERSION = 0x101
-
-  /** File attribute. */
-  static readonly FILE = 0x80
-
-  /** Directory attribute. */
-  static readonly DIRECTORY = 0x10
-
-  /** Entry byte length. */
-  static readonly ENTRY_BYTE_LENGTH = 0x2c
-
-  /** Version byte length. */
-  static readonly VERSION_BYTE_LENGTH = 0x8
-
-  /** Header byte length. */
-  static readonly HEADER_BYTE_LENGTH = 0x30
-
   constructor(
     /** Directory name. */
     public name = '\\',
@@ -96,7 +106,7 @@ export default class Directory {
    * @param path Path to directory relative to this directory
    * @returns
    */
-  setDirectory(...path: string[]): Directory {
+  ensureDirectory(...path: string[]): Directory {
     let parent: Directory = this
     let name: string | undefined
 
@@ -130,11 +140,11 @@ export default class Directory {
    * @param path Path to file relative to this directory
    * @returns
    */
-  setFile(...path: string[]): File {
+  ensureFile(...path: string[]): File {
     const name = path.at(-1)
     if (!name) throw new RangeError('Missing file name')
 
-    const parent = this.setDirectory(...path.slice(0, -1))
+    const parent = this.ensureDirectory(...path.slice(0, -1))
 
     let file = getResource(parent.files, ({ name }) => name, name)
     if (!file) parent.children.push((file = new File(name)))
@@ -143,30 +153,32 @@ export default class Directory {
   }
 
   /**
-   * Deletes entry at path.
+   * Deletes every entry at path, compared the way {@link getDirectory} compares.
    * @param path Path to entry relative to this directory
    * @returns
    */
-  delete(...path: string[]): this {
-    const name = path.at(-1)?.toLowerCase()
-    if (!name) return this
+  delete(...path: Hashable[]): this {
+    const name = path.at(-1)
+    if (name === undefined || name === '') return this
 
     const parent = this.getDirectory(...path.slice(0, -1))
     if (!parent) return this
 
+    const id = getResourceId(name)
     let index: number
 
-    while ((index = parent.children.findIndex((child) => child.name.toLowerCase() === name)) >= 0)
+    while ((index = parent.children.findIndex((child) => getResourceId(child.name) === id)) >= 0)
       parent.children.splice(index, 1)
 
     return this
   }
 
   /**
-   * Appends directories and files replacing existing entries.
+   * Sets directories and files, each replacing the existing entry with its name or appending when
+   * there is none.
    * @param values
    */
-  append(...values: (Directory | File)[]): this {
+  set(...values: (Directory | File)[]): this {
     for (const value of values) setResource(this.children, ({ name }) => name, value)
     return this
   }
@@ -181,8 +193,8 @@ export default class Directory {
     const signature = view.readUint32()
     const version = view.readUint32()
 
-    if (signature !== this.SIGNATURE) throw new Error(`Invalid header: ${toHex(signature)}`)
-    if (version !== this.VERSION) throw new RangeError(`Invalid version: ${version}`)
+    if (signature !== SIGNATURE) throw new Error(`Invalid header: ${toHex(signature)}`)
+    if (version !== VERSION) throw new RangeError(`Invalid version: ${version}`)
 
     const treeOffset = view.readUint32()
     const treeSize = view.readUint32()
@@ -200,7 +212,7 @@ export default class Directory {
     const unusedSize = view.readUint32()
     const filetime = fromFileTime(view.readBigUint64())
 
-    if (entrySize !== this.ENTRY_BYTE_LENGTH)
+    if (entrySize !== ENTRY_BYTE_LENGTH)
       throw new RangeError(`Invalid entry byte length: ${entrySize}`)
     if (treeOffset > view.byteLength)
       throw new RangeError(`Tree offset is out of bounds: ${treeOffset}`)
@@ -251,13 +263,13 @@ export default class Directory {
       // Add next sibling to queue (excluding root).
       if (parent && nextOffset > 0) queue.push({ offset: nextOffset, parent })
 
-      if (fileAttributes & this.FILE && parent) {
+      if (fileAttributes & FILE_ATTRIBUTE && parent) {
         const start = dataOffset + childOffset
         const end = start + dataSizeUsed
         const buffer = view.buffer.slice(view.byteOffset + start, view.byteOffset + end)
 
         parent.children.push(new File(name, new Uint8Array(buffer)))
-      } else if (fileAttributes & this.DIRECTORY) {
+      } else if (fileAttributes & DIRECTORY_ATTRIBUTE) {
         const directory = new this(name)
 
         // Attach to parent or set root.
@@ -277,7 +289,7 @@ export default class Directory {
    * @returns
    */
   write(): Uint8Array {
-    const entrySize = Directory.ENTRY_BYTE_LENGTH
+    const entrySize = ENTRY_BYTE_LENGTH
 
     const now = new Date()
 
@@ -324,7 +336,7 @@ export default class Directory {
         if (!(target.buffer instanceof ArrayBuffer))
           throw new TypeError(`Invalid buffer type in file ${target.name}`)
 
-        entry.fileAttributes = Directory.FILE
+        entry.fileAttributes = FILE_ATTRIBUTE
         entry.childOffset = dataSize
         entry.dataSizeAllocated =
           entry.dataSizeUsed =
@@ -334,7 +346,7 @@ export default class Directory {
         files.push(target)
         dataSize += target.byteLength
       } else {
-        entry.fileAttributes = Directory.DIRECTORY
+        entry.fileAttributes = DIRECTORY_ATTRIBUTE
 
         let last: Partial<Entry> | undefined
 
@@ -361,7 +373,7 @@ export default class Directory {
     // Some older files have dictionary preceeding entries tree.
 
     /** Tree follows version and header. */
-    const treeOffset = Directory.VERSION_BYTE_LENGTH + Directory.HEADER_BYTE_LENGTH
+    const treeOffset = VERSION_BYTE_LENGTH + HEADER_BYTE_LENGTH
 
     /** Dictionary follows entry list. */
     const namesOffset = treeOffset + treeSize
@@ -369,15 +381,15 @@ export default class Directory {
     /** Data follows dictionary. */
     const dataOffset = namesOffset + namesSize
 
-    const version = BufferView.allocate(Directory.VERSION_BYTE_LENGTH)
-      .writeUint32(Directory.SIGNATURE)
-      .writeUint32(Directory.VERSION)
+    const version = BufferView.allocate(VERSION_BYTE_LENGTH)
+      .writeUint32(SIGNATURE)
+      .writeUint32(VERSION)
 
-    const header = BufferView.allocate(Directory.HEADER_BYTE_LENGTH)
+    const header = BufferView.allocate(HEADER_BYTE_LENGTH)
       .writeUint32(treeOffset)
       .writeUint32(treeSize)
       .writeUint32(0)
-      .writeUint32(Directory.ENTRY_BYTE_LENGTH)
+      .writeUint32(ENTRY_BYTE_LENGTH)
       .writeUint32(namesOffset ?? 0)
       .writeUint32(namesSize ?? 0)
       .writeUint32(namesSize ?? 0)

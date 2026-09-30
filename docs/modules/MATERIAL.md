@@ -42,7 +42,7 @@ absent rather than being defaulted on the way out. Measurement in
 
 There is no `Ot_name`: opacity comes from the alpha channel of the diffuse texture.
 
-`materialTypes` lists the types retail authors; `mappedMaterialTypes` lists more the engine knows
+`MATERIAL_TYPES` lists the types retail authors; `MAPPED_MATERIAL_TYPES` lists more the engine knows
 that no shipped asset selects — `NomadMaterial`, `GlassMaterial`, `HUDIconMaterial`, `NullMaterial`
 and the rest. Those reach a mesh through `[MaterialMap]` in `EXE/dacom.ini` — plain text, not BINI —
 which rewrites a material's type when its name matches a pattern:
@@ -108,7 +108,7 @@ flmaterials.dll @ 0x1223c
   "NomadTexture Name\0"  "nt_name\0"  "NomadRGB1_NomadAlpha1\0"  "Diffuse V Address Mode\0"
 ```
 
-`defaultNomadTextureName` exports it. It resolves to a real texture — `SHIPS/NOMAD/nomad_fx.txm`
+`DEFAULT_NOMAD_TEXTURE_NAME` exports it. It resolves to a real texture — `SHIPS/NOMAD/nomad_fx.txm`
 holds one entry of that name, the only place in the game data it appears. No retail material carries
 an `Nt_name`, so the default is the entire mechanism by which a nomad hull gets its texture.
 
@@ -162,19 +162,20 @@ string tables; that scan can only rule out further *string* defaults, which it d
 
 | Export                    | Kind      |                                                                            |
 | ------------------------- | --------- | -------------------------------------------------------------------------- |
-| `defaultNomadTextureName` | const     | Default `Nt_name`, compiled into `EXE/flmaterials.dll`.                    |
+| `DEFAULT_NOMAD_TEXTURE_NAME` | const  | Default `Nt_name`, compiled into `EXE/flmaterials.dll`.                    |
 | `getMaterial`             | function  | Finds a material by name or resource CRC, the way a mesh's reference does. |
-| `KnownMaterialType`       | type      | A type `materialTypes` or `mappedMaterialTypes` names.                     |
-| `mappedMaterialTypes`     | const     | Shader names the engine knows that no shipped asset selects.               |
+| `KnownMaterialType`       | type      | A type `MATERIAL_TYPES` or `MAPPED_MATERIAL_TYPES` names.                  |
+| `MAPPED_MATERIAL_TYPES`   | const     | Shader names the engine knows that no shipped asset selects.               |
 | `Material`                | interface | One entry of a `Material library`.                                         |
+| `MATERIAL_TYPES`          | const     | Material types attested in retail assets, most common first.               |
+| `MaterialLibrary`         | type      | `Material[]` — the materials of a `Material library`, in directory order.  |
 | `MaterialType`            | type      | Material type. Any string is valid — `[MaterialMap]` can name others.      |
-| `materialTypes`           | const     | Material types attested in retail assets, most common first.               |
 | `readMaterial`            | function  | Reads one material from its directory.                                     |
-| `readMaterials`           | function  | Reads materials from a directory, looking for a `Material library` within. |
+| `readMaterialLibrary`     | function  | `(parent: Directory): MaterialLibrary` — empty when there is no library.   |
 | `TextureFlags`            | enum      | Texture addressing bits carried by every `*_flags` file.                   |
 | `TextureReference`        | interface | A texture slot: the name looked up, and how it is addressed.               |
 | `writeMaterial`           | function  | Writes one material as a directory of property files.                      |
-| `writeMaterials`          | function  | Writes a `Material library` directory.                                     |
+| `writeMaterialLibrary`    | function  | Writes a `Material library` directory.                                     |
 
 ## Corpus
 

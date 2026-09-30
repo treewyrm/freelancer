@@ -76,7 +76,7 @@ export function readSphere(parent: Directory): Sphere {
     sides.push(readName(file))
   }
 
-  return { type: 'sphere', hardpoints: [...readHardpoints(parent)], sides, radius }
+  return { type: 'sphere', hardpoints: readHardpoints(parent), sides, radius }
 }
 
 /**
@@ -96,10 +96,10 @@ export function writeSphere({ hardpoints, sides, radius }: Sphere): Directory {
 
   const sphere = new Directory('Sphere')
 
-  for (const [index, name] of sides.entries()) sphere.setFile(`M${index}`).writeStrings(name)
+  for (const [index, name] of sides.entries()) sphere.ensureFile(`M${index}`).setStrings(name)
 
-  sphere.setFile('Radius').writeFloats(radius)
-  sphere.setFile('Sides').writeIntegers(sides.length)
+  sphere.ensureFile('Radius').setFloats(radius)
+  sphere.ensureFile('Sides').setIntegers(sides.length)
 
   const directory = new Directory(undefined, [sphere])
 

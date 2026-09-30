@@ -60,18 +60,19 @@ A `D3DFVF_*` bitmask, passed as a DWORD to `SetVertexShader` (D3D8) or `SetFVF` 
 | `PointSize`           | `0x020`         | `D3DFVF_PSIZE`              | 4 (1× float32)               |
 | `Diffuse`             | `0x040`         | `D3DFVF_DIFFUSE`            | 4 (`D3DCOLOR`, uint32 ARGB)  |
 | `Specular`            | `0x080`         | `D3DFVF_SPECULAR`           | 4 (`D3DCOLOR`, uint32 ARGB)  |
-| `Texture1`–`Texture8` | `0x100`–`0x800` | `D3DFVF_TEX1`–`D3DFVF_TEX8` | 8 per set (2× float32 u/v)   |
+| UV set count          | `0x100`–`0x800` | `D3DFVF_TEX1`–`D3DFVF_TEX8` | 8 per set (2× float32 u/v)   |
 
-The texture flags are a count, not independent bits: bits 8–11 (`0xf00`) hold the number of UV sets.
-`D3DFVF_TEX2` means "two sets total", not "the first and the second". Combining them with `|` is
-wrong; pick exactly one. `getMapCount` and `vertexByteLength` read the field.
+The UV sets are a count, not independent bits: bits 8–11 (`TEXTURE_COUNT_MASK`, `0xf00`) hold the
+number of sets. `D3DFVF_TEX2` means "two sets total", not "the first and the second", so the count
+is not an enum member — `VertexFormat` holds the single-bit attributes only. `getMapCount` reads the
+field, `setMapCount` writes it, and `vertexByteLength` accounts for it.
 
 ### `VMeshData`
 
 ```ts
 interface VMeshData {
   name: string
-  type: 1                  // version field in the binary; always 1
+  version: 1               // version field in the binary; always 1
   primitive: Primitive     // D3DPRIMITIVETYPE
   format: VertexFormat     // D3DFVF bitmask
   groups: VMeshGroup[]
@@ -137,16 +138,17 @@ interface VMeshRef {
   indexCount: number   // uint16 — indices across all groups of this reference
   groupStart: number   // uint16 — first VMeshGroup to render
   groupCount: number   // uint16 — how many
-  boundingBox: BoundingBox       // { a: min, b: max } — D3DXComputeBoundingBox output
+  boundingBox: BoundingBox       // { min, max } — D3DXComputeBoundingBox output
   boundingSphere: BoundingSphere // { center, radius } — D3DXComputeBoundingSphere output
 }
 ```
 
 There are no named D3D structs for the bounds; the fields match the output parameters of the D3DX
-utility functions.
+utility functions. Both are the shared `./math` shapes, the same ones a surface part and an Alchemy
+effect carry.
 
 The bounding box is stored interleaved as `max.x, min.x, max.y, min.y, max.z, min.z`, not as two
-contiguous XYZ vectors. [SURFACE.md](SURFACE.md)'s `Extent` does *not* follow this convention.
+contiguous XYZ vectors. [SURFACE.md](SURFACE.md)'s extent does *not* follow this convention.
 
 Both offsets apply to an index, and neither is absolute on its own — the absolute vertex is
 `ref.vertexStart + group.vertexStart + index`. Dropping `ref.vertexStart` draws the wrong geometry
@@ -180,18 +182,17 @@ dealer views. It reuses a mesh already in the library and supplies its own index
 `D3DPT_LINELIST`.
 
 ```ts
-interface VWireData {
+interface VMeshWire {
   meshId: number      // int32 — CRC32 of the target VMeshData name, same key space as VMeshRef
   vertexStart: number // uint16 — base vertex offset; indices are relative to it
   vertexCount: number // uint16 — unique vertex ids the indices reference
   vertexRange: number // uint16 — vertex span covering them (D3D NumVertices)
   indices: Uint16Array // uint16[] — LineList indices, two per edge, relative to vertexStart
 }
-
-interface VMeshWire {
-  data: VWireData
-}
 ```
+
+The `VMeshWire` directory holds one file, `VWireData`, and nothing else in any retail wire, so the
+record is the directory's whole content rather than a field of it.
 
 | Field       | Type     | Notes                                        |
 | ----------- | -------- | -------------------------------------------- |
@@ -243,18 +244,23 @@ under-declares the span so the highest-numbered vertex falls outside it — see
 ```ts
 interface MultiLevel {
   type: 'multilevel'
-  ranges: number[]     // N+1 float distance breakpoints for N levels
+  ranges?: number[]    // N+1 float distance breakpoints for N levels; absent with no Switch2
   levels: VMeshPart[]  // Level0, Level1, … LevelN-1
 }
 ```
 
 A `MultiLevel` UTF directory holds `Switch2` — a float32 sequence of N+1 camera-distance
-breakpoints, defaulting to `[0, 1000]` when the file is absent — and one `Level<n>` subdirectory per
-level, each containing a `VMeshPart`.
+breakpoints — and one `Level<n>` subdirectory per level, each containing a `VMeshPart`. Every retail
+`Switch2` holds exactly one more breakpoint than there are levels, and the writer refuses `ranges`
+that do not.
 
-`atRange(multiLevel, value)` returns the part whose range `[ranges[i], ranges[i+1])` contains the
-distance, and `undefined` past the last breakpoint — the model's cue to vanish, not a bug to clamp
-away. LOD is per part, not per model; a large ship's parts switch at different distances.
+`Switch2` can be absent — four retail parts leave it out, none with a readable level — and the game
+then assumes the single range `[0, 1000]`. That default is `getLevel`'s to apply: the reader leaves
+`ranges` off, so the directory is written back without a `Switch2` it never had.
+
+`getLevel(multiLevel, distance)` returns the part whose range `[ranges[i], ranges[i+1])` contains
+the distance, and `undefined` past the last breakpoint — the model's cue to vanish, not a bug to
+clamp away. LOD is per part, not per model; a large ship's parts switch at different distances.
 
 ## Mesh library
 
@@ -310,40 +316,40 @@ it.
 
 ### `./vmesh`
 
-| Export              | Kind      |                                                                                   |
-| ------------------- | --------- | --------------------------------------------------------------------------------- |
-| `atRange`           | function  | Picks the detail level covering a camera distance; `undefined` past the last one. |
-| `BoundingBox`       | interface | `{ a: Vector3, b: Vector3 }`.                                                     |
-| `BoundingSphere`    | interface | `{ center: Vector3, radius: number }`.                                            |
-| `getMapCount`       | function  | Calculates number of UV maps for the vertex format.                               |
-| `getMesh`           | function  | `(library: VMeshLibrary, name: Hashable): VMeshData \| undefined`                 |
-| `getMeshDraw`       | function  | Generator — yields one `MeshDraw` per group of a reference, in index order.       |
-| `MeshDraw`          | interface | `{ materialId, startIndex, elementCount, baseVertex, numVertices }` — offsets.    |
-| `MultiLevel`        | interface | `{ type: 'multilevel', ranges: number[], levels: VMeshPart[] }`.                  |
-| `Primitive`         | enum      | Direct3D primitive type (`D3DPRIMITIVETYPE`).                                     |
-| `readMultiLevel`    | function  | `(parent: Directory): MultiLevel \| undefined`                                    |
-| `readVMeshData`     | function  | `(parent: Directory): VMeshData`                                                  |
-| `readVMeshGroup`    | function  | `(view: BufferView): VMeshGroup`                                                  |
-| `readVMeshLibrary`  | function  | `(parent: Directory): VMeshLibrary`                                               |
-| `readVMeshPart`     | function  | `(parent: Directory): VMeshPart \| undefined`                                     |
-| `readVMeshRef`      | function  | `(parent: Directory): VMeshRef`                                                   |
-| `readVMeshWire`     | function  | `(parent: Directory): VMeshWire \| undefined`                                     |
-| `vertexByteLength`  | function  | Calculates vertex byte length for the vertex format.                              |
-| `VertexFormat`      | enum      | Direct3D flexible vertex format (FVF).                                            |
-| `VMeshData`         | interface | One mesh: `primitive`, `format`, `groups`, `indices`, `vertices`.                 |
-| `VMeshGroup`        | interface | One draw range: `materialId`, `vertexStart`, `vertexEnd`, `elementCount`.         |
-| `VMeshLibrary`      | type      | `VMeshData[]`.                                                                    |
-| `VMeshPart`         | interface | `{ type: 'vmeshpart', reference: VMeshRef }`.                                     |
-| `VMeshRef`          | interface | A slice of a mesh by CRC, with its group/index/vertex offsets and bounds.         |
-| `VMeshWire`         | interface | `{ data: VWireData }`.                                                            |
-| `VWireData`         | interface | Wireframe line data, stored as authored and never recomputed on write.            |
-| `writeMultiLevel`   | function  | `(value: MultiLevel): Directory`                                                  |
-| `writeVMeshData`    | function  | `(data: VMeshData): Directory`                                                    |
-| `writeVMeshGroup`   | function  | `(group: VMeshGroup): BufferView`                                                 |
-| `writeVMeshLibrary` | function  | `(values: Iterable<VMeshData>): Directory`                                        |
-| `writeVMeshPart`    | function  | `(parent: VMeshPart): Directory`                                                  |
-| `writeVMeshRef`     | function  | `(ref: VMeshRef): File`                                                           |
-| `writeVMeshWire`    | function  | `(data: VMeshWire): Directory`                                                    |
+| Export                | Kind      |                                                                                      |
+| --------------------- | --------- | ------------------------------------------------------------------------------------ |
+| `getLevel`            | function  | Picks the detail level covering a camera distance; `undefined` past the last one.    |
+| `getMapCount`         | function  | Calculates number of UV maps for the vertex format.                                  |
+| `getMesh`             | function  | `(library: VMeshLibrary, name: Hashable): VMeshData \| undefined`                    |
+| `getMeshDraw`         | function  | Generator — yields one `MeshDraw` per group of a reference, in index order.          |
+| `MeshDraw`            | interface | `{ materialId, startIndex, elementCount, baseVertex, numVertices }` — offsets.       |
+| `MultiLevel`          | interface | `{ type: 'multilevel', ranges?: number[], levels: VMeshPart[] }`.                    |
+| `Primitive`           | enum      | Direct3D primitive type (`D3DPRIMITIVETYPE`).                                        |
+| `readMultiLevel`      | function  | `(parent: Directory): MultiLevel \| undefined`                                       |
+| `readVMeshData`       | function  | `(parent: Directory): VMeshData`                                                     |
+| `readVMeshGroup`      | function  | `(view: BufferView): VMeshGroup`                                                     |
+| `readVMeshLibrary`    | function  | `(parent: Directory): VMeshLibrary`                                                  |
+| `readVMeshPart`       | function  | `(parent: Directory): VMeshPart \| undefined`                                        |
+| `readVMeshRef`        | function  | `(parent: Directory): VMeshRef`                                                      |
+| `readVMeshWire`       | function  | `(parent: Directory): VMeshWire \| undefined`                                        |
+| `setMapCount`         | function  | `(format, count): VertexFormat` — sets the UV map count, leaving the attribute bits. |
+| `TEXTURE_COUNT_MASK`  | const     | The UV map count's four-bit field in a `VertexFormat`, `0xf00`.                      |
+| `TEXTURE_COUNT_SHIFT` | const     | Shift of that field, 8.                                                              |
+| `vertexByteLength`    | function  | Calculates vertex byte length for the vertex format.                                 |
+| `VertexFormat`        | enum      | Direct3D flexible vertex format (FVF) attribute bits.                                |
+| `VMeshData`           | interface | One mesh: `version`, `primitive`, `format`, `groups`, `indices`, `vertices`.         |
+| `VMeshGroup`          | interface | One draw range: `materialId`, `vertexStart`, `vertexEnd`, `elementCount`.            |
+| `VMeshLibrary`        | type      | `VMeshData[]`.                                                                       |
+| `VMeshPart`           | interface | `{ type: 'vmeshpart', reference: VMeshRef }`.                                        |
+| `VMeshRef`            | interface | A slice of a mesh by CRC, with its group/index/vertex offsets and bounds.            |
+| `VMeshWire`           | interface | A part's wireframe line data, stored as authored and never recomputed on write.      |
+| `writeMultiLevel`     | function  | `(value: MultiLevel): Directory`                                                     |
+| `writeVMeshData`      | function  | `(data: VMeshData): Directory`                                                       |
+| `writeVMeshGroup`     | function  | `(group: VMeshGroup): BufferView`                                                    |
+| `writeVMeshLibrary`   | function  | `(values: Iterable<VMeshData>): Directory`                                           |
+| `writeVMeshPart`      | function  | `(parent: VMeshPart): Directory`                                                     |
+| `writeVMeshRef`       | function  | `(ref: VMeshRef): File`                                                              |
+| `writeVMeshWire`      | function  | `(data: VMeshWire): Directory`                                                       |
 
 ## Corpus
 

@@ -14,8 +14,8 @@ import { readVMeshGroup, writeVMeshGroup, type VMeshGroup } from './group.js'
 export interface VMeshData {
   name: string
 
-  /** Mesh data version?. */
-  type: 1
+  /** Version field. 1 is the only value retail writes, and the only one the reader accepts. */
+  version: 1
 
   /** Mesh primitive type. */
   primitive: Primitive
@@ -56,7 +56,10 @@ export enum Primitive {
   TriangleFan,
 }
 
-/** Direct3D flexible vertex format (FVF). */
+/**
+ * Direct3D flexible vertex format (FVF): the attribute bits. The UV map count shares the word as a
+ * four-bit field, which is not an enum member — see {@link TEXTURE_COUNT_MASK}.
+ */
 export enum VertexFormat {
   /** Vertex position `D3DFVF_XYZ` */
   Position = 0x02,
@@ -72,45 +75,38 @@ export enum VertexFormat {
 
   /** Vertex specular color `D3DFVF_SPECULAR` */
   Specular = 0x80,
-
-  /** Texture UVs count mask. */
-  TextureCountMask = 0xf00,
-
-  /** Texture UVs count shift. */
-  TextureCountShift = 8,
-
-  /** Vertex UV1 `D3DFVF_TEX1` */
-  Texture1 = 0x100,
-
-  /** Vertex UV2 `D3DFVF_TEX2` */
-  Texture2 = 0x200,
-
-  /** Vertex UV3 `D3DFVF_TEX3` */
-  Texture3 = 0x300,
-
-  /** Vertex UV4 `D3DFVF_TEX4` */
-  Texture4 = 0x400,
-
-  /** Vertex UV5 `D3DFVF_TEX5` */
-  Texture5 = 0x500,
-
-  /** Vertex UV6 `D3DFVF_TEX6` */
-  Texture6 = 0x600,
-
-  /** Vertex UV7 `D3DFVF_TEX7` */
-  Texture7 = 0x700,
-
-  /** Vertex UV8 `D3DFVF_TEX8` */
-  Texture8 = 0x800,
 }
+
+/**
+ * The UV map count's field in a {@link VertexFormat}: four bits holding a count, not a flag each —
+ * `D3DFVF_TEX1`..`D3DFVF_TEX8` are the values 1 to 8 shifted into it. Read and write it with
+ * {@link getMapCount} and {@link setMapCount}.
+ */
+export const TEXTURE_COUNT_MASK = 0xf00
+
+/** Shift of the UV map count's field in a {@link VertexFormat}. */
+export const TEXTURE_COUNT_SHIFT = 8
 
 /**
  * Calculates number of UV maps for the vertex format.
  * @param format FVF bitmask
  * @returns
  */
-export const getMapCount = (format: VertexFormat) =>
-  (format & VertexFormat.TextureCountMask) >> VertexFormat.TextureCountShift
+export const getMapCount = (format: VertexFormat): number =>
+  (format & TEXTURE_COUNT_MASK) >> TEXTURE_COUNT_SHIFT
+
+/**
+ * Sets the number of UV maps in a vertex format, leaving its attribute bits alone.
+ * @param format FVF bitmask
+ * @param count UV map count, 0 to 8
+ * @throws RangeError on a count the four-bit field cannot hold as D3D reads it.
+ */
+export function setMapCount(format: VertexFormat, count: number): VertexFormat {
+  if (!Number.isInteger(count) || count < 0 || count > 8)
+    throw new RangeError(`Invalid UV map count: ${count}`)
+
+  return (format & ~TEXTURE_COUNT_MASK) | (count << TEXTURE_COUNT_SHIFT)
+}
 
 /**
  * Calculates vertex byte length for the vertex format.
@@ -166,7 +162,7 @@ export function readVMeshData(parent: Directory): VMeshData {
   // Read vertex buffer.
   view.readBuffer(vertices)
 
-  return { name, type: 1, primitive, format, groups, indices, vertices }
+  return { name, version: 1, primitive, format, groups, indices, vertices }
 }
 
 /**
@@ -179,7 +175,7 @@ export function readVMeshData(parent: Directory): VMeshData {
 export function writeVMeshData(data: VMeshData): Directory {
   const view = BufferView.join(
     BufferView.allocate(Uint32Array.BYTES_PER_ELEMENT * 4)
-      .writeUint32(data.type)
+      .writeUint32(data.version)
       .writeUint32(data.primitive)
       .writeUint16(data.groups.length)
       .writeUint16(data.indices.length)

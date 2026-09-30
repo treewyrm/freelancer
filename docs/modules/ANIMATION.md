@@ -5,7 +5,13 @@ tree as the model; deformable models keep theirs in a standalone `.anm`. Both us
 structures, so one module reads and writes either.
 
 A script is a named bundle of **maps**, each binding one animated object to one **channel** of
-keyframes. Interpolation between keyframes is always linear.
+keyframes. Interpolation between keyframes is always linear — scalars and positions on a line,
+rotations by normalized lerp.
+
+What the game does with a script is read out of retail `EXE/engbase.dll` (image base `0x6610000`),
+which holds the loader (`Anim.cpp`), the channel codec (`channel_arch.cpp`), one player per map
+(`AnimComponent.cpp`) and the joints the players drive (`engine.cpp`). Addresses below are into it
+unless another binary is named; `x86math.dll` supplies the quaternion arithmetic.
 
 ## Layout
 
@@ -32,37 +38,57 @@ The trailing number on `Object map 0` / `Joint map 4` is decorative. Freelancer 
 prefix alone, and retail `.anm` files have gaps in the sequence; the writer renumbers maps
 sequentially within each kind.
 
+The prefix match is `strncmp` (`0x66116ff`) and `Root height` an inline `strcmp` (`0x66114a4`):
+both **case-sensitive**, so `joint map 0` or `root height` is not read by the game, and not by this
+reader either. A third stem, `Event map`, is tested for and skipped outright (`0x66115fd`); any other
+directory under a script is ignored.
+
 ## Object maps and joint maps
 
-|                | Object map                            | Joint map                                   |
-| -------------- | ------------------------------------- | ------------------------------------------- |
-| Applies to     | The root object only                  | A child object, via the joint to its parent |
-| Name entries   | `Parent name` — the animated object   | `Parent name` + `Child name` — the target   |
-| Animates       | Position and rotation in object space | Whatever the joint exposes                  |
+|              | Object map                                        | Joint map                                   |
+| ------------ | ------------------------------------------------- | ------------------------------------------- |
+| Applies to   | An object — the model root                        | A child object, via the joint to its parent |
+| Name entries | `Parent name` — the animated object               | `Parent name` + `Child name` — the target   |
+| Animates     | Position and rotation, relative to the start pose | Whatever the joint exposes                  |
 
-Applying an object map to a subpart, or a joint map to the root, does nothing.
+Applying an object map to a subpart, or a joint map to the root, does nothing. (Not read in the
+engine: the object player writes through the target instance's owner, whose handling of a jointed
+child was not followed.)
 
-Which keyframe field a joint map consumes follows the joint type:
+**The engine binds a map only when its channel carries exactly what the target takes** (`0x661ae66`).
+It expands every channel to plain floats at load, then compares the keyframe size with the joint's
+state: one float for revolute and prismatic, three for translational, four for sphere, seven for
+loose — and seven for an object map (`0x661af0d`). A mismatch is logged as *failed to map JOINT* and
+the map does nothing. Which keyframe field a joint map consumes therefore follows the joint type:
 
-| Joint       | Keyframe field used                                                                                    |
-| ----------- | ------------------------------------------------------------------------------------------------------ |
-| `fixed`     | none — fixed joints cannot be animated                                                                 |
-| `revolute`  | `value` — angle in radians, nominally between the joint's `min` and `max` †                            |
-| `prismatic` | `value` — offset along the joint axis, nominally within the same range †                               |
-| `sphere`    | `rotation` ‡                                                                                           |
-| `loose`     | `position`, `rotation`, or both ‡                                                                      |
-| `cylinder`  | unimplementable — see [below](#why-cylinder-joints-cannot-be-animated)                                 |
+| Joint           | Keyframe field used                                                         |
+| --------------- | --------------------------------------------------------------------------- |
+| `fixed`         | none — fixed joints cannot be animated                                      |
+| `revolute`      | `value` — angle in radians, clamped to the joint's `min` and `max` †        |
+| `prismatic`     | `value` — offset along the joint axis, clamped to the same range †          |
+| `sphere`        | `orientation` ‡                                                             |
+| `translational` | `position` ‡ — see [COMPOUND.md](COMPOUND.md#translational-joints)          |
+| `loose`         | `position` **and** `orientation` ‡ — a channel carrying only one is refused |
+| `cylinder`      | unimplementable — see [below](#why-cylinder-joints-cannot-be-animated)      |
 
-† Nominally — retail exceeds it. See [The range is nominal](#the-range-is-nominal).
+† The engine clamps when it sets the value. See [The range is enforced](#the-range-is-enforced).
 
 ‡ A delta on top of the joint's rest, not a replacement. See [Sphere and loose channels are
 displacements](#a-sphere-or-loose-channel-is-a-displacement-of-the-joints-rest).
+
+A loose joint's channel with nothing to say about one field says so with `ZeroPosition` or
+`IdentityQuaternion`, which is what those two bits are for: they pad the channel to the seven floats
+the engine will bind, at no storage cost. Retail respects the rule as far as names can tell: every
+rotation-only `.anm` channel names a bone that is a sphere joint in at least one skeleton, and no
+channel with a position lands on a bone that is only ever a sphere.
 
 ## Channels
 
 ### `Header`
 
-Twelve bytes, always.
+Twelve bytes, always — the engine refuses a channel whose `Header` is any other length (`0x661d97b`),
+and one whose `Frames` is not exactly `count` keyframes long (`0x661da30`). `readChannel` throws on
+both.
 
 | Offset | Type      | Field    | Description                                               |
 | ------ | --------- | -------- | ---------------------------------------------------------- |
@@ -77,27 +103,58 @@ resampled `.anm` tracks run at a fixed 1/30 s.
 
 ### `ChannelType`
 
-A byte-wide bitfield describing what each keyframe holds. At most one position bit and at most one
-quaternion bit may be set, and `Angle` never combines with anything else — `validateChannelType`
-enforces it.
+A bitfield describing what each keyframe holds, stored as a `uint32` of which nine bits mean
+something. At most one position bit and at most one quaternion bit may be set, and `Angle` never
+combines with anything else — `validateChannelType` enforces it, and so does the engine: a
+compressed bit beside `Angle` or `Event`, two position bits, or two quaternion bits is a fatal
+error at load (`0x661db70`), and an `Angle` beside a vector or quaternion has no player to bind to
+(`0x6615950`, *Unknown data type!*).
 
-| Flag                 | Value  | Bytes per keyframe | Description                                                     |
-| -------------------- | ------ | ------------------ | ---------------------------------------------------------------- |
-| `Angle`              | `0x01` | 4                  | Single float: revolute angle in radians or prismatic offset     |
-| `Position`           | `0x02` | 12                 | Position vector, 3× `float32`                                   |
-| `Quaternion`         | `0x04` | 16                 | Rotation quaternion, 4× `float32` stored **W, X, Y, Z**         |
-| `Event`              | `0x08` | —                  | Event stream; no retail asset sets it, rejected by this library |
-| `ZeroPosition`       | `0x10` | 0                  | Position is animated but always zero; nothing is stored         |
-| `IdentityQuaternion` | `0x20` | 0                  | Rotation is animated but always identity; nothing is stored     |
-| `VectorQuaternion`   | `0x40` | 6                  | Rotation quantized to the quaternion vector part, 3× `int16`    |
-| `AngleQuaternion`    | `0x80` | 6                  | Rotation quantized to the axis scaled by angle, 3× `int16`      |
+| Flag                 | Value   | Bytes per keyframe | Description                                                         |
+| -------------------- | ------- | ------------------ | ------------------------------------------------------------------- |
+| `Angle`              | `0x01`  | 4                  | Single float: revolute angle in radians or prismatic offset         |
+| `Position`           | `0x02`  | 12                 | Position vector, 3× `float32`                                       |
+| `Quaternion`         | `0x04`  | 16                 | Rotation quaternion, 4× `float32` stored **W, X, Y, Z**             |
+| `Event`              | `0x08`  | 4                  | Event stream; never loaded — see [below](#the-event-bit-0x08)       |
+| `ZeroPosition`       | `0x10`  | 0                  | Position is animated but always zero; nothing is stored             |
+| `IdentityQuaternion` | `0x20`  | 0                  | Rotation is animated but always identity; nothing is stored         |
+| `VectorQuaternion`   | `0x40`  | 6                  | Rotation quantized to the quaternion vector part, 3× `int16`        |
+| `AngleQuaternion`    | `0x80`  | 6                  | Rotation quantized to the axis scaled by angle, 3× `int16`          |
+| `ShortQuaternion`    | `0x100` | 8                  | Rotation quantized whole, 4× `int16` **W, X, Y, Z**; no retail user |
 
 `ZeroPosition` and `IdentityQuaternion` declare that a channel drives a property without storing data
 for it. The reader materialises the constant so consumers never special-case them; the writer emits
-nothing.
+nothing. The engine does the same at load (`0x661db70`): every compressed or implied field is
+expanded into full floats and the type rewritten to its low-nibble equivalent before anything binds
+the channel, so what a player sees is only ever `0x01`, `0x02`, `0x04`, `0x06` or `0x08`.
+
+The bitfield is the codec's. A `Channel` is one of two shapes, and keeps what a keyframe holds apart
+from how it is stored:
+
+```ts
+type Channel = AngleChannel | MotionChannel
+
+interface AngleChannel {
+  type: 'angle' // ChannelType.Angle
+  interval: number
+  keyframes: { key: number; value: number }[]
+}
+
+interface MotionChannel {
+  type: 'motion'
+  interval: number
+  position?: 'vector' | 'zero' // Position, ZeroPosition
+  orientation?: 'quaternion' | 'identity' | 'vector' | 'angle' | 'short' // the five quaternion bits
+  keyframes: { key: number; position?: Vector3; orientation?: Quat }[]
+}
+```
+
+A keyframe carries a field exactly when its channel carries the matching encoding, and the writer
+throws on one that does not — a field with no encoding would be dropped, and an encoding with no
+field would be invented. `getChannelType` gives back the bitfield a channel is stored with.
 
 The low nibble comes from Conquest: Frontier Wars — see [Where the low bits come
-from](#where-the-low-bits-come-from). The upper nibble is Freelancer's own, all compression.
+from](#where-the-low-bits-come-from). The five bits above it are Freelancer's own, all compression.
 
 ### `Frames`
 
@@ -105,7 +162,7 @@ Keyframes are packed back to back with no padding, each field in this order:
 
 ```
 [ time marker ][ angle ][ position ][ quaternion ]
-    4 bytes      4 bytes   12 bytes    16 / 6 / 0 bytes
+    4 bytes      4 bytes   12 bytes    16 / 6 / 8 / 0 bytes
    if interval<0  if 0x01    if 0x02    per quaternion flag
 ```
 
@@ -135,25 +192,54 @@ s = sin(π · |v| / 2)         // = sin(θ/2), the quaternion vector magnitude
 q = ( v · s / |v|, sqrt(1 - s²) )
 ```
 
-This follows [Librelancer](https://github.com/Librelancer/Librelancer/tree/main/src/LibreLancer/Utf/Anm),
-not [MAXLancer](https://github.com/treewyrm/MAXLancer/blob/master/scripts/Animation.ms), which
-decodes `0x40` with a half-angle function and labels `0x80` a "harmonic mean".
+Both decoders are the engine's, instruction for instruction: `0x40` at `0x661def2`, including `w = 0`
+once `x² + y² + z²` reaches one, and `0x80` at `0x661df9d`, including the identity for a zero vector.
+The scale is `1/32767` (`0x662955c`). [Librelancer](https://github.com/Librelancer/Librelancer/tree/main/src/LibreLancer/Utf/Anm)
+agrees; [MAXLancer](https://github.com/treewyrm/MAXLancer/blob/master/scripts/Animation.ms) decodes
+`0x40` with a half-angle function and labels `0x80` a "harmonic mean".
+
+**`ShortQuaternion` (`0x100`)** stores all four components as `int16` fractions, W first, and keeps
+the sign of W. The engine (`0x661e067`) renormalizes with one Newton step rather than a square root,
+and `readShortQuaternion` does the same:
+
+```
+k = (3 - |q|²) / 2
+q = q · k
+```
+
+No retail asset sets the bit. It is the one encoding the engine reads that Freelancer's tools never
+wrote.
 
 ### The event bit (`0x08`)
 
 `PersistDT_EVENT` is an event stream rather than joint data. CFW defines it in
 `Libs/Include/PersistChannel.h` alongside the other three and pairs it with an `Event map` directory
-— a third map stem beside `Object map` and `Joint map` (`Libs/Include/persistanim.h`). Freelancer
-authored none, so its payload layout is unknown here and `validateChannelType` rejects it.
+— a third map stem beside `Object map` and `Joint map` (`Libs/Include/persistanim.h`).
+
+Freelancer's engine still carries the machinery and never reaches it. The channel codec knows the
+layout: the bit **replaces** the stride with 4 rather than adding to it (`0x661d9b4`), each keyframe
+is a time marker when the interval is negative and then a `uint32` offset, and the offset points
+into data stored after the keyframe table (`0x661e3d0`), which is why `Frames` is the one file whose
+length the codec does not check. A player exists for it and two query methods walk it by time
+(`0x661e310`, `0x661e400`). But the script loader skips every `Event map` directory before it opens
+one (`0x66115fd`), so no event channel is ever loaded — and none was authored. What the payload
+holds is unread; `validateChannelType` rejects the bit.
 
 MAXLancer repurposes the bit to write a pair of floats for cylinder joints. That is MAXLancer's
-convention, not what the bit means.
+convention, not what the bit means, and the game ignores it twice: the stride is fixed at 4, and
+the map would have to be an `Event map` to be read at all.
 
 ## Why cylinder joints cannot be animated
 
 A cylinder takes 2 floats — `get_num_state_floats` returns 2 for `JT_CYLINDRICAL` — and no
-combination of the channel type bits comes to 2. The format has nowhere to put them. This is not a
-missing decoder.
+combination of the channel type bits comes to 2. The engine keeps a two-float state for one — travel
+along the axis, then the angle about it (`0x6622781`, built into a transform at `0x66257f0`) — so code
+could pose it. Animation cannot, three times over:
+
+- the binding check wants 8 bytes of keyframe, and no valid type expands to 8 (`0x661ae66`);
+- there are players for one float, a vector, a quaternion, both, and events — none for two
+  (`0x6615950`);
+- the blend step's case for a cylinder is empty (`0x661d438`), so a value would never be written.
 
 CFW never animated one either. `GetChannelType`
 (`Libs/Src/Tools/Exporters/Common/CMP.CPP`) dispatches loose, spherical, translational and event
@@ -172,21 +258,24 @@ and child names.
 The keyframe fields compose onto what the `Cons` record already says rather than standing in for it:
 
 ```
-sphere   L(q)    = T(position)            · R(q) · R(rotation) · T(-offset)
-loose    L(p, q) = T(position + p)        · R(q) · R(rotation)
+sphere   L(q)    = T(position)            · R(q) · R(orientation) · T(-offset)
+loose    L(p, q) = T(position + p)        · R(q) · R(orientation)
 ```
 
 The driven factor sits to the left of the rest rotation, as [RENDERER.md §5.2](../refs/RENDERER.md#52-composing-a-joint)
 gives for every other joint, and the loose channel's own position is added to the rest origin in the
 parent's frame.
 
-The opposite reading is attractive: `0x06` is CFW's seven-float loose-joint *state vector*, and an
-object map — which unambiguously replaces — carries the identical channel type. No retail `.cmp`
-script drives a loose joint, so only the `.anm` files settle it, and they do
-([Corpus](#loose-and-sphere-channels-compose)). Read as a replacement, every head bone collapses onto
-its parent's origin and every rest rotation is discarded. Librelancer composes the same way in
-`BoneInstance.Update`: `Origin + Translation` under
-`Quaternion.Concatenate(OriginalRotation, Rotation)`.
+The engine settles it: the joint transforms are built exactly so (`0x6625980` for sphere,
+`0x6625af0` for loose), with the driven rotation multiplied on the left of the rest
+(`3DMathEngine +0x20`, a plain row-major `A · B`) and the loose position added to the rest origin.
+`getJointMatrix` in [COMPOUND.md](COMPOUND.md) is that code.
+
+The opposite reading was attractive: `0x06` is CFW's seven-float loose-joint *state vector*, and an
+object map carries the identical channel type. The `.anm` files had already refuted it
+([Corpus](#loose-and-sphere-channels-compose)) — read as a replacement, every head bone collapses
+onto its parent's origin. Librelancer composes the same way in `BoneInstance.Update`:
+`Origin + Translation` under `Quaternion.Concatenate(OriginalRotation, Rotation)`.
 
 A field the channel omits contributes nothing and the rest's own value stands — which is what
 `ZeroPosition` and `IdentityQuaternion` already say by storing no bytes.
@@ -197,9 +286,11 @@ A float beside the object maps, on 1,008 of the 1,010 object maps in the tree �
 `.anm`, neither of the two in a `.cmp`.
 
 It is not an offset applied to the root object map's position; nothing in the skeleton moves by it.
-Librelancer applies it to the world object — `Translate.Y = FloorHeight + RootHeight`, with the floor
-height set by the THN event `START_FLR_HEIGHT_ANIM` — so it states how far off the floor of a room
-the character stands. A renderer with no room has nothing to apply it against.
+The engine loads it beside the maps (`0x66114a4`) and hands it back through `IAnimation2`
+(`0x6615240`) without applying it anywhere itself. Librelancer applies it to the world object —
+`Translate.Y = FloorHeight + RootHeight`, with the floor height set by the THN event
+`START_FLR_HEIGHT_ANIM` — so it states how far off the floor of a room the character stands. A
+renderer with no room has nothing to apply it against.
 
 ### A revolute angle is an angle, and one bit cannot say so
 
@@ -212,17 +303,33 @@ Every one of retail's 414 revolute channels stores its angle wrapped into (-π, 
 stepping across the seam — `+3.1329` to `-3.0720` — means a further 4.49° in the same direction, and
 interpolating it on a line instead of on a circle runs 355.5° backwards.
 
-Wrapped storage is retail's habit rather than the format's rule. A channel is wrapped iff no value
-leaves the band, which is a per-channel test worth making: 51 of Discovery's 532 revolute channels
-store angles reaching ±2π, and `SHIPS/RHEINLAND/RH_MINER/rh_miner.cmp` runs a propeller
-0 → -179.8° → **-360°**, a genuine sweep just past half a turn that a blanket shortest-arc reverses
-into +179.7°.
+**The engine takes the short way round, always.** The float player (`0x661b8a0`) checks the joint it
+drives, and for a `Rev` joint moves the far keyframe by one turn whenever the pair is more than half
+a turn apart, before interpolating:
 
-The reader hands back what the file stores and `sampleChannel` lerps the scalar on a line. A consumer
-holding the joint takes the short way round for a revolute channel whose values stay in the band.
-This library already does that wherever the channel alone is enough: `Quat.slerp` folds the double
-cover for a sphere joint, and `0x40`/`0x80` fold negative-W quaternions on the way in. The angle bit
-is the one place the information is not there.
+```
+d = b - a
+if d < -π:  b += 2π
+elif d > π: b -= 2π          // strict: exactly ±π stays as stored
+value = a + (b - a) · t
+```
+
+It tests nothing about the channel: storage that leaves the band is wrapped all the same. So a sweep
+authored past half a turn between two keyframes plays the other way in game — Discovery's
+`SHIPS/RHEINLAND/RH_MINER/rh_miner.cmp` runs a propeller 0 → -179.8° → **-360°**, and the second
+step, -180.2°, is played as +179.8°. Prismatic joints get a plain lerp, and never wrap.
+
+`sampleChannel(channel, time, true)` applies the same rule; the flag is the caller's, because
+`ChannelType.Angle` carries both kinds and only the joint the map lands on separates them. The
+reader still hands back what the file stores.
+
+### Rotations interpolate by normalized lerp
+
+Between two keyframes the engine does not slerp. `3DMathEngine +0x58` (`x86math.dll` `0x6f724d0`)
+flips the second quaternion onto the near hemisphere when the dot product is negative, interpolates
+the four components linearly, and renormalizes — `Quat.nlerp`, which `sampleChannel` uses. The
+result agrees with a slerp at both keyframes and at the midpoint, and runs ahead of it and then
+behind between them, visibly only across wide steps.
 
 ### Channels loop independently, at their own lengths
 
@@ -232,16 +339,45 @@ its eight channels 2, 4, 8 and 16 seconds, and `rh_miner.cmp`'s `sc_rotate drill
 0.75-second drill with a 10-second arm, which on a shared clock spins once then stands still for
 nine seconds.
 
+That is how the engine is built: every map gets its own player with its own clock (`0x661b420`),
+advanced by `dt · speed` and wrapped at that player's channel duration. The play flags it knows are
+`0x2` loop, `0x4` bounce, and neither — play once and hold on the end; a negative speed plays
+backwards. `getChannelTime(channel, time, mode)` maps a script's elapsed time onto one channel the
+same way, with `'loop'` wrapping the end itself back to the start as the engine does.
+
 The shape is a minority — 14 of the 186 multi-map scripts in retail `.cmp` mix channel lengths, 24 of
 Discovery's 451 — so a consumer that runs everything to the script's duration is right about most
 scripts and visibly wrong about the rest.
 
-### The range is nominal
+### Object maps are relative, and carry motion forward
+
+An object map does not place its object; it moves it from where it stood. When a script starts from
+the beginning, the object player captures the object's position and orientation as its **base**
+(`0x661c9d3`), and every frame writes back `base ∘ sample` — `base.R · p + base.t` and
+`base.q ⊗ q` (`0x661bb10`). The first keyframe is applied on top of the start pose, not subtracted
+from it. Started part-way in, the base is instead solved so the object does not jump (`0x661c741`).
+
+On a looping object map, each wrap makes the pose at the channel's last keyframe the new base
+(`0x661b5b3`). A walk cycle therefore walks on instead of snapping back to where it began: after `n`
+whole cycles the object stands at `S(D)ⁿ ∘ S(t mod D)`. Only object maps do this; joint maps have no
+base.
+
+`sampleObjectMap(map, time, mode)` returns that relative transform, to compose onto the object's
+start pose. A bounce is returned without accumulation — what the engine converges to at small frame
+steps; the engine itself realigns to the object's current pose at each turn, so its result drifts
+with frame length.
+
+### The range is enforced
 
 A driven joint's `min`/`max` bound what the joint declares, not what its channel contains, and retail
 exceeds it ([Corpus](#channels-outside-their-joints-range)). This reader does not clamp — a value is
-what the file records — and whether the engine clamps is a question for the game, listed in
-[RETAIL.md](../refs/RETAIL.md#todo--what-is-pending-in-the-game).
+what the file records — but the engine clamps whenever a revolute or prismatic value is set
+(`0x66226e0`): below `min` becomes `min`, above `max` becomes `max`, in that order, and NaN passes.
+No other joint type is clamped: a sphere's three limit pairs and a cylinder's two are stored and
+never applied. `getJointMatrix` clamps the same two types.
+
+So `br_03_warwick_cityscape.cmp`'s traffic stops at the end of its rail for the 423 units its
+channel runs past it.
 
 ### Where the low bits come from
 
@@ -265,13 +401,17 @@ then the data is not periodic … each frame consists of a time value"*.
 
 | Export                  | Kind      |                                                                                 |
 | ----------------------- | --------- | ------------------------------------------------------------------------------- |
+| `AngleChannel`          | interface | A channel driving one float: a revolute angle or a prismatic offset.            |
+| `AngleKeyframe`         | interface | `{ key, value }` — one keyframe of an `AngleChannel`.                           |
 | `AnimationLibrary`      | type      | Animation scripts of a model.                                                   |
 | `AnimationMap`          | type      | `ObjectMap \| JointMap`.                                                        |
-| `Channel`               | interface | Keyframe track of a single animated property set.                               |
-| `ChannelKeyframe`       | interface | Animation keyframe. Which properties are set is dictated by the channel type.   |
-| `ChannelSample`         | interface | Channel value sampled between keyframes.                                        |
+| `AnimationScript`       | interface | Named animation, a collection of maps applied to a model at the same time.      |
+| `Channel`               | type      | `AngleChannel \| MotionChannel` — keyframe track of one animated property set.  |
+| `ChannelSample`         | interface | Channel value sampled between keyframes: `value`, `position`, `orientation`.    |
 | `ChannelType`           | enum      | Channel keyframe contents, a bitfield stored in the channel `Header` file.      |
 | `getChannelDuration`    | function  | Channel duration in seconds.                                                    |
+| `getChannelTime`        | function  | Maps a script's elapsed time onto one channel's clock: loop, once or bounce.    |
+| `getChannelType`        | function  | The type bitfield a channel is stored with.                                     |
 | `getJointMap`           | function  | Finds joint map animating the named child object.                               |
 | `getLibraryDuration`    | function  | Library duration in seconds, the longest of its scripts.                        |
 | `getMapDuration`        | function  | Map duration in seconds.                                                        |
@@ -280,8 +420,13 @@ then the data is not periodic … each frame consists of a time value"*.
 | `getScriptDuration`     | function  | Script duration in seconds, the longest of its maps.                            |
 | `JointMap`              | interface | Animates a child object relative to its parent, driving the joint between them. |
 | `keyframeByteLength`    | function  | Calculates keyframe byte length for the channel type.                           |
-| `ObjectMap`             | interface | Animates the root object of a model in its own space.                           |
+| `MotionChannel`         | interface | A channel driving position, orientation or both, with how each is stored.       |
+| `MotionKeyframe`        | interface | `{ key, position?, orientation? }` — one keyframe of a `MotionChannel`.         |
+| `ObjectMap`             | interface | Animates an object relative to its start pose; names it `object`.               |
+| `OrientationEncoding`   | type      | `'quaternion' \| 'identity' \| 'vector' \| 'angle' \| 'short'`.                 |
+| `PlaybackMode`          | type      | `'loop' \| 'once' \| 'pingPong'` — the engine's play flags.                     |
 | `POSITION_MASK`         | const     | Bits describing keyframe position.                                              |
+| `PositionEncoding`      | type      | `'vector' \| 'zero'`.                                                           |
 | `QUATERNION_MASK`       | const     | Bits describing keyframe rotation.                                              |
 | `readAngleQuaternion`   | function  | Reads quaternion from a quantized rotation axis scaled by angle.                |
 | `readAnimationLibrary`  | function  | Reads animation library from file root directory.                               |
@@ -290,9 +435,10 @@ then the data is not periodic … each frame consists of a time value"*.
 | `readObjectMap`         | function  | Reads object map from directory.                                                |
 | `readQuaternion`        | function  | Reads quaternion stored as four floats in W, X, Y, Z order.                     |
 | `readScript`            | function  | Reads animation script from directory.                                          |
+| `readShortQuaternion`   | function  | Reads quaternion stored as four int16 in W, X, Y, Z order, renormalized.        |
 | `readVectorQuaternion`  | function  | Reads quaternion from its quantized vector part, restoring W from unit length.  |
-| `sampleChannel`         | function  | Samples channel at time, interpolating linearly between neighbouring keyframes. |
-| `Script`                | interface | Named animation, a collection of maps applied to a model at the same time.      |
+| `sampleChannel`         | function  | Samples channel at time as the engine does; wraps revolute angles on request.   |
+| `sampleObjectMap`       | function  | Object map pose relative to the start pose, carried forward across loops.       |
 | `validateChannelType`   | function  | Validates channel type bitfield.                                                |
 | `writeAngleQuaternion`  | function  | Writes quaternion as a quantized rotation axis scaled by angle.                 |
 | `writeAnimationLibrary` | function  | Writes animation library into directory.                                        |
@@ -300,6 +446,7 @@ then the data is not periodic … each frame consists of a time value"*.
 | `writeChannel`          | function  | Writes animation channel into directory.                                        |
 | `writeQuaternion`       | function  | Writes quaternion as four floats in W, X, Y, Z order.                           |
 | `writeScript`           | function  | Writes animation script into directory.                                         |
+| `writeShortQuaternion`  | function  | Writes quaternion as four int16 in W, X, Y, Z order.                            |
 | `writeVectorQuaternion` | function  | Writes quaternion as its quantized vector part.                                 |
 
 ## Corpus
@@ -358,18 +505,29 @@ exercises is the majority of what a `.dfm` does.
 
 ### Wrapped revolute angles
 
-All 414 retail revolute channels store angles inside (-π, π]; 150 of them step over π somewhere.
-Prismatic data does the same in 370 of 543, where π metres means nothing and wrapping would be a bug.
+All 414 retail revolute channels store angles inside (-π, π]; 150 of them step over π somewhere, in
+212 keyframe pairs. Wrapped the engine's way, every one of those pairs still ends inside its joint's
+range, so the clamp never meets a wrapped revolute. Prismatic data steps over π in 370 of 543, where
+π metres means nothing and the engine does not wrap.
 
 `SOLAR/MISC/gyro_05x.cmp` in Discovery is the clean demonstration: five keyframes describing one
 revolution whose linear sum is exactly zero and whose wrapped sum is exactly 2π.
 
 ### Channels outside their joint's range
 
-278 keyframes in 22 prismatic channels sit outside their own joint's declared range, the worst by
-423.25 units against `[0, 3302.125]`: `BASES/BRETONIA/br_03_warwick_cityscape.cmp`, whose `Sc_loop`
-runs the city traffic past the end of its rail. No revolute channel exceeds its range, in any of the
-414.
+278 keyframes in 22 prismatic channels sit more than 1e-4 outside their own joint's declared range,
+the worst by 423.25 units against `[0, 3302.125]`: `BASES/BRETONIA/br_03_warwick_cityscape.cmp`,
+whose `Sc_loop` runs the city traffic past the end of its rail. The engine clamps them all. Counted
+strictly, as the clamp compares, it is 295 keyframes in 38 channels; the other 17 are a float's last
+bit, five of them on revolute doors whose open angle is stored a hair past `max`. No revolute channel
+exceeds its range by more.
+
+### Where the engine reads less than the format allows
+
+- Every one of the 1,010 object maps carries both position and rotation, which the engine requires
+  to bind one.
+- Every time-marked channel starts at zero. The engine's lookup interpolates from index −1 before a
+  first marker later than zero; retail never asks it to.
 
 ### `Root height`
 

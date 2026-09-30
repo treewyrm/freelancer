@@ -12,11 +12,14 @@ import {
 } from './map.js'
 
 /** Named animation, a collection of maps applied to a model at the same time. */
-export interface Script {
+export interface AnimationScript {
   /** Script name, referenced from INI files. */
   name: string
 
-  /** Root object elevation, applied on top of the object map position. Deformable models only. */
+  /**
+   * Root object elevation off the floor. Deformable models only. `engbase.dll` loads it beside the
+   * maps and hands it back to the game, but applies it to nothing itself.
+   */
   height?: number
 
   /** Animation maps, at most one per animated object. */
@@ -24,7 +27,7 @@ export interface Script {
 }
 
 /** Script duration in seconds, the longest of its maps. */
-export function getScriptDuration({ maps }: Script): number {
+export function getScriptDuration({ maps }: AnimationScript): number {
   let duration = 0
   for (const map of maps) duration = Math.max(duration, getMapDuration(map))
 
@@ -32,16 +35,16 @@ export function getScriptDuration({ maps }: Script): number {
 }
 
 /** Finds object map animating the named object. */
-export function getObjectMap({ maps }: Script, parent: Hashable): ObjectMap | undefined {
+export function getObjectMap({ maps }: AnimationScript, object: Hashable): ObjectMap | undefined {
   return getResource(
     maps.filter((map) => map.type === 'object'),
-    ({ parent }) => parent,
-    parent,
+    ({ object }) => object,
+    object,
   )
 }
 
 /** Finds joint map animating the named child object. */
-export function getJointMap({ maps }: Script, child: Hashable): JointMap | undefined {
+export function getJointMap({ maps }: AnimationScript, child: Hashable): JointMap | undefined {
   return getResource(
     maps.filter((map) => map.type === 'joint'),
     ({ child }) => child,
@@ -54,18 +57,21 @@ export function getJointMap({ maps }: Script, child: Hashable): JointMap | undef
  * @param parent Script directory
  * @returns
  */
-export function readScript(parent: Directory): Script {
-  const script: Script = { name: parent.name, maps: [] }
+export function readScript(parent: Directory): AnimationScript {
+  const script: AnimationScript = { name: parent.name, maps: [] }
 
-  const [height] = parent.getFile('Root height')?.readFloats() ?? []
+  // The engine compares both names byte for byte (`engbase.dll` `0x66114a4`, `0x66116ff`): a
+  // `root height` or `joint map 0` in any other case is not read, so neither is it here.
+  const [height] = parent.files.find(({ name }) => name === 'Root height')?.readFloats() ?? []
   if (height !== undefined) script.height = height
 
   for (const directory of parent.directories) {
-    // Freelancer matches on the name prefix alone; the trailing index is decorative.
-    const name = directory.name.toLowerCase()
+    // Matched on the name prefix alone; the trailing index is decorative. `Event map` is skipped by
+    // the engine outright, and anything else was never a map.
+    const { name } = directory
 
-    if (name.startsWith('object map')) script.maps.push(readObjectMap(directory))
-    else if (name.startsWith('joint map')) script.maps.push(readJointMap(directory))
+    if (name.startsWith('Object map')) script.maps.push(readObjectMap(directory))
+    else if (name.startsWith('Joint map')) script.maps.push(readJointMap(directory))
   }
 
   return script
@@ -76,11 +82,11 @@ export function readScript(parent: Directory): Script {
  * @param script Animation script
  * @returns
  */
-export function writeScript(script: Script): Directory {
+export function writeScript(script: AnimationScript): Directory {
   const { name, height, maps } = script
   const directory = new Directory(name)
 
-  if (height !== undefined) directory.children.push(new File('Root height').writeFloats(height))
+  if (height !== undefined) directory.children.push(new File('Root height').setFloats(height))
 
   let objects = 0
   let joints = 0

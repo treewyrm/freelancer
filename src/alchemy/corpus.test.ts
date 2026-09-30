@@ -3,11 +3,21 @@ import { describe, it } from 'node:test'
 import { list, load, skip, type TreeAsset as Asset } from '#/corpus.js'
 import { getResourceId } from '#/hash.js'
 import BufferView from '#/utility/bufferview.js'
-import { ControlRootId, readEffectLibrary, writeEffectLibrary, type NodeInstance } from './effect.js'
+import {
+  CONTROL_ROOT_ID,
+  readEffectLibrary,
+  writeEffectLibrary,
+  type NodeInstance,
+} from './effect.js'
 import { colorAt, curveAt, floatAt, transformAt } from './evaluation.js'
 import { getNodeName, readNodeLibrary, writeNodeLibrary, type Node } from './node.js'
-import { DefaultTransformOrder, EaseType } from './animation.js'
-import { PropertyType } from './property.js'
+import {
+  DEFAULT_TRANSFORM_ORDER,
+  EaseType,
+  type LoopAnimation,
+  type VectorKeyframe,
+} from './animation.js'
+import type { PropertyType } from './property.js'
 
 const assets = () => load('ale')
 
@@ -36,11 +46,11 @@ function* walk(instances: NodeInstance[]): Generator<NodeInstance> {
 
 /** Only Freelancer's own two node types carry properties absent from the Alchemy name list. */
 const unresolvedProperties = new Map([
-  ['0x1C65B7B9', { type: PropertyType.Boolean, owner: 'FLBeamAppearance' }],
-  ['0x03503B61', { type: PropertyType.Boolean, owner: 'FLBeamAppearance' }],
-  ['0x0ABE0402', { type: PropertyType.Boolean, owner: 'FLBeamAppearance' }],
-  ['0x0BA0B3BB', { type: PropertyType.Transform, owner: 'FLBeamAppearance' }],
-  ['0xE63AA248', { type: PropertyType.AnimatedCurve, owner: 'FLDustField' }],
+  ['0x1C65B7B9', { type: 'boolean', owner: 'FLBeamAppearance' }],
+  ['0x03503B61', { type: 'boolean', owner: 'FLBeamAppearance' }],
+  ['0x0ABE0402', { type: 'boolean', owner: 'FLBeamAppearance' }],
+  ['0x0BA0B3BB', { type: 'transform', owner: 'FLBeamAppearance' }],
+  ['0xE63AA248', { type: 'animatedCurve', owner: 'FLDustField' }],
 ])
 
 describe('retail asset corpus', { skip }, () => {
@@ -158,26 +168,26 @@ describe('retail asset corpus', { skip }, () => {
             for (const p of [0, 0.5, 1])
               for (const t of [0, 0.5, 1, 2]) {
                 switch (property.type) {
-                  case PropertyType.AnimatedFloat:
-                    finite(floatAt(property, p, t), where)
+                  case 'animatedFloat':
+                    finite(floatAt(property.value, p, t), where)
                     break
 
-                  case PropertyType.AnimatedColor: {
-                    const { x, y, z } = colorAt(property, p, t)
+                  case 'animatedColor': {
+                    const { x, y, z } = colorAt(property.value, p, t)
                     for (const value of [x, y, z]) finite(value, where)
                     break
                   }
 
-                  case PropertyType.AnimatedCurve:
-                    finite(curveAt(property, p, t), where)
+                  case 'animatedCurve':
+                    finite(curveAt(property.value, p, t), where)
                     if (!p && !t) curves++
                     break
 
-                  case PropertyType.Transform: {
-                    const { position, rotation, scale } = transformAt(property, p, t)
+                  case 'transform': {
+                    const { position, rotation, scale } = transformAt(property.value, p, t)
                     for (const { x, y, z } of [position, rotation, scale])
                       for (const value of [x, y, z]) finite(value, where)
-                    if (!p && !t && property.position) transforms++
+                    if (!p && !t && property.value.curves) transforms++
                     break
                   }
                 }
@@ -206,9 +216,9 @@ describe('retail asset corpus', { skip }, () => {
             switch (property.type) {
               // Only these two nest an eased list inside each keyframe; a curve nests a
               // looped one, which wraps by flags instead of easing.
-              case PropertyType.AnimatedFloat:
-              case PropertyType.AnimatedColor:
-                for (const { easing, keyframes } of property.keyframes)
+              case 'animatedFloat':
+              case 'animatedColor':
+                for (const { easing, keyframes } of property.value.keyframes)
                   if (!(easing in EaseType))
                     stray.push({
                       path: asset.path,
@@ -219,8 +229,11 @@ describe('retail asset corpus', { skip }, () => {
                     })
 
               // falls through
-              case PropertyType.AnimatedCurve:
-                ok(property.easing in EaseType, `${asset.path}: outer easing ${property.easing}`)
+              case 'animatedCurve':
+                ok(
+                  property.value.easing in EaseType,
+                  `${asset.path}: outer easing ${property.value.easing}`,
+                )
             }
 
       // Junk in a slot nothing reads. Every value has its low three bits clear and
@@ -260,9 +273,8 @@ describe('retail asset corpus', { skip }, () => {
           if (node.type !== 'FLDustAppearance') {
             for (const property of node.properties)
               if (
-                (property.type === PropertyType.AnimatedFloat ||
-                  property.type === PropertyType.AnimatedColor) &&
-                property.keyframes.some(({ easing }) => easing === EaseType.AutoInverse)
+                (property.type === 'animatedFloat' || property.type === 'animatedColor') &&
+                property.value.keyframes.some(({ easing }) => easing === EaseType.AutoInverse)
               )
                 elsewhere.push(`${asset.path}/${property.name}`)
 
@@ -270,9 +282,9 @@ describe('retail asset corpus', { skip }, () => {
           }
 
           const alpha = node.properties.find(({ name }) => name === 'BasicApp_Alpha')
-          ok(alpha?.type === PropertyType.AnimatedFloat, `${asset.path}: alpha is not animated`)
+          ok(alpha?.type === 'animatedFloat', `${asset.path}: alpha is not animated`)
 
-          dust.push({ path: asset.path, easing: alpha.keyframes.map(({ easing }) => easing) })
+          dust.push({ path: asset.path, easing: alpha.value.keyframes.map(({ easing }) => easing) })
         }
 
       deepStrictEqual(dust, [
@@ -284,21 +296,25 @@ describe('retail asset corpus', { skip }, () => {
 
     // The wrap word is two four-bit modes (alchemy.dll 0x6246b00, 0x6246c2f), and retail uses
     // six words. Only 0x01 and 0x10 mean what the bitfield reading once took them for; 0x20,
-    // 0x30 and 0x33 sit on eight curves that span a range, all but one a `Node_Transform`.
+    // 0x30 and 0x33 sit on eight curves that span a range, all but one a `Node_Transform`. The
+    // high byte is zero on all 39,355 lists, so none carries `reserved`.
     it('uses six wrap words, none past oscillate', () => {
       const words = new Map<number, number>()
-      const count = (flags: number) => words.set(flags, (words.get(flags) ?? 0) + 1)
+      const count = ({ before, after, reserved = 0 }: LoopAnimation<VectorKeyframe>) => {
+        const word = (reserved << 8) | (after << 4) | before
+        words.set(word, (words.get(word) ?? 0) + 1)
+      }
 
       for (const asset of assets())
         for (const node of nodes(asset).nodes)
           for (const property of node.properties) {
-            if (property.type === PropertyType.AnimatedCurve)
-              for (const { flags } of property.keyframes) count(flags)
+            if (property.type === 'animatedCurve') property.value.keyframes.forEach(count)
 
-            if (property.type === PropertyType.Transform)
-              for (const point of [property.position, property.rotation, property.scale])
-                for (const curve of point ? [point.x, point.y, point.z] : [])
-                  for (const { flags } of curve.keyframes) count(flags)
+            if (property.type === 'transform' && property.value.curves) {
+              const { position, rotation, scale } = property.value.curves
+              for (const point of [position, rotation, scale])
+                for (const curve of [point.x, point.y, point.z]) curve.keyframes.forEach(count)
+            }
           }
 
       deepStrictEqual(
@@ -323,13 +339,13 @@ describe('retail asset corpus', { skip }, () => {
       for (const asset of assets())
         for (const node of nodes(asset).nodes)
           for (const property of node.properties)
-            if (property.type === PropertyType.Transform) {
-              const key = property.order.join(' ')
+            if (property.type === 'transform') {
+              const key = property.value.order.join(' ')
               orders.set(key, (orders.get(key) ?? 0) + 1)
-              if (property.position) curves++
+              if (property.value.curves) curves++
             }
 
-      deepStrictEqual([...orders], [[DefaultTransformOrder.join(' '), 5590]])
+      deepStrictEqual([...orders], [[DEFAULT_TRANSFORM_ORDER.join(' '), 5590]])
       strictEqual(curves, 1289)
     })
 
@@ -344,8 +360,8 @@ describe('retail asset corpus', { skip }, () => {
         for (const node of nodes(asset).nodes)
           for (const property of node.properties)
             switch (property.type) {
-              case PropertyType.AnimatedCurve:
-                for (const { keyframes } of property.keyframes) {
+              case 'animatedCurve':
+                for (const { keyframes } of property.value.keyframes) {
                   if (!keyframes.length) lists.empty++
                   else if (keyframes.length === 1) lists.single++
                   else if (keyframes[0]!.key === keyframes.at(-1)!.key) lists.sameKey++
@@ -353,9 +369,9 @@ describe('retail asset corpus', { skip }, () => {
                 }
                 break
 
-              case PropertyType.AnimatedFloat:
-              case PropertyType.AnimatedColor:
-                for (const { keyframes } of property.keyframes)
+              case 'animatedFloat':
+              case 'animatedColor':
+                for (const { keyframes } of property.value.keyframes)
                   if (!keyframes.length) eased.push(`${asset.path}/${property.name}`)
                 break
             }
@@ -403,8 +419,7 @@ describe('retail asset corpus', { skip }, () => {
 
         if (version === 1) {
           plain++
-          for (const effect of list)
-            deepStrictEqual([effect.center, effect.radius], [{ x: 0, y: 0, z: 0 }, 0], asset.path)
+          for (const effect of list) strictEqual(effect.bounds, undefined, asset.path)
         } else {
           strictEqual(Math.fround(version), Math.fround(1.1), asset.path)
           extended++
@@ -413,12 +428,13 @@ describe('retail asset corpus', { skip }, () => {
           // without one. Most effects leave all four at zero.
           for (const effect of list) {
             const where = `${asset.path}/${effect.name}`
-            const { center, radius } = effect
+            ok(effect.bounds, where)
+            const { center, radius } = effect.bounds
 
             spheres++
-            ok(radius! >= 0, where)
+            ok(radius >= 0, where)
 
-            if (radius! > 0) sphereSet++
+            if (radius > 0) sphereSet++
             else deepStrictEqual(center, { x: 0, y: 0, z: 0 }, where)
           }
         }
@@ -444,7 +460,7 @@ describe('retail asset corpus', { skip }, () => {
         const folded = new Set(library.map((node) => id(node, false)))
 
         for (const instance of walk(effects(asset).effects.flatMap(({ children }) => children))) {
-          if (instance.crc === ControlRootId) {
+          if (instance.crc === CONTROL_ROOT_ID) {
             containers++
             continue
           }
@@ -467,7 +483,7 @@ describe('retail asset corpus', { skip }, () => {
 
       for (const asset of assets())
         for (const effect of effects(asset).effects) {
-          const containers = [...walk(effect.children)].filter(({ crc }) => crc === ControlRootId)
+          const containers = [...walk(effect.children)].filter(({ crc }) => crc === CONTROL_ROOT_ID)
 
           if (!containers.length) {
             without++
@@ -503,7 +519,7 @@ describe('retail asset corpus', { skip }, () => {
         const appearance = ({ crc }: NodeInstance) => !!types.get(crc)?.endsWith('Appearance')
 
         for (const { children } of effects(asset).effects) {
-          const root = children.find(({ crc }) => crc === ControlRootId)
+          const root = children.find(({ crc }) => crc === CONTROL_ROOT_ID)
           if (!root) continue
 
           const top = children.filter((instance) => instance !== root && appearance(instance))
@@ -522,7 +538,8 @@ describe('retail asset corpus', { skip }, () => {
     it('is never itself a link target', () => {
       for (const asset of assets())
         for (const instance of walk(effects(asset).effects.flatMap(({ children }) => children)))
-          for (const target of instance.targets) notStrictEqual(target.crc, ControlRootId, asset.path)
+          for (const target of instance.targets)
+            notStrictEqual(target.crc, CONTROL_ROOT_ID, asset.path)
     })
 
     // Entry identifiers are sparse, unordered handles the authoring tool left behind. Of the
@@ -537,7 +554,7 @@ describe('retail asset corpus', { skip }, () => {
         for (const effect of effects(asset).effects) {
           // `sort` restores the on-disk entry order, which the identifiers do not follow.
           const ids = [...walk(effect.children)]
-            .sort(({ sort: a }, { sort: b }) => a - b)
+            .sort(({ sort: a }, { sort: b }) => a! - b!)
             .map(({ id }) => id)
 
           for (const value of ids) notStrictEqual(value, undefined, `${asset.path}/${effect.name}`)

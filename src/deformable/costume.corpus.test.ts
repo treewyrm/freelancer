@@ -2,6 +2,7 @@ import { strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { load, skip } from '#/corpus.js'
 import { Matrix4 } from '#/math/index.js'
+import type { Bone } from './bone.js'
 import { readDeformableModel, type DeformableModel } from './model.js'
 
 /**
@@ -25,8 +26,8 @@ interface Piece {
 }
 
 /** `Bone to root` is the inverse bind — RENDERER.md §8 — so the forward pose is its inverse. */
-const bindOf = (bone: { rotation: never; position: never }): Matrix4 =>
-  Matrix4.invert(Matrix4.fromRotationTranslation(bone.rotation, bone.position))
+const bindOf = (bone: Pick<Bone, 'orientation' | 'position'>): Matrix4 =>
+  Matrix4.invert(Matrix4.fromRotationTranslation(bone.orientation, bone.position))
 
 function read(path: string, model: DeformableModel): Piece {
   const seats = new Map<string, Matrix4>()

@@ -53,10 +53,10 @@ interface Rigid {
 }
 
 type RigidPart = Rigid | Camera | Sphere
-type RigidModel = Model<RigidPart> | RigidPart
+type RigidModel = CompoundNode<RigidPart> | RigidPart
 ```
 
-`readRigidModel` dispatches on `isCompoundModel`. Within a compound, a part directory is dispatched
+`readRigidModel` dispatches on `isCompound`. Within a compound, a part directory is dispatched
 by what it holds: a `Camera` directory makes it a camera, a `Sphere` directory a sphere, otherwise
 geometry plus hardpoints plus any `VMeshWire`.
 
@@ -126,10 +126,22 @@ the material it drives and holds three or four files. No `.dfm` carries one.
 
 ```ts
 interface MaterialAnim {
-  name: string                   // material name, from the directory
-  flags: number                  // MAFlags; the game never reads it
-  keyframes: MaterialKeyframe[]  // time + the four velocities
-  keys: MaterialKey[]            // one fewer than keyframes
+  name: string                 // material name, from the directory
+  flags: number                // MAFlags; the game never reads it
+  segments: MaterialSegment[]  // one per MADeltas entry
+}
+
+interface MaterialSegment {
+  duration: number             // from MADeltas
+  start: MaterialTransform     // MAKeys[i − 1]; the implicit zeros on the first segment
+  velocity: MaterialTransform  // the four rates from MADeltas, per second
+}
+
+interface MaterialTransform {
+  uOffset: number
+  vOffset: number
+  uScale: number               // a displacement from 1
+  vScale: number
 }
 ```
 
@@ -140,13 +152,17 @@ interface MaterialAnim {
 | `MAKeys`   | float32[] | `(MACount − 1) × 4` floats; omitted entirely when `MACount` is 1 |
 | `MAFlags`  | uint32    | Stored by the game and never read — see [below](#what-the-game-does-with-it) |
 
-Each `MADeltas` keyframe is `time`, `uOffsetSpeed`, `vOffsetSpeed`, `uScaleSpeed`, `vScaleSpeed`.
-Each `MAKeys` keyframe is `uOffset`, `vOffset`, `uScale`, `vScale`. There is one fewer key than
+Each `MADeltas` entry is a duration and the four velocities, `uOffset`, `vOffset`, `uScale`,
+`vScale`. Each `MAKeys` entry is a starting transform in the same order. There is one fewer key than
 delta, the first being implicit; retail omits the `MAKeys` file outright rather than writing it
 empty. Layout per [the Starport wiki](https://the-starport.com/wiki/file-structures/utf/mat),
 corroborated against the corpus.
 
-`time` is a duration, not a timestamp — see [Corpus](#material-animation).
+The model pairs them the way the game does ([below](#what-the-game-does-with-it)): one segment per
+delta, starting at the key before it. So the two lists cannot fall out of step, and the writer only
+has to refuse a first segment whose `start` is not zero, which the file has no room for.
+
+`duration` is a duration, not a timestamp — see [Corpus](#material-animation).
 
 `MAKeys` is not `MADeltas` integrated. See [What `MAKeys` is not](#what-makeys-is-not).
 
@@ -227,8 +243,8 @@ It stays unread because there is no working in-game behaviour to validate a read
 | `isSphere`                 | function  | `(directory: Directory): boolean`                                                  |
 | `MaterialAnim`             | interface | Animates the UV transform of a single material, named by the directory holding it. |
 | `MaterialAnimLibrary`      | type      | `MaterialAnim[]`.                                                                  |
-| `MaterialKey`              | interface | UV transform a segment starts from.                                                |
-| `MaterialKeyframe`         | interface | One segment of a material animation; `time` is its own duration, not an offset.    |
+| `MaterialSegment`          | interface | One segment: `duration`, the `start` transform and its `velocity`.                 |
+| `MaterialTransform`        | interface | A material's UV transform, or its rate of change per second.                       |
 | `MeshSource`               | type      | What a rigid part hangs its geometry off: one reference, or a switch over several. |
 | `readCamera`               | function  | `(parent: Directory): Camera`                                                      |
 | `readMaterialAnim`         | function  | Reads a material animation from its directory.                                     |
@@ -236,7 +252,7 @@ It stays unread because there is no working in-game behaviour to validate a read
 | `readRigidModel`           | function  | `(directory: Directory): RigidModel`                                               |
 | `readSphere`               | function  | `(parent: Directory): Sphere`                                                      |
 | `Rigid`                    | interface | `{ type: 'rigid', hardpoints, part?: MeshSource, wireframe?: VMeshWire }`.         |
-| `RigidModel`               | type      | `Model<RigidPart> \| RigidPart` — a compound tree, or a lone part.                 |
+| `RigidModel`               | type      | `CompoundNode<RigidPart> \| RigidPart` — a compound tree, or a lone part.          |
 | `RigidPart`                | type      | `Rigid \| Camera \| Sphere`.                                                       |
 | `Sphere`                   | interface | Procedural sphere model, used by `.sph` planet and star files.                     |
 | `writeCamera`              | function  | `(camera: Camera): Directory`                                                      |
@@ -273,13 +289,13 @@ Retail files re-serialise byte for byte. `MACount` is 1 in most of the 82 entrie
 `MAFlags` is `2` in 78 and `0` in the other four. The `MAKeys` file is omitted whenever `MACount` is
 1, in all 82.
 
-**`time` is a duration.** Only 5 of the 16 multi-keyframe entries are ascending and none start at
-zero. `BASES/RHEINLAND/rh_01_bizmark_cityscape.cmp` alternates `3.3333` and `0.0667`: a banner that
-holds a frame for 3.3 seconds, then flips in two frames at 30fps.
+**`duration` is a duration.** Only 5 of the 16 multi-keyframe entries are ascending and none start
+at zero. `BASES/RHEINLAND/rh_01_bizmark_cityscape.cmp` alternates `3.3333` and `0.0667`: a banner
+that holds a frame for 3.3 seconds, then flips in two frames at 30fps.
 
-**`MAKeys` is not derivable.** Key differences and segment displacements (`speed × time`) are drawn
-from the same handful of magnitudes, but no fixed alignment survives. Of the seven entries with more
-than one key:
+**`MAKeys` is not derivable.** Key differences and segment displacements (`velocity × duration`) are
+drawn from the same handful of magnitudes, but no fixed alignment survives. Of the seven entries
+with more than one key:
 
 | Alignment                               | Entries                                                                       |
 | --------------------------------------- | ----------------------------------------------------------------------------- |

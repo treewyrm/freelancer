@@ -9,30 +9,35 @@ import {
   writeMaterialAnim,
   writeMaterialAnimLibrary,
   type MaterialAnim,
+  type MaterialTransform,
 } from './materialanim.js'
 
-const keyframe = (time: number, uOffsetSpeed = 0, vOffsetSpeed = 0) => ({
-  time,
-  uOffsetSpeed,
-  vOffsetSpeed,
-  uScaleSpeed: 0,
-  vScaleSpeed: 0,
+const transform = (uOffset = 0, vOffset = 0): MaterialTransform => ({
+  uOffset,
+  vOffset,
+  uScale: 0,
+  vScale: 0,
+})
+
+const segment = (duration: number, start: MaterialTransform, velocity: MaterialTransform) => ({
+  duration,
+  start,
+  velocity,
 })
 
 const single: MaterialAnim = {
   name: 'scroller',
   flags: 2,
-  keyframes: [keyframe(8, 0, -0.25)],
-  keys: [],
+  segments: [segment(8, transform(), transform(0, -0.25))],
 }
 
 const triple: MaterialAnim = {
   name: 'banner',
   flags: 2,
-  keyframes: [keyframe(2, 1), keyframe(0.5, 4), keyframe(2, 1)],
-  keys: [
-    { uOffset: 2, vOffset: 0, uScale: 0, vScale: 0 },
-    { uOffset: 4, vOffset: 0, uScale: 0, vScale: 0 },
+  segments: [
+    segment(2, transform(), transform(1)),
+    segment(0.5, transform(2), transform(4)),
+    segment(2, transform(4), transform(1)),
   ],
 }
 
@@ -48,39 +53,44 @@ describe('writeMaterialAnim', () => {
     )
   })
 
-  it('omits MAKeys entirely for a single keyframe rather than writing it empty', () => {
+  it('omits MAKeys entirely for a single segment rather than writing it empty', () => {
     strictEqual(writeMaterialAnim(single).getFile('MAKeys'), undefined)
   })
 
-  it('appends MAKeys once there is more than one keyframe', () => {
+  it('appends MAKeys once there is more than one segment', () => {
     deepStrictEqual(
       writeMaterialAnim(triple).children.map(({ name }) => name),
       ['MACount', 'MAFlags', 'MADeltas', 'MAKeys'],
     )
   })
 
-  it('writes five floats per keyframe and four per key', () => {
+  it('writes five floats per segment, and four per start past the first', () => {
     const directory = writeMaterialAnim(triple)
 
     strictEqual(directory.getFile('MADeltas')?.byteLength, 3 * 5 * 4)
     strictEqual(directory.getFile('MAKeys')?.byteLength, 2 * 4 * 4)
+    deepStrictEqual([...directory.getFile('MAKeys')!.readFloats()], [2, 0, 0, 0, 4, 0, 0, 0])
   })
 
-  it('throws when there are no keyframes', () => {
-    throws(() => writeMaterialAnim({ ...single, keyframes: [] }), RangeError)
+  it('throws when there are no segments', () => {
+    throws(() => writeMaterialAnim({ ...single, segments: [] }), RangeError)
   })
 
-  it('throws when the key count does not trail the keyframe count by one', () => {
-    throws(() => writeMaterialAnim({ ...triple, keys: [] }), RangeError)
+  // The file has no first key: the game starts from zero, and so must the model.
+  it('throws when the first segment starts anywhere but zero', () => {
+    throws(
+      () => writeMaterialAnim({ ...single, segments: [segment(1, transform(1), transform())] }),
+      /zero transform/,
+    )
   })
 })
 
 describe('readMaterialAnim', () => {
-  it('round-trips a single-keyframe animation', () => {
+  it('round-trips a single-segment animation', () => {
     deepStrictEqual(readMaterialAnim(writeMaterialAnim(single)), single)
   })
 
-  it('round-trips keyframes and keys', () => {
+  it('round-trips segments, starts included', () => {
     deepStrictEqual(readMaterialAnim(writeMaterialAnim(triple)), triple)
   })
 
@@ -95,11 +105,9 @@ describe('readMaterialAnim', () => {
     throws(() => readMaterialAnim(directory), /MACount/)
   })
 
-  // `writeIntegers` appends, so a count has to be removed before it can be replaced.
   const withCount = (anim: MaterialAnim, count: number) => {
     const directory = writeMaterialAnim(anim)
-    directory.delete('MACount')
-    directory.setFile('MACount').writeIntegers(count)
+    directory.ensureFile('MACount').setIntegers(count)
 
     return directory
   }
@@ -112,7 +120,7 @@ describe('readMaterialAnim', () => {
     throws(() => readMaterialAnim(withCount(triple, 4)), /MADeltas/)
   })
 
-  it('throws when MAKeys is short of one key per keyframe past the first', () => {
+  it('throws when MAKeys is short of one key per segment past the first', () => {
     const directory = writeMaterialAnim(triple)
     directory.delete('MAKeys')
 

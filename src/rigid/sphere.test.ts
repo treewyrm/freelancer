@@ -34,7 +34,7 @@ const inner = (sphere: Sphere) => writeSphere(sphere).getDirectory('Sphere')!
 /** Rewrites Sides to a value writeSphere would never derive, to exercise the reader against it. */
 function claimSides(directory: Directory, count: number): Directory {
   directory.delete('Sides')
-  directory.setFile('Sides').writeIntegers(count)
+  directory.ensureFile('Sides').setIntegers(count)
 
   return new Directory('\\', [directory])
 }
@@ -46,6 +46,12 @@ describe('isSphere', () => {
 
   it('rejects a directory without one', () => {
     strictEqual(isSphere(new Directory('\\')), false)
+  })
+
+  // The probe answers exactly when the reader succeeds, so a caller can dispatch on it.
+  it('agrees with readSphere', () => {
+    deepStrictEqual(readSphere(wrap(sample())), sample())
+    throws(() => readSphere(new Directory('\\')), /Missing Sphere/)
   })
 })
 
@@ -112,8 +118,8 @@ describe('readSphere', () => {
   // sun.sph stores M0 as exactly the four bytes "none", with no room for a terminator.
   it('accepts a material name with no NUL terminator', () => {
     const directory = new Directory('Sphere', [new File('M0', BufferView.from('none'))])
-    directory.setFile('Radius').writeFloats(1000)
-    directory.setFile('Sides').writeIntegers(1)
+    directory.ensureFile('Radius').setFloats(1000)
+    directory.ensureFile('Sides').setIntegers(1)
 
     deepStrictEqual(readSphere(new Directory('\\', [directory])).sides, ['none'])
   })

@@ -294,7 +294,9 @@ describe('retail corpus', { skip: corpus.skip }, () => {
 
       it('keeps @include as a property rather than following it', () => {
         const dacom = assets.find(({ path }) => /dacom\.ini$/i.test(path))
-        const properties = Document.read(dacom!.data).sections.flatMap(({ properties }) => properties)
+        const properties = Document.read(dacom!.data).sections.flatMap(
+          ({ properties }) => properties,
+        )
 
         assert.ok(properties.some(({ name }) => name.startsWith('@include')))
       })

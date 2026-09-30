@@ -1,5 +1,7 @@
-import Directory from './directory.js'
+import Directory, { isUTF } from './directory.js'
+import { getResourceId } from '#/hash.js'
 import File from './file.js'
+import { SIGNATURE, VERSION_BYTE_LENGTH } from './data.js'
 import BufferView from '#/utility/bufferview.js'
 import { describe, it } from 'node:test'
 import * as assert from 'node:assert/strict'
@@ -40,10 +42,10 @@ describe('Directory.directories / .files', () => {
   })
 })
 
-describe('Directory.setDirectory', () => {
+describe('Directory.ensureDirectory', () => {
   it('creates a single-level directory', () => {
     const root = new Directory()
-    const sub = root.setDirectory('Sub')
+    const sub = root.ensureDirectory('Sub')
     assert.ok(sub instanceof Directory)
     assert.equal(sub.name, 'Sub')
     assert.equal(root.directories.length, 1)
@@ -51,7 +53,7 @@ describe('Directory.setDirectory', () => {
 
   it('creates nested directories in one call', () => {
     const root = new Directory()
-    const deep = root.setDirectory('A', 'B', 'C')
+    const deep = root.ensureDirectory('A', 'B', 'C')
     assert.ok(deep instanceof Directory)
     assert.equal(deep.name, 'C')
     assert.equal(root.getDirectory('A', 'B', 'C'), deep)
@@ -59,8 +61,8 @@ describe('Directory.setDirectory', () => {
 
   it('returns an existing directory without duplicating', () => {
     const root = new Directory()
-    const first = root.setDirectory('Sub')
-    const second = root.setDirectory('Sub')
+    const first = root.ensureDirectory('Sub')
+    const second = root.ensureDirectory('Sub')
     assert.equal(first, second)
     assert.equal(root.directories.length, 1)
   })
@@ -69,13 +71,13 @@ describe('Directory.setDirectory', () => {
 describe('Directory.getDirectory', () => {
   it('finds an existing nested directory', () => {
     const root = new Directory()
-    const created = root.setDirectory('A', 'B')
+    const created = root.ensureDirectory('A', 'B')
     assert.equal(root.getDirectory('A', 'B'), created)
   })
 
   it('returns undefined for a missing path segment', () => {
     const root = new Directory()
-    root.setDirectory('A')
+    root.ensureDirectory('A')
     assert.equal(root.getDirectory('A', 'B'), undefined)
   })
 
@@ -90,10 +92,10 @@ describe('Directory.getDirectory', () => {
   })
 })
 
-describe('Directory.setFile', () => {
+describe('Directory.ensureFile', () => {
   it('creates a file at the root level', () => {
     const root = new Directory()
-    const f = root.setFile('data.bin')
+    const f = root.ensureFile('data.bin')
     assert.ok(f instanceof File)
     assert.equal(f.name, 'data.bin')
     assert.equal(root.files.length, 1)
@@ -101,35 +103,35 @@ describe('Directory.setFile', () => {
 
   it('creates intermediate directories as needed', () => {
     const root = new Directory()
-    const f = root.setFile('A', 'B', 'data.bin')
+    const f = root.ensureFile('A', 'B', 'data.bin')
     assert.ok(f instanceof File)
     assert.ok(root.getDirectory('A', 'B') instanceof Directory)
   })
 
   it('returns an existing file without duplicating', () => {
     const root = new Directory()
-    const first = root.setFile('data.bin')
-    const second = root.setFile('data.bin')
+    const first = root.ensureFile('data.bin')
+    const second = root.ensureFile('data.bin')
     assert.equal(first, second)
     assert.equal(root.files.length, 1)
   })
 
   it('throws RangeError when no name is provided', () => {
     const root = new Directory()
-    assert.throws(() => root.setFile(), RangeError)
+    assert.throws(() => root.ensureFile(), RangeError)
   })
 })
 
 describe('Directory.getFile', () => {
   it('finds an existing file', () => {
     const root = new Directory()
-    const created = root.setFile('A', 'data.bin')
+    const created = root.ensureFile('A', 'data.bin')
     assert.equal(root.getFile('A', 'data.bin'), created)
   })
 
   it('returns undefined when the file is missing', () => {
     const root = new Directory()
-    root.setDirectory('A')
+    root.ensureDirectory('A')
     assert.equal(root.getFile('A', 'missing.bin'), undefined)
   })
 
@@ -147,29 +149,37 @@ describe('Directory.getFile', () => {
 describe('Directory.delete', () => {
   it('removes a file by name', () => {
     const root = new Directory()
-    root.setFile('data.bin')
+    root.ensureFile('data.bin')
     root.delete('data.bin')
     assert.equal(root.files.length, 0)
   })
 
   it('removes a directory', () => {
     const root = new Directory()
-    root.setDirectory('Sub')
+    root.ensureDirectory('Sub')
     root.delete('Sub')
     assert.equal(root.directories.length, 0)
   })
 
   it('removes a nested entry', () => {
     const root = new Directory()
-    root.setFile('A', 'data.bin')
+    root.ensureFile('A', 'data.bin')
     root.delete('A', 'data.bin')
     assert.equal(root.getDirectory('A')!.files.length, 0)
   })
 
   it('is case-insensitive', () => {
     const root = new Directory()
-    root.setFile('Data.bin')
+    root.ensureFile('Data.bin')
     root.delete('DATA.BIN')
+    assert.equal(root.files.length, 0)
+  })
+
+  // Compared as the lookups compare, so what getFile finds, delete removes — by CRC included.
+  it('takes a CRC the way getFile does', () => {
+    const root = new Directory()
+    root.ensureFile('Data.bin')
+    root.delete(getResourceId('data.bin'))
     assert.equal(root.files.length, 0)
   })
 
@@ -184,22 +194,22 @@ describe('Directory.delete', () => {
   })
 })
 
-describe('Directory.append', () => {
+describe('Directory.set', () => {
   it('adds a new child entry', () => {
     const root = new Directory()
-    root.append(new File('data.bin'))
+    root.set(new File('data.bin'))
     assert.equal(root.files.length, 1)
   })
 
   it('replaces an existing child with the same name', () => {
     const root = new Directory()
     const original = new File('data.bin')
-    original.writeIntegers(1)
-    root.append(original)
+    original.setIntegers(1)
+    root.set(original)
 
     const replacement = new File('data.bin')
-    replacement.writeIntegers(99)
-    root.append(replacement)
+    replacement.setIntegers(99)
+    root.set(replacement)
 
     assert.equal(root.files.length, 1)
     assert.deepEqual([...root.files[0]!.readIntegers()], [99])
@@ -207,7 +217,19 @@ describe('Directory.append', () => {
 
   it('returns this for chaining', () => {
     const root = new Directory()
-    assert.equal(root.append(new File('x')), root)
+    assert.equal(root.set(new File('x')), root)
+  })
+})
+
+describe('isUTF', () => {
+  it('recognises what Directory.write emits', () => {
+    assert.equal(isUTF(new Directory().write()), true)
+    assert.equal(isUTF(new Directory().write().buffer), true)
+  })
+
+  it('rejects a buffer too short or signed otherwise', () => {
+    assert.equal(isUTF(new Uint8Array(4)), false)
+    assert.equal(isUTF(new TextEncoder().encode('BINI\u0001\u0000\u0000\u0000')), false)
   })
 })
 
@@ -225,7 +247,7 @@ describe('Directory write / read round-trip', () => {
 
   it('preserves a single file and its integer data', () => {
     const root = new Directory()
-    root.setFile('config').writeIntegers(42, -7)
+    root.ensureFile('config').setIntegers(42, -7)
 
     const restored = Directory.read(root.write())
     const file = restored.getFile('config')
@@ -236,7 +258,7 @@ describe('Directory write / read round-trip', () => {
 
   it('preserves nested directory structure', () => {
     const root = new Directory()
-    root.setDirectory('A', 'B', 'C')
+    root.ensureDirectory('A', 'B', 'C')
 
     const restored = Directory.read(root.write())
     assert.ok(restored.getDirectory('A', 'B', 'C') instanceof Directory)
@@ -244,7 +266,7 @@ describe('Directory write / read round-trip', () => {
 
   it('preserves float data in files', () => {
     const root = new Directory()
-    root.setFile('mesh', 'vertices').writeFloats(1.0, 2.0, 3.0)
+    root.ensureFile('mesh', 'vertices').setFloats(1.0, 2.0, 3.0)
 
     const restored = Directory.read(root.write())
     const values = [...restored.getFile('mesh', 'vertices')!.readFloats()]
@@ -257,7 +279,7 @@ describe('Directory write / read round-trip', () => {
 
   it('preserves string data in files', () => {
     const root = new Directory()
-    root.setFile('names').writeStrings('alpha', 'beta', 'gamma')
+    root.ensureFile('names').setStrings('alpha', 'beta', 'gamma')
 
     const restored = Directory.read(root.write())
     assert.deepEqual([...restored.getFile('names')!.readStrings()], ['alpha', 'beta', 'gamma'])
@@ -265,8 +287,8 @@ describe('Directory write / read round-trip', () => {
 
   it('handles same entry name in different directories', () => {
     const root = new Directory()
-    root.setFile('A', 'data').writeIntegers(1)
-    root.setFile('B', 'data').writeIntegers(2)
+    root.ensureFile('A', 'data').setIntegers(1)
+    root.ensureFile('B', 'data').setIntegers(2)
 
     const restored = Directory.read(root.write())
     assert.deepEqual([...restored.getFile('A', 'data')!.readIntegers()], [1])
@@ -276,10 +298,10 @@ describe('Directory write / read round-trip', () => {
   it('preserves a complex mixed tree', () => {
     const root = new Directory()
     root
-      .setFile('Cmpnd', 'Root', 'Transform')
-      .writeFloats(...Array.from({ length: 16 }, (_, i) => i))
-    root.setFile('Cmpnd', 'Root', 'Children').writeStrings('Part_1', 'Part_2')
-    root.setFile('MultiLevel', 'Level0', 'VMeshData').writeIntegers(1, 2, 3)
+      .ensureFile('Cmpnd', 'Root', 'Transform')
+      .setFloats(...Array.from({ length: 16 }, (_, i) => i))
+    root.ensureFile('Cmpnd', 'Root', 'Children').setStrings('Part_1', 'Part_2')
+    root.ensureFile('MultiLevel', 'Level0', 'VMeshData').setIntegers(1, 2, 3)
 
     const restored = Directory.read(root.write())
 
@@ -309,7 +331,7 @@ describe('Directory.read error handling', () => {
 
   it('throws on an invalid version', () => {
     const view = BufferView.allocate(8)
-    view.writeUint32(Directory.SIGNATURE)
+    view.writeUint32(SIGNATURE)
     view.writeUint32(0x00000000) // wrong version
     assert.throws(() => Directory.read(new Uint8Array(view.buffer)), RangeError)
   })
@@ -323,11 +345,11 @@ describe('Directory.read header free offset', () => {
   // The uint32 after treeSize is the head of the free entry list, not the root
   // entry. The root always sits at tree offset 0. Files written by the original
   // Freelancer tools leave a non-zero value here.
-  const freeOffsetAt = Directory.VERSION_BYTE_LENGTH + 8
+  const freeOffsetAt = VERSION_BYTE_LENGTH + 8
 
   it('ignores a non-zero free offset and reads the root from tree offset 0', () => {
     const root = new Directory()
-    root.setDirectory('Nested').setFile('Payload').writeIntegers(1, 2, 3)
+    root.ensureDirectory('Nested').ensureFile('Payload').setIntegers(1, 2, 3)
 
     const buffer = root.write()
     const view = BufferView.from(buffer)

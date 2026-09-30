@@ -1,7 +1,7 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import Directory from '#/utf/directory.js'
-import { ChannelType, type Channel } from './channel.js'
+import type { Channel } from './channel.js'
 import {
   getLibraryDuration,
   getScript,
@@ -9,11 +9,17 @@ import {
   writeAnimationLibrary,
 } from './library.js'
 import { writeAnimationMap, type AnimationMap } from './map.js'
-import { getJointMap, getObjectMap, getScriptDuration, writeScript, type Script } from './script.js'
+import {
+  getJointMap,
+  getObjectMap,
+  getScriptDuration,
+  writeScript,
+  type AnimationScript,
+} from './script.js'
 
 const channel = (...keys: number[]): Channel => ({
+  type: 'angle',
   interval: -1,
-  type: ChannelType.Angle,
   keyframes: keys.map((key) => ({ key, value: key })),
 })
 
@@ -24,13 +30,13 @@ const joint = (parent: string, child: string, ...keys: number[]): AnimationMap =
   channel: channel(...keys),
 })
 
-const object = (parent: string, ...keys: number[]): AnimationMap => ({
+const object = (name: string, ...keys: number[]): AnimationMap => ({
   type: 'object',
-  parent,
+  object: name,
   channel: channel(...keys),
 })
 
-const script = (name: string, ...maps: AnimationMap[]): Script => ({ name, maps })
+const script = (name: string, ...maps: AnimationMap[]): AnimationScript => ({ name, maps })
 
 const library = [
   script('Sc_open dock', joint('Root', 'door_left', 0, 1.5), joint('Root', 'door_right', 0, 2)),
@@ -67,7 +73,26 @@ describe('readAnimationLibrary', () => {
 
   it('ignores stray entries beside the maps', () => {
     const directory = writeAnimationLibrary(library)
-    directory.getDirectory('Script', 'Sc_spin')?.setDirectory('Notes')
+    directory.getDirectory('Script', 'Sc_spin')?.ensureDirectory('Notes')
+
+    strictEqual(readAnimationLibrary(new Directory('\\', [directory])).at(1)?.maps.length, 1)
+  })
+
+  it('matches map stems and root height by exact case, as the engine does', () => {
+    const directory = writeAnimationLibrary([{ ...library[1]!, height: 1 }])
+    const spin = directory.getDirectory('Script', 'Sc_spin')!
+
+    spin.getDirectory('Joint map 0')!.name = 'joint map 0'
+    spin.getFile('Root height')!.name = 'root height'
+
+    deepStrictEqual(readAnimationLibrary(new Directory('\\', [directory])), [
+      { name: 'Sc_spin', maps: [] },
+    ])
+  })
+
+  it('skips event maps, which the engine never loads', () => {
+    const directory = writeAnimationLibrary(library)
+    directory.getDirectory('Script', 'Sc_spin')?.ensureDirectory('Event map 0')
 
     strictEqual(readAnimationLibrary(new Directory('\\', [directory])).at(1)?.maps.length, 1)
   })
@@ -131,6 +156,6 @@ describe('lookup', () => {
     strictEqual(found?.name, 'Sc_open dock')
     strictEqual(getJointMap(found!, 'DOOR_RIGHT')?.child, 'door_right')
     strictEqual(getObjectMap(found!, 'Root'), undefined)
-    strictEqual(getObjectMap(script('Sc_x', object('Root')), 'root')?.parent, 'Root')
+    strictEqual(getObjectMap(script('Sc_x', object('Root')), 'root')?.object, 'Root')
   })
 })

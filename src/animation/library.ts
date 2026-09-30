@@ -1,6 +1,6 @@
 import Directory from '#/utf/directory.js'
 import { getResource, type Hashable } from '#/hash.js'
-import { getScriptDuration, readScript, writeScript, type Script } from './script.js'
+import { getScriptDuration, readScript, writeScript, type AnimationScript } from './script.js'
 
 /**
  * Animation scripts of a model.
@@ -8,7 +8,7 @@ import { getScriptDuration, readScript, writeScript, type Script } from './scrip
  * Rigid compound models embed the library in the `.cmp` file next to `Cmpnd`, deformable models
  * keep it in a standalone `.anm` file. Both use the same structures.
  */
-export type AnimationLibrary = Script[]
+export type AnimationLibrary = AnimationScript[]
 
 /** Library duration in seconds, the longest of its scripts. */
 export function getLibraryDuration(library: AnimationLibrary): number {
@@ -19,7 +19,7 @@ export function getLibraryDuration(library: AnimationLibrary): number {
 }
 
 /** Finds script by name. */
-export const getScript = (library: AnimationLibrary, name: Hashable): Script | undefined =>
+export const getScript = (library: AnimationLibrary, name: Hashable): AnimationScript | undefined =>
   getResource(library, ({ name }) => name, name)
 
 /**
@@ -43,9 +43,9 @@ export function readAnimationLibrary(parent: Directory): AnimationLibrary {
  * @param scripts Animation scripts
  * @returns
  */
-export function writeAnimationLibrary(scripts: Iterable<Script>): Directory {
+export function writeAnimationLibrary(scripts: Iterable<AnimationScript>): Directory {
   const directory = new Directory('Animation')
-  const parent = directory.setDirectory('Script')
+  const parent = directory.ensureDirectory('Script')
 
   for (const script of scripts) parent.children.push(writeScript(script))
 

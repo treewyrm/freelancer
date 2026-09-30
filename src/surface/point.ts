@@ -22,10 +22,12 @@ export function readPoint(view: BufferView): Point {
   }
 }
 
-/** Writes one point at the cursor. `clientData` goes out as carried, never zeroed. */
-export function writePoint(view: BufferView, point: Point): void {
-  view.writeFloat32(point.x)
-  view.writeFloat32(point.y)
-  view.writeFloat32(point.z)
-  view.writeInt32(point.clientData)
+/** Writes one point. `clientData` goes out as carried, never zeroed. */
+export function writePoint(point: Point): BufferView {
+  return BufferView.allocate(16)
+    .writeFloat32(point.x)
+    .writeFloat32(point.y)
+    .writeFloat32(point.z)
+    .writeInt32(point.clientData)
+    .rewind()
 }

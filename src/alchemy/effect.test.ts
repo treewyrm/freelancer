@@ -3,8 +3,8 @@ import { describe, it } from 'node:test'
 import { getResourceId } from '#/hash.js'
 import BufferView from '#/utility/bufferview.js'
 import {
-  ControlRootId,
-  WorldId,
+  CONTROL_ROOT_ID,
+  WORLD_ID,
   readEffect,
   readEffectLibrary,
   readEntry,
@@ -39,7 +39,6 @@ const writeFloat32 = (value: number) => BufferView.allocate(4).writeFloat32(valu
 const instance = (crc: number, rest: Partial<NodeInstance> = {}): NodeInstance => ({
   crc,
   flags: 0,
-  sort: 0,
   children: [],
   targets: [],
   ...rest,
@@ -47,29 +46,29 @@ const instance = (crc: number, rest: Partial<NodeInstance> = {}): NodeInstance =
 
 /** A container root with two emitters under it, the shape almost every retail effect has. */
 const entries: Entry[] = [
-  { flags: 1, crc: ControlRootId, parentId: WorldId, childId: 7 },
+  { flags: 1, crc: CONTROL_ROOT_ID, parentId: WORLD_ID, childId: 7 },
   { flags: 0, crc: 0x11111111, parentId: 7, childId: 3 },
   { flags: 0, crc: 0x22222222, parentId: 7, childId: 9 },
 ]
 
 describe('constants', () => {
-  it('holds ControlRootId signed so it compares against a CRC read as int32', () => {
-    strictEqual(ControlRootId, 0xee223b51 | 0)
-    ok(ControlRootId < 0)
+  it('holds CONTROL_ROOT_ID signed so it compares against a CRC read as int32', () => {
+    strictEqual(CONTROL_ROOT_ID, 0xee223b51 | 0)
+    ok(CONTROL_ROOT_ID < 0)
   })
 
-  it('hashes ControlRootId from "Control Root", case-sensitive', () => {
-    strictEqual(getResourceId('Control Root', true), ControlRootId)
+  it('hashes CONTROL_ROOT_ID from "Control Root", case-sensitive', () => {
+    strictEqual(getResourceId('Control Root', true), CONTROL_ROOT_ID)
   })
 
-  it('marks roots with a parent of WorldId', () => {
-    strictEqual(WorldId, 0x8000)
+  it('marks roots with a parent of WORLD_ID', () => {
+    strictEqual(WORLD_ID, 0x8000)
   })
 })
 
 describe('entries and pairs', () => {
   it('stores an entry as four signed 32-bit fields', () => {
-    const entry = { flags: 1, crc: ControlRootId, parentId: WorldId, childId: 2 }
+    const entry = { flags: 1, crc: CONTROL_ROOT_ID, parentId: WORLD_ID, childId: 2 }
     const view = writeEntry(entry)
 
     strictEqual(view.byteLength, 16)
@@ -94,10 +93,10 @@ describe('readEffect', () => {
 
     const [container] = effect.children
 
-    strictEqual(container?.crc, ControlRootId)
-    strictEqual(container.flags, 1)
+    strictEqual(container?.crc, CONTROL_ROOT_ID)
+    strictEqual(container!.flags, 1)
     deepStrictEqual(
-      container.children.map(({ crc }) => crc),
+      container!.children.map(({ crc }) => crc),
       [0x11111111, 0x22222222],
     )
   })
@@ -134,13 +133,11 @@ describe('readEffect', () => {
   it('reads a bounding sphere per effect at version 1.1 and none at version 1', () => {
     const extended = readEffect(buffer('fx_test', entries, [], [1, 2, 3, 4]), Math.fround(1.1))
 
-    deepStrictEqual(extended.center, { x: 1, y: 2, z: 3 })
-    strictEqual(extended.radius, 4)
+    deepStrictEqual(extended.bounds, { center: { x: 1, y: 2, z: 3 }, radius: 4 })
 
     const plain = readEffect(buffer('fx_test', entries))
 
-    deepStrictEqual(plain.center, { x: 0, y: 0, z: 0 })
-    strictEqual(plain.radius, 0)
+    strictEqual('bounds' in plain, false, 'absent rather than zero, since the file stores none')
   })
 })
 
@@ -157,7 +154,7 @@ describe('writeEffect', () => {
     const child = instance(0x11111111)
     const effect: Effect = {
       name: 'fx_test',
-      children: [instance(ControlRootId, { id: 2, children: [child] })],
+      children: [instance(CONTROL_ROOT_ID, { id: 2, children: [child] })],
     }
 
     const written = readEffect(writeEffect(effect))
@@ -172,7 +169,7 @@ describe('writeEffect', () => {
     const effect: Effect = {
       name: 'fx_test',
       children: [
-        instance(ControlRootId, {
+        instance(CONTROL_ROOT_ID, {
           id: 5,
           children: [instance(0x11111111, { id: 5 }), instance(0x22222222, { id: 5 })],
         }),
@@ -192,7 +189,7 @@ describe('writeEffect', () => {
     const effect: Effect = {
       name: 'fx_test',
       children: [
-        instance(ControlRootId, {
+        instance(CONTROL_ROOT_ID, {
           id: 1,
           sort: 2,
           children: [instance(0x11111111, { id: 2, sort: 0 })],
@@ -206,7 +203,29 @@ describe('writeEffect', () => {
     view.offset = writeString('fx_test').byteLength + 4
     deepStrictEqual(
       [readEntry(view), readEntry(view), readEntry(view)].map(({ crc }) => crc),
-      [0x11111111, 0x22222222, ControlRootId],
+      [0x11111111, 0x22222222, CONTROL_ROOT_ID],
+    )
+  })
+
+  // A hand-built tree need not say where each entry goes: the ones that do lead, and the rest
+  // follow breadth-first, which is how the writer walks the tree.
+  it('places instances without a sort after those with one, breadth-first', () => {
+    const effect: Effect = {
+      name: 'fx_test',
+      children: [
+        instance(CONTROL_ROOT_ID, {
+          children: [instance(0x11111111), instance(0x22222222, { sort: 0 })],
+        }),
+        instance(0x33333333),
+      ],
+    }
+
+    const view = writeEffect(effect)
+
+    view.offset = writeString('fx_test').byteLength + 4
+    deepStrictEqual(
+      [readEntry(view), readEntry(view), readEntry(view), readEntry(view)].map(({ crc }) => crc),
+      [0x22222222, CONTROL_ROOT_ID, 0x33333333, 0x11111111],
     )
   })
 
@@ -217,7 +236,7 @@ describe('writeEffect', () => {
     const effect: Effect = {
       name: 'fx_test',
       children: [
-        instance(ControlRootId, {
+        instance(CONTROL_ROOT_ID, {
           id: 7,
           children: [instance(0x11111111, { id: 3, targets: [target, orphan] }), target],
         }),
@@ -262,8 +281,8 @@ describe('effect library', () => {
     const reread = readEffectLibrary(writeEffectLibrary(plain))
 
     deepStrictEqual(
-      reread.effects.map(({ radius }) => radius),
-      [0],
+      reread.effects.map(({ bounds }) => bounds),
+      [undefined],
       'the bounding sphere is dropped at version 1',
     )
   })

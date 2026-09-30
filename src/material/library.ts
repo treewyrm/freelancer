@@ -2,21 +2,22 @@ import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
 import { getResource, type Hashable } from '#/hash.js'
 import { readMaterial, writeMaterial } from './material.js'
-import type { Material } from './types.js'
+import type { Material, MaterialLibrary } from './types.js'
 
 /**
  * Reads materials from a directory, looking for a `Material library` within.
  *
- * Only the root level is searched, as {@link readTextures} does. Four retail assets hold a second
+ * Only the root level is searched, as `readTextureLibrary` does. Four retail assets hold a second
  * library nested under an `openFLAME 3D N-mesh` tree — Conquest: Frontier Wars leftovers the game
- * itself cannot load — and those stay out of reach here deliberately.
+ * itself cannot load — and those stay out of reach here deliberately. Empty when the directory
+ * holds no library.
  * @param parent Parent directory (typically root)
  */
-export function* readMaterials(parent: Directory): Generator<Material> {
+export function readMaterialLibrary(parent: Directory): MaterialLibrary {
   const library = parent.getDirectory('Material library')
-  if (!library) return
+  if (!library) return []
 
-  for (const child of library.directories) yield readMaterial(child)
+  return library.directories.map((child) => readMaterial(child))
 }
 
 /**
@@ -27,15 +28,15 @@ export function* readMaterials(parent: Directory): Generator<Material> {
  * so a field for it on the library would only offer a way to disagree. One asset, `SOLAR/SUNS/
  * sun.sph`, has no count file at all and gains one here.
  */
-export function writeMaterials(materials: Iterable<Material>): Directory {
+export function writeMaterialLibrary(materials: Iterable<Material>): Directory {
   const children = [...materials].map((material) => writeMaterial(material))
 
   return new Directory('Material library', [
-    new File('Material count').writeIntegers(children.length),
+    new File('Material count').setIntegers(children.length),
     ...children,
   ])
 }
 
 /** Finds a material by name or resource CRC, the way a mesh's material reference does. */
-export const getMaterial = (materials: Material[], name: Hashable): Material | undefined =>
+export const getMaterial = (materials: MaterialLibrary, name: Hashable): Material | undefined =>
   getResource(materials, ({ name }) => name, name)

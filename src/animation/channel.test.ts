@@ -9,14 +9,18 @@ import {
   ChannelType,
   keyframeByteLength,
   readAngleQuaternion,
+  getChannelTime,
+  getChannelType,
   readChannel,
   readQuaternion,
+  readShortQuaternion,
   readVectorQuaternion,
   sampleChannel,
   validateChannelType,
   writeAngleQuaternion,
   writeChannel,
   writeQuaternion,
+  writeShortQuaternion,
   writeVectorQuaternion,
   type Channel,
 } from './channel.js'
@@ -57,9 +61,19 @@ describe('validateChannelType', () => {
     )
   })
 
-  it('rejects event keyframes and bits outside the byte', () => {
+  it('rejects event keyframes and bits the engine gives no meaning', () => {
     throws(() => validateChannelType(ChannelType.Event), RangeError)
-    throws(() => validateChannelType(0x100), RangeError)
+    throws(() => validateChannelType(0x200), RangeError)
+  })
+
+  it('accepts the whole-quaternion bit, alone or beside a position', () => {
+    strictEqual(validateChannelType(0x100), ChannelType.ShortQuaternion)
+    strictEqual(validateChannelType(0x102), 0x102)
+    strictEqual(validateChannelType(0x110), 0x110)
+    throws(
+      () => validateChannelType(ChannelType.ShortQuaternion | ChannelType.AngleQuaternion),
+      RangeError,
+    )
   })
 })
 
@@ -74,6 +88,7 @@ describe('keyframeByteLength', () => {
     strictEqual(keyframeByteLength(ChannelType.Quaternion, 0), 16)
     strictEqual(keyframeByteLength(ChannelType.VectorQuaternion, 0), 6)
     strictEqual(keyframeByteLength(ChannelType.AngleQuaternion, 0), 6)
+    strictEqual(keyframeByteLength(ChannelType.ShortQuaternion, 0), 8)
   })
 
   it('stores nothing for implied zero position and identity rotation', () => {
@@ -114,6 +129,29 @@ describe('quaternion storage', () => {
     }
   })
 
+  it('stores the whole quaternion as four int16, W first, keeping its sign', () => {
+    const quat = Quat.axisAngle({ axis: { x: 0, y: 0.6, z: 0.8 }, angle: Math.PI * 1.5 })
+    const view = BufferView.allocate(8)
+
+    writeShortQuaternion(view, quat)
+    strictEqual(
+      new Int16Array(view.buffer)[0],
+      Math.round(quat.w * 0x7fff),
+      'W precedes X, Y and Z',
+    )
+    ok(Vector4.equal(quat, readShortQuaternion(view.rewind()), 1e-4))
+  })
+
+  it("renormalizes a whole quaternion with the engine's single Newton step", () => {
+    // Stored at half length: |q|² = 0.25, so k = (3 - 0.25) / 2 = 1.375 — not the exact 2.
+    const view = BufferView.allocate(8)
+      .writeInt16(0x7fff / 2)
+      .rewind()
+    const { w } = readShortQuaternion(view)
+
+    ok(Math.abs(w - 0.5 * 1.375) < 1e-4, `${w}`)
+  })
+
   it('reads identity from a zero angle-scaled axis', () => {
     const view = BufferView.allocate(6)
 
@@ -150,14 +188,16 @@ describe('readChannel', () => {
       ),
     )
 
-    deepStrictEqual(
-      channel.keyframes.map(({ key, value }) => [key, value]),
-      [
-        [0, 1],
-        [0.5, 2],
-        [1, 3],
+    strictEqual(channel.type, 'angle')
+    deepStrictEqual(channel, {
+      type: 'angle',
+      interval: 0.5,
+      keyframes: [
+        { key: 0, value: 1 },
+        { key: 0.5, value: 2 },
+        { key: 1, value: 3 },
       ],
-    )
+    })
   })
 
   it('reads a time marker per keyframe when the interval is negative', () => {
@@ -173,13 +213,10 @@ describe('readChannel', () => {
       ),
     )
 
-    deepStrictEqual(
-      channel.keyframes.map(({ key, value }) => [key, value]),
-      [
-        [0, 10],
-        [2.5, 20],
-      ],
-    )
+    deepStrictEqual(channel.keyframes, [
+      { key: 0, value: 10 },
+      { key: 2.5, value: 20 },
+    ])
   })
 
   it('materialises implied zero position and identity rotation', () => {
@@ -192,9 +229,15 @@ describe('readChannel', () => {
       ),
     )
 
-    deepStrictEqual(channel.keyframes, [
-      { key: 0, position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 } },
-    ])
+    deepStrictEqual(channel, {
+      type: 'motion',
+      interval: 0,
+      position: 'zero',
+      orientation: 'identity',
+      keyframes: [
+        { key: 0, position: { x: 0, y: 0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } },
+      ],
+    })
   })
 
   it('rejects a frame buffer too short for the keyframe count', () => {
@@ -212,6 +255,27 @@ describe('readChannel', () => {
     )
   })
 
+  it('rejects a frame buffer longer than the keyframe count, as the engine does', () => {
+    throws(
+      () =>
+        readChannel(
+          wrap(
+            new Directory('Channel', [
+              header(1, 1, ChannelType.Angle),
+              new File('Frames', BufferView.allocate(8)),
+            ]),
+          ),
+        ),
+      RangeError,
+    )
+  })
+
+  it('rejects a header of any length but twelve bytes', () => {
+    const long = new File('Header', BufferView.allocate(16).writeUint32(0).writeFloat32(1))
+
+    throws(() => readChannel(wrap(new Directory('Channel', [long]))), /not 12 bytes/)
+  })
+
   it('reports a missing channel or header', () => {
     throws(() => readChannel(new Directory('Joint map 0')), /Missing channel/)
     throws(() => readChannel(wrap(new Directory('Channel'))), /Missing channel header/)
@@ -220,11 +284,13 @@ describe('readChannel', () => {
 
 describe('writeChannel', () => {
   const channel: Channel = {
+    type: 'motion',
     interval: -1,
-    type: ChannelType.Position | ChannelType.Quaternion,
+    position: 'vector',
+    orientation: 'quaternion',
     keyframes: [
-      { key: 0, position: { x: 1, y: 2, z: 3 }, rotation: { ...Quat.identity } },
-      { key: 1.5, position: { x: 4, y: 5, z: 6 }, rotation: { x: 0, y: 0, z: 1, w: 0 } },
+      { key: 0, position: { x: 1, y: 2, z: 3 }, orientation: { ...Quat.identity } },
+      { key: 1.5, position: { x: 4, y: 5, z: 6 }, orientation: { x: 0, y: 0, z: 1, w: 0 } },
     ],
   }
 
@@ -247,16 +313,55 @@ describe('writeChannel', () => {
 
   it('writes nothing for implied zero position and identity rotation', () => {
     const implied: Channel = {
+      type: 'motion',
       interval: 1 / 30,
-      type: ChannelType.ZeroPosition | ChannelType.IdentityQuaternion,
+      position: 'zero',
+      orientation: 'identity',
       keyframes: [{ key: 0 }, { key: 1 / 30 }],
     }
 
     strictEqual(writeChannel(implied).getFile('Frames')?.byteLength, 0)
   })
 
-  it('rejects channel types the format does not define', () => {
-    throws(() => writeChannel({ ...channel, type: ChannelType.Event }), RangeError)
+  it('stores the encodings as the type bitfield', () => {
+    strictEqual(getChannelType(channel), ChannelType.Position | ChannelType.Quaternion)
+    strictEqual(
+      getChannelType({ type: 'motion', interval: 1, orientation: 'angle', keyframes: [] }),
+      ChannelType.AngleQuaternion,
+    )
+    strictEqual(getChannelType({ type: 'angle', interval: 1, keyframes: [] }), ChannelType.Angle)
+  })
+
+  // A keyframe field the channel has no encoding for would be dropped, and one it does encode
+  // but the keyframe lacks would be invented.
+  it('refuses keyframes that disagree with the channel encodings', () => {
+    throws(
+      () =>
+        writeChannel({
+          type: 'motion',
+          interval: 1,
+          orientation: 'quaternion',
+          keyframes: [{ key: 0, position: { x: 1, y: 0, z: 0 }, orientation: Quat.identity }],
+        }),
+      /does not store/,
+    )
+
+    throws(
+      () =>
+        writeChannel({ type: 'motion', interval: 1, position: 'vector', keyframes: [{ key: 0 }] }),
+      /missing its position/,
+    )
+
+    throws(
+      () =>
+        writeChannel({
+          type: 'motion',
+          interval: 1,
+          orientation: 'vector',
+          keyframes: [{ key: 0 }],
+        }),
+      /missing its orientation/,
+    )
   })
 
   it('re-reads a byte-identical header', () => {
@@ -269,8 +374,9 @@ describe('writeChannel', () => {
 
 describe('sampleChannel', () => {
   const channel: Channel = {
+    type: 'motion',
     interval: 1,
-    type: ChannelType.Position,
+    position: 'vector',
     keyframes: [
       { key: 0, position: { x: 0, y: 0, z: 0 } },
       { key: 1, position: { x: 10, y: 0, z: 0 } },
@@ -290,8 +396,8 @@ describe('sampleChannel', () => {
 
   it('interpolates joint values', () => {
     const angles: Channel = {
+      type: 'angle',
       interval: 2,
-      type: ChannelType.Angle,
       keyframes: [
         { key: 0, value: 0 },
         { key: 2, value: Math.PI },
@@ -299,5 +405,105 @@ describe('sampleChannel', () => {
     }
 
     strictEqual(sampleChannel(angles, 1).value, Math.PI / 2)
+  })
+
+  const seam: Channel = {
+    type: 'angle',
+    interval: 1,
+    keyframes: [
+      { key: 0, value: 3 },
+      { key: 1, value: -3 },
+    ],
+  }
+
+  it('takes the short way round a revolute seam, and the long way for anything else', () => {
+    // 3 → -3 is 6 radians backwards on a line and 2π - 6 forwards on the circle.
+    ok(Math.abs(sampleChannel(seam, 0.5, true).value! - Math.PI) < 1e-6)
+    strictEqual(sampleChannel(seam, 0.5).value, 0)
+  })
+
+  it('wraps a revolute pair once, whatever it stores', () => {
+    // A sweep authored past half a turn plays backwards in game.
+    const sweep: Channel = {
+      type: 'angle',
+      interval: 1,
+      keyframes: [
+        { key: 0, value: 0 },
+        { key: 1, value: -Math.PI * 1.25 },
+      ],
+    }
+
+    ok(Math.abs(sampleChannel(sweep, 1, true).value! - Math.PI * 0.75) < 1e-6)
+  })
+
+  it('interpolates rotations as a normalized lerp, not a slerp', () => {
+    const a = Quat.identity
+    const b = Quat.axisAngle({ axis: { x: 0, y: 0, z: 1 }, angle: Math.PI / 2 })
+    const turn: Channel = {
+      type: 'motion',
+      interval: 1,
+      orientation: 'quaternion',
+      keyframes: [
+        { key: 0, orientation: a },
+        { key: 1, orientation: b },
+      ],
+    }
+
+    const sample = sampleChannel(turn, 0.25).orientation!
+
+    ok(Vector4.equal(sample, Quat.nlerp(a, b, 0.25), 1e-9))
+    ok(!Vector4.equal(sample, Quat.slerp(a, b, 0.25), 1e-4), 'the two differ off the midpoint')
+  })
+
+  it('takes the near hemisphere between opposite-signed keyframes', () => {
+    const b = Vector4.multiplyScalar(Quat.axisAngle({ axis: { x: 1, y: 0, z: 0 }, angle: 0.5 }), -1)
+    const turn: Channel = {
+      type: 'motion',
+      interval: 1,
+      orientation: 'quaternion',
+      keyframes: [
+        { key: 0, orientation: Quat.identity },
+        { key: 1, orientation: b },
+      ],
+    }
+
+    ok(sampleChannel(turn, 0.5).orientation!.w > 0.9)
+  })
+})
+
+describe('getChannelTime', () => {
+  const channel: Channel = {
+    type: 'angle',
+    interval: 1,
+    keyframes: [
+      { key: 0, value: 0 },
+      { key: 1, value: 1 },
+      { key: 2, value: 2 },
+    ],
+  }
+
+  it('wraps a loop at its own duration, the end reading as the start', () => {
+    strictEqual(getChannelTime(channel, 0.5), 0.5)
+    strictEqual(getChannelTime(channel, 2), 0)
+    strictEqual(getChannelTime(channel, 5.5), 1.5)
+    strictEqual(getChannelTime(channel, -0.5), 1.5)
+  })
+
+  it('stops a single play on its last keyframe', () => {
+    strictEqual(getChannelTime(channel, 7, 'once'), 2)
+    strictEqual(getChannelTime(channel, -1, 'once'), 0)
+  })
+
+  it('turns a bounce round at either end', () => {
+    strictEqual(getChannelTime(channel, 2, 'pingPong'), 2)
+    strictEqual(getChannelTime(channel, 2.5, 'pingPong'), 1.5)
+    strictEqual(getChannelTime(channel, 4, 'pingPong'), 0)
+    strictEqual(getChannelTime(channel, 4.5, 'pingPong'), 0.5)
+  })
+
+  it('holds a single keyframe at zero', () => {
+    const pose: Channel = { type: 'angle', interval: 0, keyframes: [{ key: 0, value: 1 }] }
+
+    strictEqual(getChannelTime(pose, 3), 0)
   })
 })

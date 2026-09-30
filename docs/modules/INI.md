@@ -323,6 +323,7 @@ decoder and nothing else should reach for `isBinary` plus the submodule's own `r
 | `text`      | namespace | Everything under `./ini/text`.                                               |
 | `value`     | namespace | Value constructors, predicates and coercions (below).                        |
 | `Value`     | type      | One value of one property, tagged rather than a bare primitive.              |
+| `ValueOf`   | type      | Narrows `Value` to the arm of a given `type`.                                |
 | `ValueType` | type      | Which of the four things a value is.                                         |
 
 **`Document`, `Section` and `Property` are classes**, the same shape as `utf/`'s `Directory` —
@@ -333,10 +334,14 @@ nothing at module scope reads or writes a document.
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Document` | `read` (static), `write`, `entries`, `sections`, `getSection`, `filterSections`, `addSection`, `insertSection`, `deleteSection`, `removeSection`, `append`, `findByNickname`, `[Symbol.iterator]` |
 | `Section`  | `name`, `label`, `comment`, `entries`, `properties`, `getProperty`, `filterProperties`, `getValue`, `getValues`, `hasProperty`, `addProperty`, `insertProperty`, `deleteProperty`, `removeProperty`, `append`, `getNickname` |
-| `Property` | `name`, `label`, `comment`, `values`, `format`                                                                                              |
+| `Property` | `name`, `label`, `comment`, `values`, `coerce`                                                                                              |
 
 `value`: `boolean`, `integer`, `float`, `string`, `from`, `list`, `isBoolean`, `isInteger`,
-`isFloat`, `isNumber`, `isString`, `toBoolean`, `toInteger`, `toFloat`, `toText`, `equals`.
+`isFloat`, `isNumber`, `isString`, `toBoolean`, `toInteger`, `toFloat`, `toText`, `equals`. The
+`is*` guards are type predicates, so a value they pass is narrowed to its arm.
+
+`Property.coerce(...types)` reads the values positionally as the requested types, the way the
+engine's typed accessors do: `property.coerce('float', 'float', 'float')`.
 
 ### `./ini/text`
 

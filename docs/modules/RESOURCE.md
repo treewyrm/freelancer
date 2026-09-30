@@ -176,7 +176,7 @@ Split three ways: the id space, the two payload formats, and the PE container.
 | `globalIdOf`       | function  | Global id for a resource in the library at `index`.                                 |
 | `libraryOf`        | function  | Library index a global id falls in.                                                 |
 | `localOf`          | function  | Local resource id within its library.                                               |
-| `Library`          | interface | Everything a set of libraries resolves, in the global id space.                     |
+| `ResourceLibrary`  | interface | Everything a set of libraries resolves, in the global id space.                     |
 | `LIBRARY_ID_RANGE` | const     | Ids each library contributes before the next one begins.                            |
 | `partition`        | function  | Splits a global map back into per-library maps of local ids, ready for the writers. |
 | `readLibrary`      | function  | Merges libraries into one id space, keeping names and infocards apart.              |
@@ -219,7 +219,7 @@ image, so nothing a caller passes or receives is a PE header. They live in `reso
 | `WriteOptions` | interface | `imageBase` and COFF `timestamp`; both default, so output is deterministic.  |
 | `Resource`     | interface | One resource: a leaf of the directory tree, with the path that reaches it.   |
 | `ResourceId`   | type      | A resource type or entry identity: a number, or a name.                      |
-| `Type`         | const     | `RT_*` resource type numbers — a `const` object and the union of its values. |
+| `ResourceType` | enum      | The three `RT_*` types these DLLs carry: `String`, `Version`, `Html`.        |
 
 ## Corpus
 

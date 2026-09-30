@@ -1,4 +1,4 @@
-import { deepStrictEqual, strictEqual, throws } from 'node:assert/strict'
+import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import Directory from '#/utf/directory.js'
 import { isCamera, readCamera, writeCamera, type Camera } from './camera.js'
@@ -30,6 +30,12 @@ describe('isCamera', () => {
     const directory = wrap().getDirectory('Camera')!
 
     strictEqual(isCamera(directory), false)
+  })
+
+  // The probe answers exactly when the reader succeeds, so a caller can dispatch on it.
+  it('agrees with readCamera', () => {
+    ok(readCamera(wrap()))
+    throws(() => readCamera(new Directory('\\')), /Missing Camera/)
   })
 })
 
@@ -75,7 +81,7 @@ describe('readCamera', () => {
   it('throws on a field written with no value in it', () => {
     const directory = wrap()
     directory.getDirectory('Camera')!.delete('Zfar')
-    directory.getDirectory('Camera')!.setFile('Zfar')
+    directory.getDirectory('Camera')!.ensureFile('Zfar')
 
     throws(() => readCamera(directory), /Missing Zfar in Camera/)
   })

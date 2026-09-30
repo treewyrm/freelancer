@@ -54,10 +54,10 @@ export function readCamera(parent: Directory): Camera {
 export function writeCamera({ fovX, fovY, zNear, zFar }: Camera): Directory {
   const directory = new Directory('Camera')
 
-  directory.setFile('Fovx').writeFloats(fovX)
-  directory.setFile('Fovy').writeFloats(fovY)
-  directory.setFile('Znear').writeFloats(zNear)
-  directory.setFile('Zfar').writeFloats(zFar)
+  directory.ensureFile('Fovx').setFloats(fovX)
+  directory.ensureFile('Fovy').setFloats(fovY)
+  directory.ensureFile('Znear').setFloats(zNear)
+  directory.ensureFile('Zfar').setFloats(zFar)
 
   return directory
 }

@@ -7,12 +7,14 @@ import {
   readPrismatic,
   readRevolute,
   readSphere,
+  readTranslational,
   writeCylinder,
   writeFixed,
   writeLoose,
   writePrismatic,
   writeRevolute,
   writeSphere,
+  writeTranslational,
   type Joint,
 } from './joint.js'
 
@@ -62,7 +64,9 @@ const writeNames = (parent: string, child: string): BufferView =>
  * desynchronize every record after it.
  * @param files
  */
-export function* readConstraints(files: Iterable<File>): Generator<Constraint> {
+export function readConstraints(files: Iterable<File>): Constraint[] {
+  const constraints: Constraint[] = []
+
   for (const file of files) {
     const view = BufferView.from(file)
     const kind = file.name.toLowerCase()
@@ -72,58 +76,81 @@ export function* readConstraints(files: Iterable<File>): Generator<Constraint> {
 
       switch (kind) {
         case 'fix':
-          yield { parent, child, joint: readFixed(view) }
+          constraints.push({ parent, child, joint: readFixed(view) })
           break
         case 'rev':
-          yield { parent, child, joint: readRevolute(view) }
+          constraints.push({ parent, child, joint: readRevolute(view) })
           break
         case 'pris':
-          yield { parent, child, joint: readPrismatic(view) }
+          constraints.push({ parent, child, joint: readPrismatic(view) })
           break
         case 'cyl':
-          yield { parent, child, joint: readCylinder(view) }
+          constraints.push({ parent, child, joint: readCylinder(view) })
           break
         case 'sphere':
-          yield { parent, child, joint: readSphere(view) }
+          constraints.push({ parent, child, joint: readSphere(view) })
           break
         case 'loose':
-          yield { parent, child, joint: readLoose(view) }
+          constraints.push({ parent, child, joint: readLoose(view) })
+          break
+        case 'trans':
+          constraints.push({ parent, child, joint: readTranslational(view) })
           break
         default:
           throw new RangeError(`Unknown constraint file ${file.name}`)
       }
     }
   }
+
+  return constraints
 }
 
 /**
  * Writes one file per constraint, for a caller to append together by name.
  *
- * Names are capitalized the way retail writes them — `Fix`, `Rev`, `Pris`, `Sphere`, `Loose`, and
- * `Cyl` after CFW's struct. Lookups fold case, so the engine reads either, but 1024 retail files
- * agree on this one and nothing is gained by writing a spelling none of them use.
+ * Names are capitalized the way retail writes them — `Fix`, `Rev`, `Pris`, `Sphere`, `Loose` — and
+ * `Cyl` and `Trans` as `engbase.dll` spells them. Lookups fold case (`CompareStringsI`), so the
+ * engine reads either, but 1024 retail files agree on this one and nothing is gained by writing a
+ * spelling none of them use.
  */
-export function* writeConstraints(constraints: Iterable<Constraint>): Generator<File> {
+export function writeConstraints(constraints: Iterable<Constraint>): File[] {
+  const files: File[] = []
+
   for (const { parent, child, joint } of constraints) {
     switch (joint.type) {
       case 'fixed':
-        yield new File('Fix', BufferView.join(writeNames(parent, child), writeFixed(joint)))
+        files.push(new File('Fix', BufferView.join(writeNames(parent, child), writeFixed(joint))))
         break
       case 'revolute':
-        yield new File('Rev', BufferView.join(writeNames(parent, child), writeRevolute(joint)))
+        files.push(
+          new File('Rev', BufferView.join(writeNames(parent, child), writeRevolute(joint))),
+        )
         break
       case 'prismatic':
-        yield new File('Pris', BufferView.join(writeNames(parent, child), writePrismatic(joint)))
+        files.push(
+          new File('Pris', BufferView.join(writeNames(parent, child), writePrismatic(joint))),
+        )
         break
       case 'sphere':
-        yield new File('Sphere', BufferView.join(writeNames(parent, child), writeSphere(joint)))
+        files.push(
+          new File('Sphere', BufferView.join(writeNames(parent, child), writeSphere(joint))),
+        )
         break
       case 'loose':
-        yield new File('Loose', BufferView.join(writeNames(parent, child), writeLoose(joint)))
+        files.push(new File('Loose', BufferView.join(writeNames(parent, child), writeLoose(joint))))
         break
       case 'cylinder':
-        yield new File('Cyl', BufferView.join(writeNames(parent, child), writeCylinder(joint)))
+        files.push(
+          new File('Cyl', BufferView.join(writeNames(parent, child), writeCylinder(joint))),
+        )
+        break
+      case 'translational':
+        files.push(
+          new File('Trans', BufferView.join(writeNames(parent, child), writeTranslational(joint))),
+        )
         break
     }
   }
+
+  return files
 }

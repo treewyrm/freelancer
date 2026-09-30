@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { quadIn, quadOut, smooth } from '#/math/scalar.js'
 import {
   EaseType,
-  WrapFlags,
+  WrapMode,
   type AnimatedColor,
   type AnimatedCurve,
   type AnimatedFloat,
@@ -17,10 +17,10 @@ import {
   easeVector,
   floatAt,
   floatWhen,
-  hermiteAt,
-  limit,
+  hermiteWhen,
+  wrapKey,
   transformAt,
-  vectorWhen,
+  colorWhen,
 } from './evaluation.js'
 
 /** A hermite keyframe: X is the value, Y the incoming tangent and Z the outgoing one. */
@@ -29,11 +29,16 @@ const knot = (key: number, value: number, out = 0, into = 0): VectorKeyframe => 
   value: { x: value, y: into, z: out },
 })
 
+/** The two wrap modes, each side holding unless it is named. */
+type Modes = { before?: WrapMode; after?: WrapMode }
+
 const loop = (
   keyframes: VectorKeyframe[],
-  flags = WrapFlags.None,
+  { before = WrapMode.Hold, after = WrapMode.Hold }: Modes = {},
   fallback = 0,
-): LoopAnimation<VectorKeyframe> => ({ default: fallback, flags, keyframes })
+): LoopAnimation<VectorKeyframe> => ({ fallback, before, after, keyframes })
+
+const modes = ({ before = WrapMode.Hold, after = WrapMode.Hold }: Modes = {}) => ({ before, after })
 
 describe('ease', () => {
   it('follows each easing curve', () => {
@@ -75,47 +80,52 @@ describe('ease', () => {
   })
 })
 
-describe('limit', () => {
+describe('wrapKey', () => {
   it('leaves a key inside the range alone', () => {
-    deepStrictEqual(limit(WrapFlags.None, 0, 2, 1), { key: 1, count: 0 })
+    deepStrictEqual(wrapKey(modes({}), 0, 2, 1), { key: 1, count: 0 })
   })
 
   it('holds the ends when a side has no mode', () => {
-    strictEqual(limit(WrapFlags.None, 0, 2, 5).key, 2)
-    strictEqual(limit(WrapFlags.None, 0, 2, -5).key, 0)
+    strictEqual(wrapKey(modes({}), 0, 2, 5).key, 2)
+    strictEqual(wrapKey(modes({}), 0, 2, -5).key, 0)
   })
 
   it('cycles', () => {
-    strictEqual(limit(WrapFlags.AfterCycle, 0, 1, 2.25).key, 0.25)
-    strictEqual(limit(WrapFlags.BeforeCycle, 0, 1, -0.25).key, 0.75)
+    strictEqual(wrapKey(modes({ after: WrapMode.Cycle }), 0, 1, 2.25).key, 0.25)
+    strictEqual(wrapKey(modes({ before: WrapMode.Cycle }), 0, 1, -0.25).key, 0.75)
 
     // `fmod` of a whole number of ranges is zero, so a cycle lands back on its first keyframe
     // after the range and on its last before it (0x6246c36, 0x6246b07).
-    strictEqual(limit(WrapFlags.AfterCycle, 0, 1, 2).key, 0)
-    strictEqual(limit(WrapFlags.BeforeCycle, 0, 1, -1).key, 1)
+    strictEqual(wrapKey(modes({ after: WrapMode.Cycle }), 0, 1, 2).key, 0)
+    strictEqual(wrapKey(modes({ before: WrapMode.Cycle }), 0, 1, -1).key, 1)
   })
 
   it('oscillates back into the range', () => {
-    strictEqual(limit(WrapFlags.AfterOscillate, 0, 1, 1.25).key, 0.75)
-    strictEqual(limit(WrapFlags.AfterOscillate, 0, 1, 2.25).key, 0.25)
-    strictEqual(limit(WrapFlags.BeforeOscillate, 0, 1, -0.25).key, 0.25)
-    strictEqual(limit(WrapFlags.BeforeOscillate, 0, 1, -1.25).key, 0.75)
+    strictEqual(wrapKey(modes({ after: WrapMode.Oscillate }), 0, 1, 1.25).key, 0.75)
+    strictEqual(wrapKey(modes({ after: WrapMode.Oscillate }), 0, 1, 2.25).key, 0.25)
+    strictEqual(wrapKey(modes({ before: WrapMode.Oscillate }), 0, 1, -0.25).key, 0.25)
+    strictEqual(wrapKey(modes({ before: WrapMode.Oscillate }), 0, 1, -1.25).key, 0.75)
   })
 
   it('cycles and counts whole ranges for cycle with offset, in both directions', () => {
-    deepStrictEqual(limit(WrapFlags.AfterCycleOffset, 0, 1, 2.5), { key: 0.5, count: 2 })
-    deepStrictEqual(limit(WrapFlags.BeforeCycleOffset, 0, 1, -1.5), { key: 0.5, count: -2 })
+    deepStrictEqual(wrapKey(modes({ after: WrapMode.CycleOffset }), 0, 1, 2.5), {
+      key: 0.5,
+      count: 2,
+    })
+    deepStrictEqual(wrapKey(modes({ before: WrapMode.CycleOffset }), 0, 1, -1.5), {
+      key: 0.5,
+      count: -2,
+    })
   })
 
-  // Each side is a four-bit mode, not a set of flags: 0x30 is oscillate, not cycle plus
-  // something, and a before mode says nothing about the far end.
-  it('reads each nibble as one mode', () => {
-    strictEqual(limit(0x30, 0, 1, 1.25).key, 0.75)
-    strictEqual(limit(WrapFlags.BeforeOscillate, 0, 1, 1.25).key, 1)
+  // A before mode says nothing about the far end.
+  it("applies each side's mode to that side alone", () => {
+    strictEqual(wrapKey(modes({ after: WrapMode.Oscillate }), 0, 1, 1.25).key, 0.75)
+    strictEqual(wrapKey(modes({ before: WrapMode.Oscillate }), 0, 1, 1.25).key, 1)
   })
 
   it('maps the key through the range, not through zero to one', () => {
-    strictEqual(limit(WrapFlags.AfterCycle, 10, 20, 25).key, 15)
+    strictEqual(wrapKey(modes({ after: WrapMode.Cycle }), 10, 20, 25).key, 15)
   })
 })
 
@@ -206,7 +216,7 @@ describe('float and colour animations', () => {
 
     const byte = (n: number) => Math.fround(n * Math.fround(1 / 255))
 
-    deepStrictEqual(vectorWhen(color.keyframes[0]!, 0.5), { x: byte(126), y: byte(63), z: 0 })
+    deepStrictEqual(colorWhen(color.keyframes[0]!, 0.5), { x: byte(126), y: byte(63), z: 0 })
     deepStrictEqual(colorAt(color, 0, 1), { x: 1, y: byte(127), z: 0 }, 'a half is 127 stored')
   })
 
@@ -219,7 +229,7 @@ describe('float and colour animations', () => {
     strictEqual(floatAt({ easing: EaseType.Linear, keyframes: [empty] }, 0, 0.5), 0)
     strictEqual(floatAt({ easing: EaseType.Linear, keyframes: [] }, 0, 0.5), 0)
 
-    deepStrictEqual(vectorWhen(empty, 0.5), { x: 0, y: 0, z: 0 })
+    deepStrictEqual(colorWhen(empty, 0.5), { x: 0, y: 0, z: 0 })
     deepStrictEqual(colorAt({ easing: EaseType.Linear, keyframes: [] }, 0, 0.5), {
       x: 0,
       y: 0,
@@ -249,24 +259,24 @@ describe('float and colour animations', () => {
   })
 })
 
-describe('hermiteAt', () => {
+describe('hermiteWhen', () => {
   it('falls back to the default value when the curve has no keyframes', () => {
-    strictEqual(hermiteAt(loop([], WrapFlags.None, 7), 0.5), 7)
+    strictEqual(hermiteWhen(loop([], {}, 7), 0.5), 7)
   })
 
   it('interpolates between knots, flat tangents giving the midpoint', () => {
     const curve = loop([knot(0, 0), knot(1, 10)])
 
-    strictEqual(hermiteAt(curve, 0), 0)
-    strictEqual(hermiteAt(curve, 0.25), 1.5625)
-    strictEqual(hermiteAt(curve, 0.5), 5)
+    strictEqual(hermiteWhen(curve, 0), 0)
+    strictEqual(hermiteWhen(curve, 0.25), 1.5625)
+    strictEqual(hermiteWhen(curve, 0.5), 5)
   })
 
   it('bends the curve with the outgoing tangent', () => {
     // Z carries the outgoing tangent of the knot the span starts on, Y the incoming tangent
     // of the one it ends on. Equal and opposite tangents cancel back to the flat midpoint.
-    strictEqual(hermiteAt(loop([knot(0, 0, 4), knot(1, 10)]), 0.5), 5.5)
-    strictEqual(hermiteAt(loop([knot(0, 0, 4), knot(1, 10, 0, 4)]), 0.5), 5)
+    strictEqual(hermiteWhen(loop([knot(0, 0, 4), knot(1, 10)]), 0.5), 5.5)
+    strictEqual(hermiteWhen(loop([knot(0, 0, 4), knot(1, 10, 0, 4)]), 0.5), 5)
   })
 
   // Tangents are stored per unit of key and `hermite` wants them per unit of span, so a curve
@@ -276,74 +286,74 @@ describe('hermiteAt', () => {
   it('scales tangents by the width of the interval', () => {
     const narrow = loop([knot(0, 0, 4), knot(0.25, 10)])
 
-    strictEqual(hermiteAt(narrow, 0.125), 5.125)
+    strictEqual(hermiteWhen(narrow, 0.125), 5.125)
     strictEqual(
-      hermiteAt(narrow, 0.125),
-      hermiteAt(loop([knot(0, 0, 1), knot(1, 10)]), 0.5),
+      hermiteWhen(narrow, 0.125),
+      hermiteWhen(loop([knot(0, 0, 1), knot(1, 10)]), 0.5),
       'a quarter-wide interval with tangent 4 is the same curve as a unit one with tangent 1',
     )
-    notStrictEqual(hermiteAt(narrow, 0.125), 5.5, 'which is what the unscaled tangent would give')
+    notStrictEqual(hermiteWhen(narrow, 0.125), 5.5, 'which is what the unscaled tangent would give')
   })
 
   it('ignores tangents where the interval has no width', () => {
-    strictEqual(hermiteAt(loop([knot(0, 3, 99, 99)]), 0.5), 3)
+    strictEqual(hermiteWhen(loop([knot(0, 3, 99, 99)]), 0.5), 3)
   })
 
   // 0x6246c8f takes the last keyframe at or before the key, so on a shared key the last one wins.
   it('reads knots sharing one key as the last of them on the key and after it', () => {
     const shared = loop([knot(2, 3), knot(2, 5)])
 
-    strictEqual(hermiteAt(shared, 2), 5)
-    strictEqual(hermiteAt(shared, 99), 5)
-    strictEqual(hermiteAt(shared, -99), 3)
+    strictEqual(hermiteWhen(shared, 2), 5)
+    strictEqual(hermiteWhen(shared, 99), 5)
+    strictEqual(hermiteWhen(shared, -99), 3)
   })
 
   it('reaches the last knot at the end of the range', () => {
-    strictEqual(hermiteAt(loop([knot(0, 0), knot(1, 10)]), 1), 10)
+    strictEqual(hermiteWhen(loop([knot(0, 0), knot(1, 10)]), 1), 10)
   })
 
   it('holds the ends of a curve with no modes', () => {
     const curve = loop([knot(0, 0), knot(1, 10)])
 
-    strictEqual(hermiteAt(curve, 5), 10)
-    strictEqual(hermiteAt(curve, -5), 0)
+    strictEqual(hermiteWhen(curve, 5), 10)
+    strictEqual(hermiteWhen(curve, -5), 0)
   })
 
   it('extrapolates along the end tangents for linear', () => {
-    const curve = loop(
-      [knot(0, 0, 0, 2), knot(1, 10, 3, 0)],
-      WrapFlags.BeforeLinear | WrapFlags.AfterLinear,
-    )
+    const curve = loop([knot(0, 0, 0, 2), knot(1, 10, 3, 0)], {
+      before: WrapMode.Linear,
+      after: WrapMode.Linear,
+    })
 
-    strictEqual(hermiteAt(curve, -2), -4, 'in-tangent of the first knot')
-    strictEqual(hermiteAt(curve, 3), 16, 'out-tangent of the last knot')
+    strictEqual(hermiteWhen(curve, -2), -4, 'in-tangent of the first knot')
+    strictEqual(hermiteWhen(curve, 3), 16, 'out-tangent of the last knot')
   })
 
   it('accumulates whole ranges for cycle with offset', () => {
-    const curve = loop([knot(0, 0), knot(1, 10)], WrapFlags.AfterCycleOffset)
+    const curve = loop([knot(0, 0), knot(1, 10)], { after: WrapMode.CycleOffset })
 
-    strictEqual(hermiteAt(curve, 1.5), 15, 'one range of 10 plus half of the next')
-    strictEqual(hermiteAt(curve, 2.5), 25)
+    strictEqual(hermiteWhen(curve, 1.5), 15, 'one range of 10 plus half of the next')
+    strictEqual(hermiteWhen(curve, 2.5), 25)
   })
 
   // Retail: 0x20 on three live Transform curves, 0x30 on three, 0x33 on two. Read as the bits
   // they were once taken for, 0x20 mirrored and 0x30 repeated.
   it('reads the retail words other than 0x10 as the modes they are', () => {
-    const curve = (flags: WrapFlags) => loop([knot(0, 0), knot(1, 10)], flags)
+    const curve = (wrap: Modes) => loop([knot(0, 0), knot(1, 10)], wrap)
 
     strictEqual(
-      hermiteAt(curve(WrapFlags.AfterCycleOffset), 1.25),
+      hermiteWhen(curve({ after: WrapMode.CycleOffset }), 1.25),
       10 + 10 * smooth(0.25),
       'cycle with offset',
     )
     strictEqual(
-      hermiteAt(curve(WrapFlags.AfterOscillate), 1.25),
-      hermiteAt(curve(WrapFlags.AfterOscillate), 0.75),
+      hermiteWhen(curve({ after: WrapMode.Oscillate }), 1.25),
+      hermiteWhen(curve({ after: WrapMode.Oscillate }), 0.75),
       'oscillate',
     )
     strictEqual(
-      hermiteAt(curve(WrapFlags.BeforeOscillate | WrapFlags.AfterOscillate), -0.25),
-      hermiteAt(curve(WrapFlags.BeforeOscillate | WrapFlags.AfterOscillate), 0.25),
+      hermiteWhen(curve({ before: WrapMode.Oscillate, after: WrapMode.Oscillate }), -0.25),
+      hermiteWhen(curve({ before: WrapMode.Oscillate, after: WrapMode.Oscillate }), 0.25),
       'oscillate before',
     )
   })
@@ -351,16 +361,12 @@ describe('hermiteAt', () => {
   // Most retail curves are a single knot. The cycling modes need a range, so the knot holds
   // whatever they say; linear alone extends it (0x6246a11).
   it('reads a single knot as a constant unless a side is linear', () => {
-    for (const key of [-99, 0, 0.5, 99]) strictEqual(hermiteAt(loop([knot(0, 3)]), key), 3)
+    for (const key of [-99, 0, 0.5, 99]) strictEqual(hermiteWhen(loop([knot(0, 3)]), key), 3)
 
-    for (const flags of [
-      WrapFlags.AfterCycle,
-      WrapFlags.AfterCycleOffset,
-      WrapFlags.AfterOscillate,
-    ])
-      strictEqual(hermiteAt(loop([knot(0, 3)], flags), 99), 3)
+    for (const after of [WrapMode.Cycle, WrapMode.CycleOffset, WrapMode.Oscillate])
+      strictEqual(hermiteWhen(loop([knot(0, 3)], { after }), 99), 3)
 
-    strictEqual(hermiteAt(loop([knot(0, 3, 1)], WrapFlags.AfterLinear), 2), 5)
+    strictEqual(hermiteWhen(loop([knot(0, 3, 1)], { after: WrapMode.Linear }), 2), 5)
   })
 })
 
@@ -390,9 +396,11 @@ describe('transformAt', () => {
     const result = transformAt(
       {
         order: [4, 3, 5],
-        position: { x: point(1), y: point(2), z: point(3) },
-        rotation: { x: point(4), y: point(5), z: point(6) },
-        scale: { x: point(7), y: point(8), z: point(9) },
+        curves: {
+          position: { x: point(1), y: point(2), z: point(3) },
+          rotation: { x: point(4), y: point(5), z: point(6) },
+          scale: { x: point(7), y: point(8), z: point(9) },
+        },
       },
       0,
       0,

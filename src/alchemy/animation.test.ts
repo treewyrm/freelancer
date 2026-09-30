@@ -2,9 +2,9 @@ import { deepStrictEqual, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import BufferView from '#/utility/bufferview.js'
 import {
-  DefaultTransformOrder,
+  DEFAULT_TRANSFORM_ORDER,
   EaseType,
-  WrapFlags,
+  WrapMode,
   readAnimatedColor,
   readAnimatedCurve,
   readAnimatedFloat,
@@ -35,8 +35,9 @@ const curve = (value: number): AnimatedCurve => ({
   keyframes: [
     {
       key: 0,
-      default: value,
-      flags: WrapFlags.None,
+      fallback: value,
+      before: WrapMode.Hold,
+      after: WrapMode.Hold,
       keyframes: [{ key: 0, value: { x: value, y: 0, z: 0 } }],
     },
   ],
@@ -81,17 +82,53 @@ describe('animation containers', () => {
     deepStrictEqual(readEaseAnimation(view.rewind(), readFloatKeyframe), animation)
   })
 
-  it('heads a looped list with a default value, wrap flags and count', () => {
+  it('heads a looped list with a fallback value, the wrap word and count', () => {
     const animation = {
-      default: 1.5,
-      flags: WrapFlags.BeforeCycle | WrapFlags.AfterCycleOffset,
+      fallback: 1.5,
+      before: WrapMode.Cycle,
+      after: WrapMode.CycleOffset,
       keyframes: [{ key: 0, value: { x: 1, y: 2, z: 3 } }],
     }
 
     const view = writeLoopAnimation(animation, writeVectorKeyframe)
 
     strictEqual(view.byteLength, 8 + 16)
+    strictEqual(new DataView(view.buffer).getUint16(4, true), 0x21)
     deepStrictEqual(readLoopAnimation(view.rewind(), readVectorKeyframe), animation)
+  })
+
+  // The two modes are the low byte's nibbles; the high byte is never consulted, and no retail list
+  // sets it, but a file that does keeps it.
+  it('carries a non-zero high byte of the wrap word as reserved, and only then', () => {
+    const word = (value: number) =>
+      BufferView.allocate(8).writeFloat32(0).writeUint16(value).writeUint16(0).rewind()
+
+    deepStrictEqual(readLoopAnimation(word(0x0143), readVectorKeyframe), {
+      fallback: 0,
+      before: WrapMode.Oscillate,
+      after: WrapMode.Linear,
+      reserved: 0x01,
+      keyframes: [],
+    })
+
+    const view = writeLoopAnimation(
+      readLoopAnimation(word(0x0143), readVectorKeyframe),
+      writeVectorKeyframe,
+    )
+    strictEqual(new DataView(view.buffer).getUint16(4, true), 0x0143)
+    strictEqual('reserved' in readLoopAnimation(word(0x43), readVectorKeyframe), false)
+  })
+
+  it('keeps a mode nibble past the enum as read', () => {
+    const view = BufferView.allocate(8).writeFloat32(0).writeUint16(0x9f).writeUint16(0).rewind()
+    const animation = readLoopAnimation(view, readVectorKeyframe)
+
+    strictEqual(animation.before, 0xf)
+    strictEqual(animation.after, 0x9)
+    strictEqual(
+      new DataView(writeLoopAnimation(animation, writeVectorKeyframe).buffer).getUint16(4, true),
+      0x9f,
+    )
   })
 
   it('keeps an empty list to its header', () => {
@@ -101,8 +138,10 @@ describe('animation containers', () => {
     )
 
     strictEqual(
-      writeLoopAnimation({ default: 0, flags: WrapFlags.None, keyframes: [] }, writeVectorKeyframe)
-        .byteLength,
+      writeLoopAnimation(
+        { fallback: 0, before: WrapMode.Hold, after: WrapMode.Hold, keyframes: [] },
+        writeVectorKeyframe,
+      ).byteLength,
       8,
     )
   })
@@ -167,7 +206,7 @@ describe('animated properties', () => {
 })
 
 describe('transform', () => {
-  const order = () => [...DefaultTransformOrder] as TransformOrder
+  const order = () => [...DEFAULT_TRANSFORM_ORDER] as TransformOrder
 
   it('writes the order bytes and a clear curve byte when no points are present', () => {
     const view = writeTransform({ order: order() })
@@ -177,7 +216,10 @@ describe('transform', () => {
   })
 
   it('round-trips position, rotation and scale behind a curve byte of 0x80', () => {
-    const transform = { order: order(), position: point(), rotation: point(), scale: point() }
+    const transform = {
+      order: order(),
+      curves: { position: point(), rotation: point(), scale: point() },
+    }
     const view = writeTransform(transform)
 
     strictEqual(view.byteLength, 4 + 3 * 3 * (2 + 4 + 8 + 16))
@@ -185,10 +227,10 @@ describe('transform', () => {
     deepStrictEqual(readTransform(view.rewind()), transform)
   })
 
-  // alchemy.dll's writer derives the byte from the curves, so a partial set cannot claim a
-  // payload it does not carry.
-  it('writes no curves unless all three points are present', () => {
-    strictEqual(writeTransform({ order: order(), position: point() }).byteLength, 4)
+  // alchemy.dll's writer derives the byte from the curves, so the header cannot claim a payload
+  // the transform does not carry.
+  it('writes no curves when the transform has none', () => {
+    strictEqual(writeTransform({ order: order() }).byteLength, 4)
   })
 
   // The reader tests the sign bit and nothing else (0x62280a0).

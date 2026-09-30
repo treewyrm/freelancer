@@ -54,19 +54,19 @@ export interface Script {
 }
 
 /** Three numbers as a Lua array. A position, a colour or an axis, depending on the key. */
-export type Vector3 = readonly [number, number, number]
+export type Vector3Tuple = [number, number, number]
 
 /** A rotation matrix, as three rows. */
-export type Matrix3 = readonly [Vector3, Vector3, Vector3]
+export type Matrix3Rows = [Vector3Tuple, Vector3Tuple, Vector3Tuple]
 
 /** Four numbers as a Lua array. The animation form of an orientation; `orient` places instead. */
-export type Quaternion = readonly [number, number, number, number]
+export type QuaternionTuple = [number, number, number, number]
 
 /** Degrees about an axis. The animation form, and never on an entity. */
-export type AxisRotation = readonly [number, AxisName]
+export type AxisRotation = [number, AxisName]
 
 /** Keys the vocabulary does not name, kept verbatim so a read-modify-write does not delete them. */
-export type Unknown = Record<string, Value>
+export type UnknownKeys = Record<string, Value>
 
 /**
  * `userprops` — **read by Freelancer, not by THORN**.
@@ -80,9 +80,9 @@ export type UserProps = Record<string, string>
 
 /** Position and orientation. `orient` places, `q_orient` and `axisrot` animate. */
 export interface SpatialProps {
-  pos?: Vector3
-  orient?: Matrix3
-  q_orient?: Quaternion
+  pos?: Vector3Tuple
+  orient?: Matrix3Rows
+  q_orient?: QuaternionTuple
   axisrot?: AxisRotation
 }
 
@@ -111,16 +111,16 @@ export interface CameraAnimProps {
 /** `lightprops` on a `LIGHT` entity, and on a `START_LIGHT_PROP_ANIM` — the same keys either way. */
 export interface LightProps {
   on?: TruthName
-  color?: Vector3
-  diffuse?: Vector3
-  specular?: Vector3
-  ambient?: Vector3
-  direction?: Vector3
+  color?: Vector3Tuple
+  diffuse?: Vector3Tuple
+  specular?: Vector3Tuple
+  ambient?: Vector3Tuple
+  direction?: Vector3Tuple
   range?: number
   cutoff?: number
   type?: LightTypeName
   theta?: number
-  atten?: Vector3
+  atten?: Vector3Tuple
 }
 
 /** `audioprops` on a `SOUND` entity, and on a `START_AUDIO_PROP_ANIM`. Attenuation and 3D falloff. */
@@ -145,8 +145,8 @@ export interface PsysProps {
 
 /** One keyframe of an oriented path: where the object is, and which way it faces. */
 export interface OrientedPoint {
-  position: Vector3
-  orientation: Quaternion
+  position: Vector3Tuple
+  orientation: QuaternionTuple
 }
 
 /**
@@ -165,14 +165,14 @@ export type PathProps = OrientationSplinePath | SplinePath | NullPath
 export interface OrientationSplinePath {
   path_type: 'CV_CROrientationSplinePath'
   flag: PathFlagName
-  points: readonly OrientedPoint[]
+  points: OrientedPoint[]
 }
 
 /** Position only. Named by `thorn.dll`, used by no retail script. */
 export interface SplinePath {
   path_type: 'CV_CRSplinePath'
   flag: PathFlagName
-  points: readonly Vector3[]
+  points: Vector3Tuple[]
 }
 
 /**
@@ -201,7 +201,7 @@ export interface CompoundProps {
 export interface FogProps {
   fogon?: TruthName
   fogmode?: FogModeName
-  fogcolor?: Vector3
+  fogcolor?: Vector3Tuple
   fogstart?: number
   fogend?: number
   fogdensity?: number
@@ -211,7 +211,7 @@ export interface FogProps {
 /** A parameter curve. Every retail `points` row is exactly four numbers, over 13,297 rows. */
 export interface ParamCurve {
   CLSID?: string
-  points?: readonly (readonly [number, number, number, number])[]
+  points?: [number, number, number, number][]
 }
 
 /** What every entity carries, whatever its type. */
@@ -226,7 +226,7 @@ export interface EntityCommon {
   template_id?: number
 
   userprops?: UserProps
-  unknown?: Unknown
+  unknown?: UnknownKeys
 }
 
 /** An entity that renders, and therefore has a place to be. */
@@ -240,7 +240,7 @@ export interface Scene extends Placed {
   type: 'SCENE'
   up?: AxisName
   front?: AxisName
-  ambient?: Vector3
+  ambient?: Vector3Tuple
 
   /** Written flat on the entity, not as a block. See {@link FogProps}. */
   fog?: FogProps
@@ -327,7 +327,7 @@ export interface EventCommon {
   /** Milliseconds, unlike `duration`. Negative means "match the event duration". */
   pcurve_period?: number
 
-  unknown?: Unknown
+  unknown?: UnknownKeys
 }
 
 /** Where the action addresses part of an entity rather than the whole of it. */
@@ -338,7 +338,7 @@ export interface Targeted {
 
 /** Where the action orients something. */
 export interface Oriented {
-  offset?: Vector3
+  offset?: Vector3Tuple
   up?: AxisName
   front?: AxisName
 }

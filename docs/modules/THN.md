@@ -261,7 +261,7 @@ value comes from.
 | `LightProps`            | interface | `lightprops` block.                                                               |
 | `LightTypeName`         | type      | `L_POINT`, `L_SPOT`, `L_DIRECT`.                                                  |
 | `Marker`                | interface | A placeholder with no visual.                                                     |
-| `Matrix3`               | type      | A rotation matrix, as three `Vector3` rows.                                       |
+| `Matrix3Rows`           | type      | A rotation matrix, as three `Vector3Tuple` rows.                                  |
 | `Monitor`               | interface | The render target. The one entity type with no `spatialprops`.                    |
 | `MotionPath`            | interface | `MOTION_PATH` entity.                                                             |
 | `NullPath`              | interface | A `MOTION_PATH` with no path on it.                                               |
@@ -275,7 +275,7 @@ value comes from.
 | `Placed`                | interface | An entity that renders, and therefore has a place to be.                          |
 | `Psys`                  | interface | `PSYS` entity.                                                                    |
 | `PsysProps`             | interface | `psysprops` block.                                                                |
-| `Quaternion`            | type      | A readonly four-number tuple.                                                     |
+| `QuaternionTuple`       | type      | A four-number tuple, as the file writes a quaternion.                             |
 | `read`                  | function  | Turns an interim document into a scene. Both export forms read the same.          |
 | `Scene`                 | interface | The scene descriptor. One per script, with one retail exception.                  |
 | `Script`                | interface | A whole script: what the three globals mean.                                      |
@@ -298,9 +298,9 @@ value comes from.
 | `Targeted`              | interface | Where the action addresses part of an entity rather than the whole of it.         |
 | `TargetTypeName`        | type      | `ROOT`, `HARDPOINT`, `PART`.                                                      |
 | `TruthName`             | type      | `N`, `Y`.                                                                         |
-| `Unknown`               | type      | Keys the vocabulary does not name, kept verbatim so a rewrite does not lose them. |
+| `UnknownKeys`           | type      | Keys the vocabulary does not name, kept verbatim so a rewrite does not lose them. |
 | `UserProps`             | type      | `userprops` — read by Freelancer, not by THORN.                                   |
-| `Vector3`               | type      | A readonly three-number tuple.                                                    |
+| `Vector3Tuple`          | type      | A three-number tuple: a position, a colour or an axis, as the file writes it.     |
 | `write`                 | function  | Turns a scene back into an interim document, always in symbolic form.             |
 
 `data`: `ENTITY_TYPES`, `UNUSED_ENTITY_TYPES`, `EVENT_TYPES`, `UNUSED_EVENT_TYPES`,

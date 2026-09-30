@@ -38,8 +38,11 @@ export interface FaceGroup {
    */
   material: string
 
-  /** Which of the two index files holds {@link indices}. */
-  type: 'strip' | 'list'
+  /**
+   * Topology of {@link indices}: a triangle strip in `Tristrip_indices` or a triangle list in
+   * `Face_indices`. Named as a VMesh's `primitive` is, since it is the same choice.
+   */
+  primitive: 'strip' | 'list'
 
   /** `Tristrip_indices` or `Face_indices`, indexing `Point_indices` of the same mesh. */
   indices: Uint16Array
@@ -64,7 +67,7 @@ export function readFaceGroup(parent: Directory): FaceGroup {
 
   const group: FaceGroup = {
     material,
-    type: strip ? 'strip' : 'list',
+    primitive: strip ? 'strip' : 'list',
     indices: readUint16Array(file),
   }
 
@@ -93,11 +96,11 @@ function* readEdges(indices: File, angles: File): Generator<Edge> {
  * @param index Group index within its mesh, which is all the directory name carries
  */
 export function writeFaceGroup(group: FaceGroup, index = 0): Directory {
-  const { material, type, indices, edges } = group
+  const { material, primitive, indices, edges } = group
 
   const directory = new Directory(`Group${index}`, [
-    new File('Material_name').writeStrings(material),
-    writeUint16Array(type === 'strip' ? 'Tristrip_indices' : 'Face_indices', indices),
+    new File('Material_name').setStrings(material),
+    writeUint16Array(primitive === 'strip' ? 'Tristrip_indices' : 'Face_indices', indices),
   ])
 
   if (edges?.length)

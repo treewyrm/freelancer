@@ -35,8 +35,8 @@ export interface Bone {
    */
   name?: string
 
-  /** `Bone to root` rotation, the 3x3 half of the record. */
-  rotation: Matrix3
+  /** `Bone to root` orientation, the 3x3 half of the record. */
+  orientation: Matrix3
 
   /** `Bone to root` translation, the three floats following the rotation. */
   position: Vector3
@@ -68,32 +68,32 @@ export function readBone(parent: Directory): Bone {
 
   const view = BufferView.from(file)
 
-  const rotation = Matrix3.read(view)
+  const orientation = Matrix3.read(view)
   const position = Vector3.read(view)
 
   const [levels = 0] = parent.getFile('Lod Bits')?.readIntegers() ?? []
 
   return {
     filename: parent.name,
-    rotation,
+    orientation,
     position,
     levels,
-    hardpoints: [...readHardpoints(parent)],
+    hardpoints: readHardpoints(parent),
   }
 }
 
 /**
  * Writes a bone into its `<name>.3db` directory.
  *
- * `Lod Bits` is a single byte, so it cannot go through `writeIntegers`, which is 32-bit. The view
+ * `Lod Bits` is a single byte, so it cannot go through `setIntegers`, which is 32-bit. The view
  * it is written through is rewound before the file takes it: a `BufferView` carries its own
  * position, and `File` hands that position on to whatever reads the file next.
  */
 export function writeBone(bone: Bone): Directory {
-  const { filename, rotation, position, levels, hardpoints } = bone
+  const { filename, orientation, position, levels, hardpoints } = bone
 
   const directory = new Directory(filename, [
-    new File('Bone to root', BufferView.join(Matrix3.write(rotation), Vector3.write(position))),
+    new File('Bone to root', BufferView.join(Matrix3.write(orientation), Vector3.write(position))),
     new File(
       'Lod Bits',
       BufferView.allocate(Uint8Array.BYTES_PER_ELEMENT).writeUint8(levels).rewind(),

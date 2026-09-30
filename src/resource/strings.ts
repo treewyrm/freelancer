@@ -1,5 +1,10 @@
 import type { Resource, ResourceOptions } from './types.js'
-import { CODE_PAGE_WINDOWS_1252, LANGUAGE_ENGLISH_US, STRING_BLOCK_LENGTH, Type } from './data.js'
+import {
+  CODE_PAGE_WINDOWS_1252,
+  LANGUAGE_ENGLISH_US,
+  STRING_BLOCK_LENGTH,
+  ResourceType,
+} from './data.js'
 
 /**
  * `RT_STRING` tables: what every `ids_name` resolves to.
@@ -75,7 +80,7 @@ export const readStrings = (resources: Resource[], language?: number): Map<numbe
   const strings = new Map<number, string>()
 
   for (const resource of resources) {
-    if (resource.type !== Type.String) continue
+    if (resource.type !== ResourceType.String) continue
     if (typeof resource.id !== 'number') continue
     if (language !== undefined && resource.language !== language) continue
 
@@ -129,6 +134,6 @@ export const writeStrings = (
         offset += value.length * 2
       }
 
-      return { type: Type.String, id: block, language, codePage, data }
+      return { type: ResourceType.String, id: block, language, codePage, data }
     })
 }

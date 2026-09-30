@@ -3,17 +3,17 @@ export interface Tree<T> {
   children: T[]
 }
 
-/** A parent-child pair representing link in hierarchy connection. */
-export interface Parenthesis<T> {
+/** A parent-child pair: one edge of a hierarchy. */
+export interface TreeLink<T> {
   parent: T
   child: T
 }
 
 /**
- * Walks a tree depth-first, yielding every edge as a {@link Parenthesis}. The root itself is not
+ * Walks a tree depth-first, yielding every edge as a {@link TreeLink}. The root itself is not
  * yielded, having no parent — {@link listTreeElements} is the counterpart that includes it.
  */
-export function* listTreePairs<T extends Tree<T>>(parent: T): Generator<Parenthesis<T>> {
+export function* listTreePairs<T extends Tree<T>>(parent: T): Generator<TreeLink<T>> {
   for (const child of parent.children) {
     yield { parent, child }
     yield* listTreePairs(child)
@@ -35,15 +35,16 @@ export function findTreeElement<T extends Tree<T>>(
 }
 
 /**
- * Folds a tree depth-first. The reducer is called for the root with a `null` parent first, then for
- * every descendant with the node it hangs from, so an accumulator may depend on the parent's result.
+ * Folds a tree depth-first. The reducer is called for the root with an `undefined` parent first,
+ * then for every descendant with the node it hangs from, so an accumulator may depend on the
+ * parent's result.
  */
 export function reduceTree<T extends Tree<T>, R>(
   root: T,
-  reducer: (accumulator: R, child: T, parent: T | null) => R,
+  reducer: (accumulator: R, child: T, parent: T | undefined) => R,
   initial: R,
 ): R {
-  let result = reducer(initial, root, null)
+  let result = reducer(initial, root, undefined)
   for (const { child, parent } of listTreePairs(root)) result = reducer(result, child, parent)
   return result
 }

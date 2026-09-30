@@ -15,8 +15,8 @@ const sample = (): VMeshRef => ({
   groupStart: 1,
   groupCount: 2,
   boundingBox: {
-    a: { x: -1, y: -2, z: -3 },
-    b: { x: 4, y: 5, z: 6 },
+    min: { x: -1, y: -2, z: -3 },
+    max: { x: 4, y: 5, z: 6 },
   },
   boundingSphere: {
     center: { x: 0.5, y: 1.5, z: 2.5 },

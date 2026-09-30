@@ -24,7 +24,7 @@ export type ResourceId = number | string
 /** One resource: a leaf of the directory tree, with the path that reaches it. */
 export interface Resource {
   /**
-   * Resource type. `Type.String` and `Type.Html` are the two Freelancer reads; anything else in the
+   * Resource type. `ResourceType.String` and `ResourceType.Html` are the two Freelancer reads; anything else in the
    * image is carried through untouched rather than dropped.
    */
   type: ResourceId

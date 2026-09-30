@@ -1,7 +1,7 @@
 import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
 import { readConstraints, writeConstraints, type Constraint } from '#/compound/constraint.js'
-import { arrangeByConstraints, type Model } from '#/compound/model.js'
+import { arrangeByConstraints, type CompoundNode } from '#/compound/model.js'
 import { readBone, writeBone, type Bone } from './bone.js'
 import { readLevels, writeLevels, type Level } from './level.js'
 
@@ -24,8 +24,8 @@ const isPart = (directory: Directory): boolean => /^(root|part_)/i.test(director
  * A character is assembled from three of these — a body, a head and a pair of hands — each with
  * its own bones, mesh and materials, joined through the hardpoints of the bones its
  * {@link skeleton} names. Neither the material library nor the texture library is read here: they
- * are ordinary siblings in the same container, and {@link readMaterials} and {@link readTextures}
- * take the same file root this does.
+ * are ordinary siblings in the same container, and {@link readMaterialLibrary} and
+ * {@link readTextureLibrary} take the same file root this does.
  */
 export interface DeformableModel {
   /**
@@ -72,9 +72,9 @@ export interface DeformableModel {
 /**
  * Reads a deformable model from a file root directory.
  *
- * Takes the root the way {@link readVMeshLibrary} and {@link readTextures} do, because the pieces
- * are spread across it: bones are root children, geometry is under `MultiLevel`, and the hierarchy
- * that ties them together is under `Cmpnd`.
+ * Takes the root the way {@link readVMeshLibrary} and {@link readTextureLibrary} do, because the
+ * pieces are spread across it: bones are root children, geometry is under `MultiLevel`, and the
+ * hierarchy that ties them together is under `Cmpnd`.
  * @param parent File root directory
  */
 export function readDeformableModel(parent: Directory): DeformableModel {
@@ -114,7 +114,7 @@ export function readDeformableModel(parent: Directory): DeformableModel {
   const [scale = 1] = compound.getFile('Scale')?.readFloats() ?? []
   const [skeleton = ''] = parent.getDirectory('Skeleton')?.getFile('Name')?.readStrings() ?? []
 
-  const constraints = [...readConstraints(compound.getDirectory('Cons')?.files ?? [])]
+  const constraints = readConstraints(compound.getDirectory('Cons')?.files ?? [])
 
   return { skeleton, scale, levels: readLevels(parent), bones, constraints }
 }
@@ -125,12 +125,12 @@ export function readDeformableModel(parent: Directory): DeformableModel {
  * The result holds `MultiLevel`, `Skeleton`, `Cmpnd` and the bone directories, in that order.
  * Retail also puts `Exporter Version` first and the `Material library` and `Texture library`
  * between `MultiLevel` and `Skeleton`; those are the caller's to add, the same way they are for a
- * rigid model, since {@link writeMaterials} and {@link writeTextures} own them.
+ * rigid model, since {@link writeMaterialLibrary} and {@link writeTextureLibrary} own them.
  */
 export function writeDeformableModel(model: DeformableModel): Directory {
   const { skeleton, scale, levels, bones, constraints } = model
 
-  const compound = new Directory('Cmpnd', [new File('Scale').writeFloats(scale)])
+  const compound = new Directory('Cmpnd', [new File('Scale').setFloats(scale)])
   const names = new Set<string>()
 
   bones.forEach((bone, index) => {
@@ -144,9 +144,9 @@ export function writeDeformableModel(model: DeformableModel): Directory {
 
     compound.children.push(
       new Directory(index === 0 ? 'Root' : `Part_${name}`, [
-        new File('Object name').writeStrings(name),
-        new File('File name').writeStrings(filename),
-        new File('Index').writeIntegers(index),
+        new File('Object name').setStrings(name),
+        new File('File name').setStrings(filename),
+        new File('Index').setIntegers(index),
       ]),
     )
   })
@@ -154,11 +154,11 @@ export function writeDeformableModel(model: DeformableModel): Directory {
   // One file per joint kind, records appended in the order the constraints are given, matching how
   // `Cons` is read back: file by file, record by record.
   for (const file of writeConstraints(constraints))
-    compound.setFile('Cons', file.name).append(file.data)
+    compound.ensureFile('Cons', file.name).append(file.data)
 
   return new Directory(undefined, [
     writeLevels(levels),
-    new Directory('Skeleton', [new File('Name').writeStrings(skeleton)]),
+    new Directory('Skeleton', [new File('Name').setStrings(skeleton)]),
     compound,
     ...bones.map((bone) => writeBone(bone)),
   ])
@@ -167,15 +167,18 @@ export function writeDeformableModel(model: DeformableModel): Directory {
 /**
  * Assembles the bone hierarchy from {@link DeformableModel.constraints}.
  *
- * Produces the same {@link Model} tree a rigid compound reads into, so everything built on that —
- * {@link listTreeElements}, {@link getModelHardpoint} — works on a character's skeleton
+ * Produces the same {@link CompoundNode} tree a rigid compound reads into, so everything built on
+ * that — {@link listTreeElements}, {@link getCompoundHardpoint} — works on a character's skeleton
  * unchanged. Detached bones are left out: they name no part, so nothing constrains them and they
  * belong to the host skeleton rather than this one.
  *
  * @returns The root bone with its children, or nothing if the model has no named bone.
  */
-export function getBoneModel({ bones, constraints }: DeformableModel): Model<Bone> | undefined {
-  const objects = bones.flatMap<Model<Bone>>((bone, index) =>
+export function getBoneModel({
+  bones,
+  constraints,
+}: DeformableModel): CompoundNode<Bone> | undefined {
+  const objects = bones.flatMap<CompoundNode<Bone>>((bone, index) =>
     bone.name === undefined
       ? []
       : [

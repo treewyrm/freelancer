@@ -77,7 +77,7 @@ export enum TextureFlags {
  * byte-exact round trip. Apply it at the point of use, where a missing slot means "the default",
  * not "no texture".
  */
-export const defaultNomadTextureName = 'NomadRGB1_NomadAlpha1'
+export const DEFAULT_NOMAD_TEXTURE_NAME = 'NomadRGB1_NomadAlpha1'
 
 /** A texture slot: the name a {@link Texture} entry is looked up by, and how it is addressed. */
 export interface TextureReference {
@@ -89,8 +89,8 @@ export interface TextureReference {
    */
   name: string
 
-  /** {@link TextureFlags} bitfield. */
-  flags: number
+  /** {@link TextureFlags} bitfield, carried as read — unknown bits included. */
+  flags: TextureFlags
 }
 
 /**
@@ -106,7 +106,7 @@ export interface TextureReference {
  * `DcDt` carries an `Ec` its shader cannot read. So this list documents the shader, not a schema;
  * see {@link Material}, whose properties are all optional for exactly that reason.
  */
-export const materialTypes = [
+export const MATERIAL_TYPES = [
   'DcDt',
   'DcDtEc',
   'DcDtOcOt',
@@ -150,7 +150,7 @@ export const materialTypes = [
  * `DcDtOcOt`), which is why `EcEt` appears in circulated type lists but in no asset. Resolving the
  * table is out of scope here; the names are listed so a writer can produce them deliberately.
  */
-export const mappedMaterialTypes = [
+export const MAPPED_MATERIAL_TYPES = [
   'NebulaTwo',
   'EcEt',
   'BtDetailMapMaterial',
@@ -167,9 +167,9 @@ export const mappedMaterialTypes = [
   'NullMaterial',
 ] as const
 
-/** A type {@link materialTypes} or {@link mappedMaterialTypes} names. */
+/** A type {@link MATERIAL_TYPES} or {@link MAPPED_MATERIAL_TYPES} names. */
 export type KnownMaterialType =
-  (typeof materialTypes)[number] | (typeof mappedMaterialTypes)[number]
+  (typeof MATERIAL_TYPES)[number] | (typeof MAPPED_MATERIAL_TYPES)[number]
 
 /**
  * Material type. Any string is valid — `[MaterialMap]` can name a shader this list does not, and
@@ -221,7 +221,7 @@ export interface Material {
 
   /**
    * Nomad texture, `Nt_name` and `Nt_flags`. No retail material carries one — every
-   * `NomadMaterial` falls back to {@link defaultNomadTextureName}.
+   * `NomadMaterial` falls back to {@link DEFAULT_NOMAD_TEXTURE_NAME}.
    */
   nomadTexture?: TextureReference
 
@@ -262,3 +262,6 @@ export interface Material {
   /** Flip texture vertically, `flip v`. */
   flipV?: boolean
 }
+
+/** The materials of a `Material library`, in directory order. */
+export type MaterialLibrary = Material[]

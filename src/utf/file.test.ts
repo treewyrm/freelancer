@@ -28,16 +28,16 @@ describe('File byteOffset / buffer', () => {
   })
 })
 
-describe('File.writeIntegers / readIntegers', () => {
+describe('File.setIntegers / readIntegers', () => {
   it('round-trips multiple 32-bit integers', () => {
     const f = new File('ints')
-    f.writeIntegers(1, -2, 0x7fffffff)
+    f.setIntegers(1, -2, 0x7fffffff)
     assert.deepEqual([...f.readIntegers()], [1, -2, 0x7fffffff])
   })
 
   it('yields Int16 for a 2-byte remainder after Int32 reads', () => {
     const f = new File('mixed')
-    f.writeIntegers(100) // 4 bytes
+    f.setIntegers(100) // 4 bytes
     f.append(new Uint8Array([0x01, 0x00])) // 2 more bytes (LE Int16 = 1)
     const values = [...f.readIntegers()]
     assert.equal(values.length, 2)
@@ -47,7 +47,7 @@ describe('File.writeIntegers / readIntegers', () => {
 
   it('yields Int8 for a 1-byte remainder after Int32 reads', () => {
     const f = new File('mixed')
-    f.writeIntegers(100) // 4 bytes
+    f.setIntegers(100) // 4 bytes
     f.append(new Uint8Array([7])) // 1 more byte (Int8 = 7)
     const values = [...f.readIntegers()]
     assert.equal(values.length, 2)
@@ -60,10 +60,10 @@ describe('File.writeIntegers / readIntegers', () => {
   })
 })
 
-describe('File.writeFloats / readFloats', () => {
+describe('File.setFloats / readFloats', () => {
   it('round-trips 32-bit floats', () => {
     const f = new File('floats')
-    f.writeFloats(1.0, -0.5, 3.14)
+    f.setFloats(1.0, -0.5, 3.14)
     const result = [...f.readFloats()]
     assert.equal(result.length, 3)
     assert.ok(Math.abs(result[0]! - 1.0) < 1e-6)
@@ -73,7 +73,7 @@ describe('File.writeFloats / readFloats', () => {
 
   it('ignores a trailing sub-4-byte remainder', () => {
     const f = new File('floats')
-    f.writeFloats(1.0) // 4 bytes
+    f.setFloats(1.0) // 4 bytes
     f.append(new Uint8Array([0])) // 1 trailing byte — ignored
     assert.equal([...f.readFloats()].length, 1)
   })
@@ -83,22 +83,22 @@ describe('File.writeFloats / readFloats', () => {
   })
 })
 
-describe('File.writeStrings / readStrings', () => {
+describe('File.setStrings / readStrings', () => {
   it('round-trips a single string', () => {
     const f = new File('s')
-    f.writeStrings('hello')
+    f.setStrings('hello')
     assert.deepEqual([...f.readStrings()], ['hello'])
   })
 
   it('round-trips multiple strings', () => {
     const f = new File('s')
-    f.writeStrings('alpha', 'beta', 'gamma')
+    f.setStrings('alpha', 'beta', 'gamma')
     assert.deepEqual([...f.readStrings()], ['alpha', 'beta', 'gamma'])
   })
 
   it('round-trips an empty string', () => {
     const f = new File('s')
-    f.writeStrings('')
+    f.setStrings('')
     assert.deepEqual([...f.readStrings()], [''])
   })
 
@@ -119,7 +119,7 @@ describe('File.writeStrings / readStrings', () => {
   // The consequence: a rewrite normalizes the payload rather than reproducing it.
   it('appends the terminator a rewrite was missing', () => {
     const f = new File('s', new Uint8Array([0x41, 0x42, 0x43]))
-    const result = new File('s').writeStrings(...f.readStrings())
+    const result = new File('s').setStrings(...f.readStrings())
 
     assert.equal(result.byteLength, 4)
     assert.deepEqual([...f.readStrings()], [...result.readStrings()])
@@ -140,11 +140,28 @@ describe('File.append', () => {
   })
 })
 
+// The set methods replace the payload, so writing a file twice leaves the second value alone —
+// `append` is the one that keeps what was there.
+describe('File.set*', () => {
+  it('replaces rather than appends', () => {
+    const f = new File('x').setIntegers(1, 2)
+    f.setIntegers(3)
+    assert.deepEqual([...f.readIntegers()], [3])
+
+    f.setFloats(0.5)
+    assert.deepEqual([...f.readFloats()], [0.5])
+
+    f.setStrings('a')
+    f.setStrings('b')
+    assert.deepEqual([...f.readStrings()], ['b'])
+  })
+})
+
 describe('File method chaining', () => {
-  it('write methods return this', () => {
+  it('set methods return this', () => {
     const f = new File('x')
-    assert.equal(f.writeIntegers(1), f)
-    assert.equal(f.writeFloats(1.0), f)
-    assert.equal(f.writeStrings('ok'), f)
+    assert.equal(f.setIntegers(1), f)
+    assert.equal(f.setFloats(1.0), f)
+    assert.equal(f.setStrings('ok'), f)
   })
 })

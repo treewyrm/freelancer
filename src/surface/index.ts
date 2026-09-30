@@ -1,4 +1,4 @@
-export { type Extent, createBox, getExtent } from './extent.js'
+export { createBox, getExtent } from './extent.js'
 export { type Point } from './point.js'
 export {
   type Face,
@@ -26,4 +26,4 @@ export {
   createHullGeometry,
   createPart,
 } from './part.js'
-export { readSurfaceLibrary, writeSurfaceLibrary } from './library.js'
+export { type SurfaceLibrary, readSurfaceLibrary, writeSurfaceLibrary } from './library.js'

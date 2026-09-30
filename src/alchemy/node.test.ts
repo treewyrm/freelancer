@@ -14,14 +14,14 @@ import {
   writeNodeLibrary,
   type Node,
 } from './node.js'
-import { PropertyType, writeProperty } from './property.js'
+import { writeProperty } from './property.js'
 
 const bytes = ({ buffer, byteOffset, byteLength }: ArrayBufferView) =>
   new Uint8Array(buffer, byteOffset, byteLength)
 
 const named = (name: string, type = 'FxBasicAppearance'): Node => ({
   type,
-  properties: [{ name: 'Node_Name', type: PropertyType.String, value: name }],
+  properties: [{ name: 'Node_Name', type: 'string', value: name }],
 })
 
 describe('readNode', () => {
@@ -29,8 +29,8 @@ describe('readNode', () => {
     const node = readNode(
       BufferView.join(
         writeString('FxSphereEmitter'),
-        writeProperty({ name: 'Node_Name', type: PropertyType.String, value: 'emitter' }),
-        writeProperty({ name: 'Node_LifeSpan', type: PropertyType.Float, value: 2 }),
+        writeProperty({ name: 'Node_Name', type: 'string', value: 'emitter' }),
+        writeProperty({ name: 'Node_LifeSpan', type: 'float', value: 2 }),
         BufferView.allocate(2),
       ),
     )
@@ -67,7 +67,7 @@ describe('writeNode', () => {
   it('round-trips through the reader', () => {
     const node = named('particle', 'FxParticleAppearance')
 
-    node.properties.push({ name: 'BasicApp_FlipTexV', type: PropertyType.Boolean, value: true })
+    node.properties.push({ name: 'BasicApp_FlipTexV', type: 'boolean', value: true })
     deepStrictEqual(readNode(writeNode(node)), node)
   })
 })
@@ -104,7 +104,7 @@ describe('node names', () => {
     strictEqual(
       getNodeName({
         type: 'FxNode',
-        properties: [{ name: 'Node_Name', type: PropertyType.Float, value: 0 }],
+        properties: [{ name: 'Node_Name', type: 'float', value: 0 }],
       }),
       undefined,
     )
@@ -118,15 +118,13 @@ describe('node names', () => {
     const node: Node = { type: 'FxNode', properties: [] }
 
     setNodeName(node, 'added')
-    deepStrictEqual(node.properties, [
-      { name: 'Node_Name', type: PropertyType.String, value: 'added' },
-    ])
+    deepStrictEqual(node.properties, [{ name: 'Node_Name', type: 'string', value: 'added' }])
   })
 
   it('replaces an existing name in place', () => {
     const node = named('before')
 
-    node.properties.push({ name: 'Node_LifeSpan', type: PropertyType.Float, value: 1 })
+    node.properties.push({ name: 'Node_LifeSpan', type: 'float', value: 1 })
     setNodeName(node, 'after')
 
     strictEqual(getNodeName(node), 'after')
@@ -136,13 +134,11 @@ describe('node names', () => {
   it('converts a Node_Name of another type to a string', () => {
     const node: Node = {
       type: 'FxNode',
-      properties: [{ name: 'Node_Name', type: PropertyType.Float, value: 0 }],
+      properties: [{ name: 'Node_Name', type: 'float', value: 0 }],
     }
 
     setNodeName(node, 'converted')
-    deepStrictEqual(node.properties, [
-      { name: 'Node_Name', type: PropertyType.String, value: 'converted' },
-    ])
+    deepStrictEqual(node.properties, [{ name: 'Node_Name', type: 'string', value: 'converted' }])
   })
 })
 

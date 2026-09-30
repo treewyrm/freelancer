@@ -25,9 +25,13 @@ Texture library (UTF directory)
 The four forms are mutually exclusive in practice, and `readTexture` tries them in the order
 animated → `CUBE` → `MIPS` → `MIP0..n`.
 
-Which image form an entry uses is not a function of its pixel format — retail authored `rgb24_888`
-both ways. `TextureStorage` (`dds`, `targa` or `cube`) carries it, so `writeTexture` puts a texture
-back in the form it came from.
+An entry is one of three kinds, told apart by `type`: a flat `Texture` (`'image'`), a `CubeTexture`
+(`'cube'`) or an `AnimatedTexture` (`'animated'`). The pixel layout is `format`, never `type`.
+
+Which image form a flat texture uses is not a function of its pixel format — retail authored
+`rgb24_888` both ways. `TextureStorage` (`dds` or `targa`) carries it, so `writeTexture` puts a
+texture back in the form it came from. A cubemap is always a `CUBE` DirectDrawSurface and has no
+`storage`.
 
 The directory name is spelled three ways, so every lookup goes through `getResourceId`. Entry names
 are matched by CRC, so a collision inside one library makes a texture unreachable.
@@ -150,7 +154,7 @@ as `surfaces`, one chain per face — a plain texture has one, a cubemap six —
 refused rather than read at offsets its missing faces would have shifted.
 
 `CubeTexture` is a separate interface from `Texture` rather than a flag on it, discriminated by
-`storage: 'cube'`, so uploading a cubemap as a 2D texture is a type error instead of a silently wrong
+`type: 'cube'`, so uploading a cubemap as a 2D texture is a type error instead of a silently wrong
 render.
 
 The cubemap header is not the one `writeMIPS` emits. The two forms disagree on four fields, and each
@@ -201,8 +205,8 @@ The embedded digits are an export timestamp in `YYMMDDHHMMSS` form — `02112117
 
 ## Refusals
 
-`readTextures` collects per-entry failures and throws a single `AggregateError` at the end, so one
-malformed texture does not hide the rest of the library.
+`readTextureLibrary` attempts every entry and then throws a single `AggregateError` naming each that
+failed, so one malformed texture does not hide the rest of the library.
 
 The writers refuse what they cannot express: a block-compressed or 16-bit texture stored as a Targa
 chain, a bottom-up bitmap stored as a DirectDrawSurface (DDS is top-down unconditionally), a mip
@@ -243,7 +247,8 @@ Librelancer's Targa reader carries the row reversal written out and commented ou
 — right for the bottom-left chains it was measured on, and wrong for the nine, which it draws mirrored.
 
 Reporting rather than transforming is what lets a consumer do the same without a decode change: the
-reader hands back file order and `flip`, and the reversal is the consumer's, for `storage: 'targa'` only.
+reader hands back file order and `flip`, and the reversal is the consumer's, for `storage: 'targa'`
+only.
 
 ## API
 
@@ -271,26 +276,27 @@ reader hands back file order and `flip`, and the reversal is the consumer's, for
 | `readDirectDrawSurface`  | function  | `(view: BufferView): DirectDrawSurface`                                            |
 | `readMIP`                | function  | Reads texture as sequence of uncompressed Targa images.                            |
 | `readMIPS`               | function  | Reads texture as mipmaps (uncompressed or DXTn) stored in DirectDrawSurface.       |
-| `readTargaImage`         | function  | Reads bitmap from targa file. Its `options` type is not exported.                  |
+| `readTargaImage`         | function  | `(view: BufferView): TargaBitmap` — reads bitmap from targa file.                  |
 | `readTexture`            | function  | Reads one texture library entry.                                                   |
-| `readTextures`           | function  | Reads textures from directory. Looks for `Texture library` within.                 |
+| `readTextureLibrary`     | function  | `(parent: Directory): TextureLibrary` — empty when there is no `Texture library`.  |
 | `swapRB16`               | function  | Swap red and blue in a 16-bit ARGB-1555 value.                                     |
 | `swapRB24`               | function  | Swap red and blue in a 24-bit RGB value.                                           |
 | `swapRB32`               | function  | Swap red and blue in a 32-bit ARGB value.                                          |
 | `TargaBitmap`            | interface | `TargaPixels & { flip: boolean }` — origin reported as read, rows never reordered. |
 | `TargaPixels`            | interface | `width`, `height`, `depth`, and the pixel bytes.                                   |
-| `Texture`                | interface | A flat texture: one mip chain, as a DirectDrawSurface or a chain of Targas.        |
-| `TextureEntry`           | type      | Any entry a `Texture library` holds. Narrow on `type === 'animated'` first.        |
-| `TextureStorage`         | type      | Which on-disk form holds the image data: `MIPS`, `MIP0..n`, or `CUBE`.             |
-| `TextureType`            | type      | The pixel formats, with no `dxt1a` — punch-through is per block, not per image.    |
+| `Texture`                | interface | A flat texture (`type: 'image'`): one mip chain, as a DirectDrawSurface or Targas. |
+| `TextureEntry`           | type      | Any entry a `Texture library` holds, told apart by `type`.                         |
+| `TextureFormat`          | type      | The pixel formats, with no `dxt1a` — punch-through is per block, not per image.    |
+| `TextureLibrary`         | type      | `TextureEntry[]` — the entries of a `Texture library`, in directory order.         |
+| `TextureStorage`         | type      | Which on-disk form holds a flat texture's image data: `MIPS` or `MIP0..n`.         |
 | `writeAnimatedTexture`   | function  | `(texture: AnimatedTexture): Directory`                                            |
 | `writeCUBE`              | function  | Writes a cubemap as one DirectDrawSurface holding all six faces.                   |
 | `writeDirectDrawSurface` | function  | Writes a DirectDrawSurface, header and mip chains.                                 |
 | `writeMIP`               | function  | Writes texture as a sequence of uncompressed Targa images, one file per level.     |
 | `writeMIPS`              | function  | Writes texture as mipmaps (uncompressed or DXTn) in a DirectDrawSurface.           |
 | `writeTargaImage`        | function  | Writes an uncompressed RGB(A) Targa.                                               |
-| `writeTexture`           | function  | Writes one texture library entry, in whichever form `TextureStorage` names.        |
-| `writeTextures`          | function  | `(textures: Iterable<TextureEntry>): Directory`                                    |
+| `writeTexture`           | function  | Writes one texture library entry, in whichever form its `type` and `storage` name. |
+| `writeTextureLibrary`    | function  | `(textures: Iterable<TextureEntry>): Directory`                                    |
 
 ## Corpus
 
@@ -319,18 +325,18 @@ inside an `openFLAME 3D N-mesh` tree. No name collision occurs inside any librar
 Four entries carry both a `MIPS` and a `MIP0..n` chain; `MIPS` wins, the Targa chain is never
 decoded, and — since writing follows what was read — it is dropped on the way back out.
 
-Eight pixel formats:
+Seven pixel formats, and the animated entries that carry none:
 
-| `TextureType` | Count | Source                 |
-| ------------- | ----- | ---------------------- |
-| `dxt1`        | 4,230 | `MIPS`                 |
-| `rgb24_888`   | 1,789 | 1,787 Targa + 2 `MIPS` |
-| `rgba32_8888` | 613   | Targa                  |
-| `dxt3`        | 129   | `MIPS`                 |
-| `dxt5`        | 42    | `MIPS`                 |
-| `rgba16_5551` | 24    | `MIPS`                 |
-| `rgb16_565`   | 20    | `MIPS`                 |
-| `animated`    | 12    | `Frame rects`          |
+| `format`      | Count | Source                                             |
+| ------------- | ----- | -------------------------------------------------- |
+| `dxt1`        | 4,230 | `MIPS`                                             |
+| `rgb24_888`   | 1,789 | 1,787 Targa + 2 `MIPS`                             |
+| `rgba32_8888` | 613   | Targa                                              |
+| `dxt3`        | 129   | `MIPS`                                             |
+| `dxt5`        | 42    | `MIPS`                                             |
+| `rgba16_5551` | 24    | `MIPS`                                             |
+| `rgb16_565`   | 20    | `MIPS`                                             |
+| —             | 12    | `Frame rects`, animated entries carrying no pixels |
 
 ### Mip chain depth
 

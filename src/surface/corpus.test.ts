@@ -125,7 +125,7 @@ function model(path: string): Directory | undefined {
 }
 
 /**
- * Part names of a compound model, read straight out of `Cmpnd` rather than through `readModel`,
+ * Part names of a compound model, read straight out of `Cmpnd` rather than through `readCompound`,
  * which also parses the constraint list — a failure here should be about the surface.
  */
 function partNames(root: Directory): string[] | undefined {

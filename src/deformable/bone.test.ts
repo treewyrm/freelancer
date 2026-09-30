@@ -7,7 +7,7 @@ import Vector3 from '#/math/vector3.js'
 import BufferView from '#/utility/bufferview.js'
 import { getBone, readBone, writeBone, type Bone } from './bone.js'
 
-const rotation: Matrix3 = {
+const orientation: Matrix3 = {
   x: { x: 0, y: 1, z: 0 },
   y: { x: -1, y: 0, z: 0 },
   z: { x: 0, y: 0, z: 1 },
@@ -17,7 +17,7 @@ const position: Vector3 = { x: 1, y: 2, z: 3 }
 
 const bone = (values: Partial<Bone> = {}): Bone => ({
   filename: 'Spine020831180347.3db',
-  rotation,
+  orientation,
   position,
   levels: 0x3f,
   hardpoints: [],
@@ -26,16 +26,16 @@ const bone = (values: Partial<Bone> = {}): Bone => ({
 
 const directory = (levels = 0x3f) =>
   new Directory('Spine020831180347.3db', [
-    new File('Bone to root', BufferView.join(Matrix3.write(rotation), Vector3.write(position))),
+    new File('Bone to root', BufferView.join(Matrix3.write(orientation), Vector3.write(position))),
     new File('Lod Bits', BufferView.allocate(1).writeUint8(levels).rewind()),
   ])
 
 describe('readBone', () => {
-  it('reads the rotation and translation halves of Bone to root', () => {
+  it('reads the orientation and translation halves of Bone to root', () => {
     const value = readBone(directory())
 
     strictEqual(value.filename, 'Spine020831180347.3db')
-    deepStrictEqual(value.rotation, rotation)
+    deepStrictEqual(value.orientation, orientation)
     deepStrictEqual(value.position, position)
     strictEqual(value.levels, 0x3f)
   })
@@ -48,7 +48,7 @@ describe('readBone', () => {
     const parent = directory()
 
     parent
-      .setDirectory('Hardpoints', 'Fixed', 'hp_neck')
+      .ensureDirectory('Hardpoints', 'Fixed', 'hp_neck')
       .children.push(
         new File('Position', Vector3.write({ x: 0, y: 1, z: 0 })),
         new File('Orientation', Matrix3.write(Matrix3.identity)),
@@ -72,7 +72,7 @@ describe('writeBone', () => {
     deepStrictEqual(readBone(writeBone(value)), value)
   })
 
-  it('writes Bone to root as twelve floats, rotation first', () => {
+  it('writes Bone to root as twelve floats, orientation first', () => {
     const file = writeBone(bone()).getFile('Bone to root')!
 
     strictEqual(file.byteLength, 48)

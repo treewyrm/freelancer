@@ -1,4 +1,4 @@
-export { PropertyType, type PropertyName, type Property } from './property.js'
+export type { PropertyName, Property, PropertyType, PropertyOf } from './property.js'
 
 export { BlendingMode, type Blending } from './misc.js'
 
@@ -20,8 +20,8 @@ export {
   type EffectLibrary,
   readEffectLibrary,
   writeEffectLibrary,
-  ControlRootId,
-  WorldId,
+  CONTROL_ROOT_ID,
+  WORLD_ID,
 } from './effect.js'
 
 export { type Alchemy, hasAlchemy, readAlchemy, writeAlchemy } from './library.js'
@@ -36,23 +36,24 @@ export {
   type AnimatedColor,
   type AnimatedCurve,
   type TransformPoint,
-  type Transform,
+  type TransformCurves,
+  type AnimatedTransform,
   type TransformOrder,
   EaseType,
-  WrapFlags,
-  DefaultTransformOrder,
+  WrapMode,
+  DEFAULT_TRANSFORM_ORDER,
 } from './animation.js'
 
 export {
-  type TransformAt,
+  type SampledTransform,
   type SparamLevel,
   sparamLevel,
   ease,
   easeVector,
-  limit,
+  wrapKey,
   floatWhen,
-  vectorWhen,
-  hermiteAt,
+  colorWhen,
+  hermiteWhen,
   floatAt,
   colorAt,
   curveAt,

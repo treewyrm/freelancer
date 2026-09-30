@@ -15,12 +15,12 @@ describe('label', () => {
 describe('format', () => {
   it('coerces values positionally', () => {
     const property = new Property('pos', value.integer(1), value.string('a'), value.boolean(true))
-    assert.deepEqual(property.format('float', 'string', 'boolean'), [1, 'a', true])
+    assert.deepEqual(property.coerce('float', 'string', 'boolean'), [1, 'a', true])
   })
 
   // A missing value comes back undefined, never a fabricated default.
   it('leaves a missing value undefined rather than defaulting it', () => {
     const property = new Property('a', value.integer(1))
-    assert.deepEqual(property.format('integer', 'string'), [1, undefined])
+    assert.deepEqual(property.coerce('integer', 'string'), [1, undefined])
   })
 })

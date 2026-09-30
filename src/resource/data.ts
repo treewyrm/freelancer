@@ -99,20 +99,17 @@ export const DATA_ALIGNMENT = 4
  */
 export const PADDING = 'PADDINGXXPADDING'
 
-/** Resource types, by their Win32 `RT_*` numbers. */
-export const Type = {
+/** The three resource types these DLLs carry, by their Win32 `RT_*` numbers. */
+export enum ResourceType {
   /** `RT_STRING`. String tables, blocked sixteen to an entry. Holds every `ids_name`. */
-  String: 6,
+  String = 6,
 
   /** `RT_VERSION`. The version block every retail DLL carries and Freelancer never reads. */
-  Version: 16,
+  Version = 16,
 
   /** `RT_HTML`. Infocards, one per entry. Holds every `ids_info`. */
-  Html: 23,
-} as const
-
-/** One of the three resource types these DLLs carry. */
-export type Type = (typeof Type)[keyof typeof Type]
+  Html = 23,
+}
 
 /**
  * Strings per `RT_STRING` block. Fixed by the format: a string's resource id is

@@ -3,7 +3,8 @@ export {
   type CubeTexture,
   type Texture,
   type TextureEntry,
-  type TextureType,
+  type TextureFormat,
+  type TextureLibrary,
   type TextureStorage,
 } from './types.js'
 export {
@@ -31,12 +32,12 @@ export {
   readMIP,
   readMIPS,
   readTexture,
-  readTextures,
+  readTextureLibrary,
   writeCUBE,
   writeMIP,
   writeMIPS,
   writeTexture,
-  writeTextures,
+  writeTextureLibrary,
 } from './library.js'
 
 /**

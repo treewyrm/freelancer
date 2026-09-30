@@ -7,13 +7,11 @@ import { readVMeshWire, writeVMeshWire, type VMeshWire } from './wireframe.js'
 
 /** Canonical wireframe: indices relative to vertexStart, so they begin at 0. */
 const sample = (): VMeshWire => ({
-  data: {
-    meshId: -12345678,
-    vertexStart: 222,
-    vertexCount: 4, // unique ids: 0, 4, 9, 12
-    vertexRange: 13, // canonical: max - min + 1
-    indices: Uint16Array.from([0, 4, 4, 9, 9, 12, 12, 0]),
-  },
+  meshId: -12345678,
+  vertexStart: 222,
+  vertexCount: 4, // unique ids: 0, 4, 9, 12
+  vertexRange: 13, // canonical: max - min + 1
+  indices: Uint16Array.from([0, 4, 4, 9, 9, 12, 12, 0]),
 })
 
 const wrap = (wire: VMeshWire) => new Directory('Part', [writeVMeshWire(wire)])
@@ -23,12 +21,12 @@ describe('writeVMeshWire', () => {
     const wire = sample()
     const file = writeVMeshWire(wire).getFile('VWireData')
 
-    strictEqual(file?.byteLength, 16 + wire.data.indices.byteLength)
+    strictEqual(file?.byteLength, 16 + wire.indices.byteLength)
   })
 
   it('derives indexCount from the indices array', () => {
     const wire = sample()
-    wire.data.indices = Uint16Array.from([0, 1, 1, 2])
+    wire.indices = Uint16Array.from([0, 1, 1, 2])
 
     const view = BufferView.from(writeVMeshWire(wire).getFile('VWireData')!)
     view.offset = 12
@@ -79,27 +77,27 @@ describe('VWireData vertex fields', () => {
     const wire = sample()
     const result = readVMeshWire(wrap(wire))
 
-    strictEqual(Math.min(...wire.data.indices), 0)
-    strictEqual(result?.data.vertexStart, 222)
+    strictEqual(Math.min(...wire.indices), 0)
+    strictEqual(result?.vertexStart, 222)
   })
 
   // Original Digital Anvil exporters write max - min + 1; MAXLancer and LancerEdit
   // write one less. Neither is normalised, so assets round-trip byte-exactly.
   it('preserves a non-canonical vertexRange rather than deriving it', () => {
     const wire = sample()
-    const { indices } = wire.data
+    const { indices } = wire
     const canonical = Math.max(...indices) - Math.min(...indices) + 1
 
-    wire.data.vertexRange = canonical - 1 // MAXLancer convention
+    wire.vertexRange = canonical - 1 // MAXLancer convention
 
-    strictEqual(readVMeshWire(wrap(wire))?.data.vertexRange, canonical - 1)
+    strictEqual(readVMeshWire(wrap(wire))?.vertexRange, canonical - 1)
   })
 
   it('preserves a vertexCount that disagrees with the unique id count', () => {
     const wire = sample()
-    wire.data.vertexCount = 99
+    wire.vertexCount = 99
 
-    strictEqual(new Set(wire.data.indices).size, 4)
-    strictEqual(readVMeshWire(wrap(wire))?.data.vertexCount, 99)
+    strictEqual(new Set(wire.indices).size, 4)
+    strictEqual(readVMeshWire(wrap(wire))?.vertexCount, 99)
   })
 })

@@ -10,11 +10,11 @@ import type { Joint } from './joint.js'
 import type { Hardpoint } from './hardpoint.js'
 import {
   arrangeByConstraints,
-  getModelHardpoint,
-  isCompoundModel,
-  readModel,
-  writeModel,
-  type Model,
+  getCompoundHardpoint,
+  isCompound,
+  readCompound,
+  writeCompound,
+  type CompoundNode,
 } from './model.js'
 
 /**
@@ -31,19 +31,19 @@ const readPayload = (parent: Directory): Payload => ({
 })
 
 const writePayload = ({ tag }: Payload): Directory =>
-  new Directory('\\', [new File('Tag').writeStrings(tag)])
+  new Directory('\\', [new File('Tag').setStrings(tag)])
 
 const position = { x: 1, y: 2, z: 3 }
 
-const rotation = Matrix3.copy({})
+const orientation = Matrix3.copy({})
 
-const fixed: Joint = { type: 'fixed', position, rotation }
+const fixed: Joint = { type: 'fixed', position, orientation }
 
 const revolute: Joint = {
   type: 'revolute',
   position,
   offset: { x: -1, y: -2, z: -3 },
-  rotation,
+  orientation,
   axis: { x: 0, y: 1, z: 0 },
   min: -0.5,
   max: 1.25,
@@ -52,13 +52,13 @@ const revolute: Joint = {
 interface PartOptions {
   index?: number
   joint?: Joint
-  children?: Model<Payload>[]
+  children?: CompoundNode<Payload>[]
 }
 
 const part = (
   name: string,
   { index = 0, joint, children = [] }: PartOptions = {},
-): Model<Payload> => ({
+): CompoundNode<Payload> => ({
   type: 'compound',
   name,
   index,
@@ -72,7 +72,7 @@ const part = (
  * A three-level model, so the hierarchy is not something a flat reader could produce by accident:
  * `handle` hangs off `door`, not off the root.
  */
-const sample = (): Model<Payload> =>
+const sample = (): CompoundNode<Payload> =>
   part('Root', {
     children: [
       part('wing_lod1', { index: 1, joint: fixed }),
@@ -84,21 +84,27 @@ const sample = (): Model<Payload> =>
     ],
   })
 
-const document = (model: Model<Payload> = sample()) => writeModel(model, writePayload)
+const document = (model: CompoundNode<Payload> = sample()) => writeCompound(model, writePayload)
 
-const names = (model: Model<Payload>) => [...listTreeElements(model)].map(({ name }) => name)
+const names = (model: CompoundNode<Payload>) => [...listTreeElements(model)].map(({ name }) => name)
 
-describe('isCompoundModel', () => {
+describe('isCompound', () => {
   it('recognises a document holding a Cmpnd hierarchy', () => {
-    strictEqual(isCompoundModel(document()), true)
+    strictEqual(isCompound(document()), true)
   })
 
   it('rejects a single-part document, which carries its part at the root', () => {
-    strictEqual(isCompoundModel(new Directory('\\', [new File('Tag')])), false)
+    strictEqual(isCompound(new Directory('\\', [new File('Tag')])), false)
+  })
+
+  // The probe answers exactly when the reader can start, so a caller can dispatch on it.
+  it('agrees with readCompound', () => {
+    ok(readCompound(document(), () => undefined))
+    throws(() => readCompound(new Directory('\\'), () => undefined), /Missing compound directory/)
   })
 })
 
-describe('writeModel', () => {
+describe('writeCompound', () => {
   it('names the root Root and every other part Part_<name>', () => {
     deepStrictEqual(
       document()
@@ -184,19 +190,19 @@ describe('writeModel', () => {
   })
 })
 
-describe('readModel', () => {
+describe('readCompound', () => {
   it('round-trips a model', () => {
-    deepStrictEqual(readModel(document(), readPayload), sample())
+    deepStrictEqual(readCompound(document(), readPayload), sample())
   })
 
   it('reads a root with no children', () => {
     const model = part('Root')
 
-    deepStrictEqual(readModel(document(model), readPayload), model)
+    deepStrictEqual(readCompound(document(model), readPayload), model)
   })
 
   it('reads the part payload through the fragment reader it is given', () => {
-    const model = readModel(document(), readPayload)
+    const model = readCompound(document(), readPayload)
 
     deepStrictEqual(
       [...listTreeElements(model)].map(({ part }) => part.tag),
@@ -212,11 +218,11 @@ describe('readModel', () => {
 
     compound.children.reverse()
 
-    deepStrictEqual(readModel(root, readPayload), sample())
+    deepStrictEqual(readCompound(root, readPayload), sample())
   })
 
   it('carries the joint onto the child it constrains', () => {
-    const model = readModel(document(), readPayload)
+    const model = readCompound(document(), readPayload)
     const door = model.children.find(({ name }) => name === 'door')
 
     deepStrictEqual(door?.joint, revolute)
@@ -227,26 +233,26 @@ describe('readModel', () => {
     const root = document()
     root.getDirectory('Cmpnd', 'Part_door')!.delete('Index')
 
-    const model = readModel(root, readPayload)
+    const model = readCompound(root, readPayload)
     strictEqual(model.children.find(({ name }) => name === 'door')?.index, 0)
   })
 
   it('throws without a Cmpnd directory', () => {
-    throws(() => readModel(new Directory('\\'), readPayload), /Missing compound directory/)
+    throws(() => readCompound(new Directory('\\'), readPayload), /Missing compound directory/)
   })
 
   it('throws when a part has no object name', () => {
     const root = document()
     root.getDirectory('Cmpnd', 'Part_door')!.delete('Object name')
 
-    throws(() => readModel(root, readPayload), /Missing compound object name/)
+    throws(() => readCompound(root, readPayload), /Missing compound object name/)
   })
 
   it('throws when a part has no file name', () => {
     const root = document()
     root.getDirectory('Cmpnd', 'Part_door')!.delete('File name')
 
-    throws(() => readModel(root, readPayload), /Missing compound object file name/)
+    throws(() => readCompound(root, readPayload), /Missing compound object file name/)
   })
 
   // A file name that names nothing is damage rather than a part without geometry: the fragment
@@ -255,14 +261,14 @@ describe('readModel', () => {
     const root = document()
     root.delete('door.3db')
 
-    throws(() => readModel(root, readPayload), /Missing object fragment directory/)
+    throws(() => readCompound(root, readPayload), /Missing object fragment directory/)
   })
 
   it('throws when Cmpnd holds no part at all', () => {
     const root = new Directory('\\')
-    root.setDirectory('Cmpnd', 'Cons')
+    root.ensureDirectory('Cmpnd', 'Cons')
 
-    throws(() => readModel(root, readPayload), /Missing root object/)
+    throws(() => readCompound(root, readPayload), /Missing root object/)
   })
 
   // The Root directory is a marker, not a requirement: a document without one is read with the
@@ -272,7 +278,7 @@ describe('readModel', () => {
     const root = document()
     root.getDirectory('Cmpnd')!.getDirectory('Root')!.name = 'Part_hull'
 
-    const model = readModel(root, readPayload)
+    const model = readCompound(root, readPayload)
 
     strictEqual(model.name, 'Root')
     deepStrictEqual(names(model), ['Root', 'wing_lod1', 'door', 'handle'])
@@ -287,19 +293,19 @@ describe('readModel', () => {
 
     compound.children.push(marker!)
 
-    deepStrictEqual(readModel(root, readPayload), sample())
+    deepStrictEqual(readCompound(root, readPayload), sample())
   })
 
   it('ignores a directory under Cmpnd it does not recognise', () => {
     const root = document()
-    root.getDirectory('Cmpnd')!.setDirectory('Notes')
+    root.getDirectory('Cmpnd')!.ensureDirectory('Notes')
 
-    deepStrictEqual(readModel(root, readPayload), sample())
+    deepStrictEqual(readCompound(root, readPayload), sample())
   })
 })
 
 describe('arrangeByConstraints', () => {
-  const objects = (...names: string[]): Model<Payload>[] => names.map((name) => part(name))
+  const objects = (...names: string[]): CompoundNode<Payload>[] => names.map((name) => part(name))
 
   const link = (parent: string, child: string, joint: Joint = fixed): Constraint => ({
     parent,
@@ -352,12 +358,12 @@ describe('arrangeByConstraints', () => {
   })
 })
 
-describe('getModelHardpoint', () => {
+describe('getCompoundHardpoint', () => {
   interface Mount {
     hardpoints: Hardpoint[]
   }
 
-  const mount = (name: string, ...hardpoints: string[]): Model<Mount> => ({
+  const mount = (name: string, ...hardpoints: string[]): CompoundNode<Mount> => ({
     type: 'compound',
     name,
     index: 0,
@@ -367,13 +373,13 @@ describe('getModelHardpoint', () => {
         type: 'fixed',
         name,
         position: { x: 0, y: 0, z: 0 },
-        orientation: rotation,
+        orientation,
       })),
     },
     children: [],
   })
 
-  const model = (): Model<Mount> => {
+  const model = (): CompoundNode<Mount> => {
     const root = mount('Root', 'HpMount01')
     const wing = mount('wing_lod1', 'HpWeapon01', 'HpWeapon02')
 
@@ -384,27 +390,27 @@ describe('getModelHardpoint', () => {
   const hardpoints = ({ hardpoints }: Mount) => hardpoints
 
   it('finds a hardpoint on the root', () => {
-    strictEqual(getModelHardpoint(model(), hardpoints, 'HpMount01')?.hardpoint.name, 'HpMount01')
+    strictEqual(getCompoundHardpoint(model(), hardpoints, 'HpMount01')?.hardpoint.name, 'HpMount01')
   })
 
   // Which part owns the hardpoint is the half a per-part lookup cannot answer, and it is what a
   // caller needs to place anything on it — the part carries the transform.
   it('says which part owns the match', () => {
-    strictEqual(getModelHardpoint(model(), hardpoints, 'HpWeapon02')?.parent.name, 'wing_lod1')
+    strictEqual(getCompoundHardpoint(model(), hardpoints, 'HpWeapon02')?.parent.name, 'wing_lod1')
   })
 
   it('finds a hardpoint by its resource CRC', () => {
-    const match = getModelHardpoint(model(), hardpoints, getResourceId('HpWeapon01'))
+    const match = getCompoundHardpoint(model(), hardpoints, getResourceId('HpWeapon01'))
 
     strictEqual(match?.hardpoint.name, 'HpWeapon01')
     strictEqual(match.parent.name, 'wing_lod1')
   })
 
   it('folds case, as the game does', () => {
-    ok(getModelHardpoint(model(), hardpoints, 'hpweapon01'))
+    ok(getCompoundHardpoint(model(), hardpoints, 'hpweapon01'))
   })
 
   it('returns undefined when no part carries the hardpoint', () => {
-    strictEqual(getModelHardpoint(model(), hardpoints, 'HpEngine01'), undefined)
+    strictEqual(getCompoundHardpoint(model(), hardpoints, 'HpEngine01'), undefined)
   })
 })

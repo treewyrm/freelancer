@@ -5,14 +5,15 @@ import BufferView from '#/utility/bufferview.js'
 const byteLength = 0x10
 
 /**
- * Wireframe line data.
+ * A part's wireframe overlay: the `VMeshWire` directory's one file, `VWireData`, which no retail
+ * part accompanies with anything else. A sibling of {@link VMeshPart}, not a property of it.
  *
  * `vertexStart`, `vertexCount` and `vertexRange` are stored as authored and are never recomputed on
  * write, so files round-trip byte-exactly whichever exporter produced them. Exporters disagree on
  * `vertexRange`; see [VMESH.md](../../docs/modules/VMESH.md) for the canonical formulas to use when
  * authoring new data.
  */
-export interface VWireData {
+export interface VMeshWire {
   /** Mesh buffer id. */
   meshId: number
 
@@ -27,11 +28,6 @@ export interface VWireData {
 
   /** Wireframe element (LineList) indices, relative to vertexStart. */
   indices: Uint16Array
-}
-
-/** A part's wireframe overlay. A sibling of {@link VMeshPart}, not a property of it. */
-export interface VMeshWire {
-  data: VWireData
 }
 
 /**
@@ -62,15 +58,7 @@ export function readVMeshWire(parent: Directory): VMeshWire | undefined {
 
   for (let i = 0; i < indices.length; i++) indices[i] = view.readUint16()
 
-  return {
-    data: {
-      meshId,
-      vertexStart,
-      vertexCount,
-      vertexRange,
-      indices,
-    },
-  }
+  return { meshId, vertexStart, vertexCount, vertexRange, indices }
 }
 
 /**
@@ -78,10 +66,8 @@ export function readVMeshWire(parent: Directory): VMeshWire | undefined {
  * `vertexRange` go out as carried, since exporters disagree on them and retail files round-trip
  * byte-exactly whichever one produced them.
  */
-export function writeVMeshWire(data: VMeshWire): Directory {
-  const {
-    data: { meshId, vertexStart, vertexCount, indices, vertexRange },
-  } = data
+export function writeVMeshWire(wire: VMeshWire): Directory {
+  const { meshId, vertexStart, vertexCount, indices, vertexRange } = wire
 
   const view = BufferView.join(
     BufferView.allocate(Uint32Array.BYTES_PER_ELEMENT * 4)

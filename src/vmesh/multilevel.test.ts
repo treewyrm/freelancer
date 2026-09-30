@@ -1,7 +1,7 @@
-import { deepStrictEqual, strictEqual } from 'node:assert/strict'
+import { deepStrictEqual, strictEqual, throws } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import Directory from '#/utf/directory.js'
-import { atRange, readMultiLevel, writeMultiLevel, type MultiLevel } from './multilevel.js'
+import { getLevel, readMultiLevel, writeMultiLevel, type MultiLevel } from './multilevel.js'
 import { writeVMeshPart, type VMeshPart } from './part.js'
 import type { VMeshRef } from './ref.js'
 
@@ -15,7 +15,7 @@ const level = (meshId: number): VMeshPart => ({
     indexCount: 3,
     groupStart: 0,
     groupCount: 1,
-    boundingBox: { a: { x: -1, y: -1, z: -1 }, b: { x: 1, y: 1, z: 1 } },
+    boundingBox: { min: { x: -1, y: -1, z: -1 }, max: { x: 1, y: 1, z: 1 } },
     boundingSphere: { center: { x: 0, y: 0, z: 0 }, radius: 1 },
   } satisfies VMeshRef,
 })
@@ -64,20 +64,31 @@ describe('readMultiLevel', () => {
     strictEqual(readMultiLevel(new Directory('part.3db')), undefined)
   })
 
-  it('falls back to a single 0..1000 range when Switch2 is missing', () => {
+  // The game assumes a single 0..1000 range, but that is getLevel's to apply: a directory read
+  // without Switch2 must be written back without one.
+  it('leaves ranges off when Switch2 is missing, and writes none back', () => {
     const directory = writeMultiLevel(sample())
     directory.delete('Switch2')
 
-    deepStrictEqual(readMultiLevel(new Directory('part.3db', [directory]))?.ranges, [0, 1000])
+    const value = readMultiLevel(new Directory('part.3db', [directory]))!
+
+    strictEqual('ranges' in value, false)
+    strictEqual(writeMultiLevel(value).getFile('Switch2'), undefined)
+    strictEqual(getLevel(value, 999), value.levels[0])
+    strictEqual(getLevel(value, 1000), undefined)
   })
 
-  // Four retail parts carry a MultiLevel holding a single empty LevelN directory
-  // and no Switch2 at all. There is nothing to read, and it must not throw.
+  // Retail parts carry a MultiLevel holding a single empty LevelN directory and no Switch2 at
+  // all. There is nothing to read, and it must not throw.
   it('tolerates a MultiLevel whose only level directory is empty', () => {
     const directory = new Directory('MultiLevel', [new Directory('Level0')])
     const value = readMultiLevel(new Directory('part.3db', [directory]))
 
-    deepStrictEqual(value, { type: 'multilevel', ranges: [0, 1000], levels: [] })
+    deepStrictEqual(value, { type: 'multilevel', levels: [] })
+  })
+
+  it('refuses to write breakpoints that do not number one more than the levels', () => {
+    throws(() => writeMultiLevel({ ...sample(), ranges: [0, 1000] }), RangeError)
   })
 
   it('stops at the first gap in the level numbering', () => {
@@ -88,30 +99,30 @@ describe('readMultiLevel', () => {
   })
 })
 
-describe('atRange', () => {
+describe('getLevel', () => {
   const value = sample()
 
   it('selects the level whose bracket contains the distance', () => {
-    strictEqual(atRange(value, 0), value.levels[0])
-    strictEqual(atRange(value, 99), value.levels[0])
-    strictEqual(atRange(value, 100), value.levels[1])
-    strictEqual(atRange(value, 499), value.levels[1])
-    strictEqual(atRange(value, 500), value.levels[2])
-    strictEqual(atRange(value, 999), value.levels[2])
+    strictEqual(getLevel(value, 0), value.levels[0])
+    strictEqual(getLevel(value, 99), value.levels[0])
+    strictEqual(getLevel(value, 100), value.levels[1])
+    strictEqual(getLevel(value, 499), value.levels[1])
+    strictEqual(getLevel(value, 500), value.levels[2])
+    strictEqual(getLevel(value, 999), value.levels[2])
   })
 
   it('returns undefined past the last breakpoint', () => {
-    strictEqual(atRange(value, 1000), undefined)
-    strictEqual(atRange(value, 10000), undefined)
+    strictEqual(getLevel(value, 1000), undefined)
+    strictEqual(getLevel(value, 10000), undefined)
   })
 
   it('returns undefined below the first breakpoint', () => {
-    strictEqual(atRange(value, -1), undefined)
+    strictEqual(getLevel(value, -1), undefined)
   })
 
   it('treats a trailing Infinity breakpoint as unbounded', () => {
     const unbounded: MultiLevel = { ...value, ranges: [0, 100, 500, Infinity] }
 
-    strictEqual(atRange(unbounded, 1e9), unbounded.levels[2])
+    strictEqual(getLevel(unbounded, 1e9), unbounded.levels[2])
   })
 })

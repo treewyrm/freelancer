@@ -1,12 +1,15 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { load, skip } from '#/corpus.js'
+import { readConstraints } from '#/compound/constraint.js'
+import type { Joint } from '#/compound/joint.js'
 import type Directory from '#/utf/directory.js'
 import type File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
 import Vector4 from '#/math/vector4.js'
 import {
   ChannelType,
+  getChannelType,
   keyframeByteLength,
   readAngleQuaternion,
   readChannel,
@@ -46,7 +49,10 @@ const rotationOffset = (type: ChannelType, interval: number) =>
  * The encoding maps length onto a rotation of 0 to PI, so anything past one unit is outside the
  * range it can represent and cannot survive a re-encode intact.
  */
-function countOutOfRange({ type, interval, keyframes }: Channel, frames: File): number {
+function countOutOfRange(channel: Channel, frames: File): number {
+  const { interval, keyframes } = channel
+  const type = getChannelType(channel)
+
   if (!(type & ChannelType.AngleQuaternion)) return 0
 
   const stride = keyframeByteLength(type, interval)
@@ -85,7 +91,8 @@ describe('retail asset corpus', { skip }, () => {
         ok(getScriptDuration(script) >= 0, `${path}/${script.name}: negative duration`)
 
         for (const map of script.maps) {
-          ok(map.parent.length > 0, `${path}/${script.name}: unnamed parent`)
+          const name = map.type === 'object' ? map.object : map.parent
+          ok(name.length > 0, `${path}/${script.name}: unnamed parent`)
           if (map.type === 'joint')
             ok(map.child.length > 0, `${path}/${script.name}: unnamed child`)
 
@@ -103,7 +110,7 @@ describe('retail asset corpus', { skip }, () => {
     const types = new Set<number>()
 
     for (const { name, path, directory } of maps()) {
-      const { type } = readChannel(directory)
+      const type = getChannelType(readChannel(directory))
 
       ok(type > 0, `${path}/${name}: empty channel type`)
       types.add(type)
@@ -122,7 +129,7 @@ describe('retail asset corpus', { skip }, () => {
 
       strictEqual(
         frames?.byteLength,
-        keyframeByteLength(channel.type, channel.interval) * channel.keyframes.length,
+        keyframeByteLength(getChannelType(channel), channel.interval) * channel.keyframes.length,
         `${path}/${name}`,
       )
     }
@@ -168,8 +175,8 @@ describe('retail asset corpus', { skip }, () => {
       inexact++
 
       // Whatever changed must still decode to the same rotation.
-      const stride = keyframeByteLength(channel.type, channel.interval)
-      const offset = rotationOffset(channel.type, channel.interval)
+      const stride = keyframeByteLength(getChannelType(channel), channel.interval)
+      const offset = rotationOffset(getChannelType(channel), channel.interval)
 
       for (let i = 0; i < channel.keyframes.length; i++) {
         const before = readAngleQuaternion(BufferView.from(original).subarray(i * stride + offset))
@@ -180,6 +187,93 @@ describe('retail asset corpus', { skip }, () => {
     }
 
     ok(inexact < 50, `${inexact} channels failed to round-trip exactly`)
+  })
+
+  it('gives every object map both position and rotation, as the engine requires to bind it', () => {
+    let objects = 0
+
+    for (const { root } of assets())
+      for (const script of readAnimationLibrary(root))
+        for (const map of script.maps) {
+          if (map.type !== 'object') continue
+
+          const { channel } = map
+          ok(channel.type === 'motion' && channel.position && channel.orientation)
+          objects++
+        }
+
+    strictEqual(objects, 1010)
+  })
+
+  it('starts every time-marked channel at zero, where the engine lookup has a keyframe', () => {
+    // `engbase.dll` interpolates from index −1 before a first marker later than zero; retail never
+    // asks it to.
+    for (const { path, name, directory } of maps()) {
+      const { interval, keyframes } = readChannel(directory)
+      if (interval < 0) strictEqual(keyframes[0]?.key ?? 0, 0, `${path}/${name}`)
+    }
+  })
+
+  it('leaves only prismatic channels for the engine to clamp, and wraps revolutes within range', () => {
+    let strict = 0
+    let strictChannels = 0
+    let past = 0
+    let pastChannels = 0
+    let wrapped = 0
+    let wrappedChannels = 0
+
+    for (const { root } of load('cmp')) {
+      const joints = new Map<string, Joint>()
+
+      for (const { child, joint } of readConstraints(
+        root.getDirectory('Cmpnd', 'Cons')?.files ?? [],
+      ))
+        joints.set(child.trim().toLowerCase(), joint)
+
+      for (const script of readAnimationLibrary(root))
+        for (const map of script.maps) {
+          if (map.type !== 'joint' || map.channel.type !== 'angle') continue
+
+          const joint = joints.get(map.child.trim().toLowerCase())
+          if (joint?.type !== 'revolute' && joint?.type !== 'prismatic') continue
+
+          const values = map.channel.keyframes.map(({ value }) => value)
+          const excess = values.map((value) => Math.max(joint.min - value, value - joint.max))
+
+          const over = excess.filter((e) => e > 0).length
+          const beyond = excess.filter((e) => e > 1e-4).length
+
+          strict += over
+          strictChannels += over ? 1 : 0
+          past += beyond
+          pastChannels += beyond ? 1 : 0
+
+          if (beyond) strictEqual(joint.type, 'prismatic', 'only prismatic channels overshoot')
+          if (joint.type !== 'revolute') continue
+
+          // The engine's revolute wrap, applied to every pair: the far end must stay in range.
+          let crossed = false
+
+          for (let i = 1; i < values.length; i++) {
+            const a = values[i - 1]!
+            const b = values[i]!
+            const d = b - a
+            const end = d < -Math.PI ? b + Math.PI * 2 : d > Math.PI ? b - Math.PI * 2 : b
+
+            if (end === b) continue
+
+            ok(end >= joint.min && end <= joint.max, `${script.name}/${map.child}`)
+            wrapped++
+            crossed = true
+          }
+
+          wrappedChannels += crossed ? 1 : 0
+        }
+    }
+
+    deepStrictEqual([strict, strictChannels], [295, 38])
+    deepStrictEqual([past, pastChannels], [278, 22])
+    deepStrictEqual([wrapped, wrappedChannels], [212, 150])
   })
 
   it('rebuilds the Animation directory of every animated asset', () => {

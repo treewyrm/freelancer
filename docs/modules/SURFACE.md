@@ -58,7 +58,7 @@ Surface library (.sur)
   header ── 'vers' + float32 2.0
   └─ Part[]                     ── one per collision-enabled model part
        ├─ '!fxd'                ── part is not fixed to the root
-       ├─ 'exts' → Extent       ── bounding box
+       ├─ 'exts' → BoundingBox  ── extent
        ├─ 'surf' → Surface      ── IVP_Compact_Surface
        │    ├─ massCenter, rotationInertia, radius, surfaceDeviation
        │    ├─ Hull[]           ── ledges
@@ -75,7 +75,7 @@ be exactly `2.0`. Parts are then read until the view is exhausted.
 ## Part
 
 ```ts
-interface Part extends Extent, Surface {
+interface Part extends BoundingBox, Surface {
   id: number           // int32 — CRC32 of the model part name
   fixed: boolean       // false when the '!fxd' chunk is present
   hardpoints: number[] // int32 CRCs of hardpoints this part covers
@@ -91,7 +91,7 @@ interface Part extends Extent, Surface {
 | FourCC | Value        | Payload                                      |
 | ------ | ------------ | -------------------------------------------- |
 | `!fxd` | `0x64786621` | None — marks the part as not fixed           |
-| `exts` | `0x73747865` | `Extent` (24 bytes)                          |
+| `exts` | `0x73747865` | `BoundingBox` (24 bytes)                     |
 | `surf` | `0x66727573` | uint32 size, then the `Surface` block        |
 | `hpid` | `0x64697068` | uint32 count followed by that many int32 IDs |
 
@@ -122,11 +122,14 @@ Compare ids unsigned. `readPart` reads `id` with `readInt32` and `readHull` with
 ## Extent
 
 ```ts
-interface Extent {
-  minimum: Vector3
-  maximum: Vector3
+interface BoundingBox {
+  min: Vector3
+  max: Vector3
 }
 ```
+
+The shared `./math` box — the same shape a `VMeshRef` carries, whatever order each file stores it
+in.
 
 Fixed size: 24 bytes. Stored as two contiguous XYZ vectors — `min.x, min.y, min.z, max.x, max.y,
 max.z`. This does *not* follow [`VMeshRef`](VMESH.md#mesh-reference)'s interleaved convention.
@@ -368,7 +371,7 @@ import { createBox, createPart, writeSurfaceLibrary } from '@treewyrm/freelancer
 import { getResourceId } from '@treewyrm/freelancer'
 
 const id = getResourceId('Root')
-const extent = { minimum: { x: -2, y: -1, z: -6 }, maximum: { x: 2, y: 1, z: 6 } }
+const extent = { min: { x: -2, y: -1, z: -6 }, max: { x: 2, y: 1, z: 6 } }
 
 const part = createPart(id, [{ id, ...createBox(extent) }])
 const bytes = writeSurfaceLibrary([part])
@@ -565,7 +568,6 @@ that.
 | `createNode`          | function  | Leaf node bounding one terminal hull, from the points its faces index.                 |
 | `createPart`          | function  | Builds a part from convex hulls — geometry to something `writeSurfaceLibrary` takes.   |
 | `createSurface`       | function  | Builds a surface block around a hierarchy, deriving its `MassProperties`.              |
-| `Extent`              | interface | Extents section (bounding box).                                                        |
 | `Face`                | interface | Hull triangle face. Corresponds to IVP's `IVP_Compact_Triangle`.                       |
 | `getExtent`           | function  | Axis-aligned bounding box of a point set; an empty set yields an inverted one.         |
 | `getHulls`            | function  | Every hull in a hierarchy, in `getNodes` order. Nodes carrying none are skipped.       |
@@ -581,14 +583,15 @@ that.
 | `MassProperties`      | type      | What a `Surface` records about its geometry beyond the geometry itself.                |
 | `mergeNodes`          | function  | Inner node bounding two children, unioning their **quantised** boxes.                  |
 | `Node`                | interface | Boundary volume hierarchy node. Corresponds to IVP's `IVP_Compact_Ledgetree_Node`.     |
-| `Part`                | interface | `Extent & Surface & { id, fixed, hardpoints }` — one collidable piece.                 |
+| `Part`                | interface | `BoundingBox & Surface & { id, fixed, hardpoints }` — one collidable piece.            |
 | `PartOptions`         | interface | What `createPart` cannot derive, plus overrides for what it can.                       |
 | `Point`               | interface | Hull vertex, shared between the hulls of a part.                                       |
-| `readSurfaceLibrary`  | function  | `(view: BufferView): Part[]`                                                           |
+| `readSurfaceLibrary`  | function  | `(view: BufferView): SurfaceLibrary`                                                   |
 | `Surface`             | interface | Surfaces section. Corresponds to IVP's `IVP_Compact_Surface`.                          |
+| `SurfaceLibrary`      | type      | `Part[]` — the parts of a `.sur` file, in file order.                                  |
 | `TriangleFlags`       | type      | A per-edge flag triple, indexed the same way `TriangleIndices` is.                     |
 | `TriangleIndices`     | type      | Three point indices, one per triangle corner, in winding order.                        |
-| `writeSurfaceLibrary` | function  | `(parts: Part[]): BufferView`                                                          |
+| `writeSurfaceLibrary` | function  | `(parts: Iterable<Part>): BufferView`                                                  |
 
 ## Corpus
 

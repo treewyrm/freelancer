@@ -11,25 +11,25 @@ import type { Joint } from './joint.js'
 const NAMES = 0x80
 
 /** Record size of each constraint file, names included. */
-const sizes = { fix: 176, rev: 208, pris: 208, cyl: 216, sphere: 212, loose: 176 }
+const sizes = { fix: 176, rev: 208, pris: 208, cyl: 216, sphere: 212, trans: 176, loose: 176 }
 
 const position = { x: 1, y: 2, z: 3 }
 
 const offset = { x: -1, y: -2, z: -3 }
 
-const rotation = Matrix3.copy({ x: { x: 0, y: 1, z: 0 }, y: { x: -1, y: 0, z: 0 } })
+const orientation = Matrix3.copy({ x: { x: 0, y: 1, z: 0 }, y: { x: -1, y: 0, z: 0 } })
 
 const axis = { x: 0, y: 0, z: 1 }
 
 const joints: Record<keyof typeof sizes, Joint> = {
-  fix: { type: 'fixed', position, rotation },
-  rev: { type: 'revolute', position, offset, rotation, axis, min: -0.5, max: 0.75 },
-  pris: { type: 'prismatic', position, offset, rotation, axis, min: -0.5, max: 0.75 },
+  fix: { type: 'fixed', position, orientation },
+  rev: { type: 'revolute', position, offset, orientation, axis, min: -0.5, max: 0.75 },
+  pris: { type: 'prismatic', position, offset, orientation, axis, min: -0.5, max: 0.75 },
   cyl: {
     type: 'cylinder',
     position,
     offset,
-    rotation,
+    orientation,
     axis,
     minPris: -2,
     maxPris: 3,
@@ -40,7 +40,7 @@ const joints: Record<keyof typeof sizes, Joint> = {
     type: 'sphere',
     position,
     offset,
-    rotation,
+    orientation,
     minX: -1,
     maxX: 1,
     minY: -2,
@@ -48,7 +48,8 @@ const joints: Record<keyof typeof sizes, Joint> = {
     minZ: -3,
     maxZ: 3,
   },
-  loose: { type: 'loose', position, rotation },
+  trans: { type: 'translational', position, orientation },
+  loose: { type: 'loose', position, orientation },
 }
 
 const constraint = (
@@ -61,7 +62,7 @@ const constraint = (
   joint: joints[name]!,
 })
 
-/** Serializes constraints the way `writeModel` does — one file per name, records appended. */
+/** Serializes constraints the way `writeCompound` does — one file per name, records appended. */
 function pack(...constraints: Constraint[]): File[] {
   const files = new Map<string, File>()
 

@@ -118,7 +118,7 @@ describe('readHardpoints', () => {
 
   it('walks past a group it does not know', () => {
     const directory = wrap(fixed())
-    directory.getDirectory('Hardpoints')!.setDirectory('Prismatic', 'HpSlide01')
+    directory.getDirectory('Hardpoints')!.ensureDirectory('Prismatic', 'HpSlide01')
 
     deepStrictEqual([...readHardpoints(directory)], [fixed()])
   })
@@ -126,13 +126,21 @@ describe('readHardpoints', () => {
   describe('defaults, for a hardpoint written without a field', () => {
     const bare = (group: string, name: string) => {
       const directory = new Directory('part.3db')
-      directory.setDirectory('Hardpoints', group, name)
+      directory.ensureDirectory('Hardpoints', group, name)
 
       return [...readHardpoints(directory)]
     }
 
-    it('places a hardpoint with no Position at the origin', () => {
-      deepStrictEqual(bare('Fixed', 'HpMount01')[0]?.position, Vector3.copy({}))
+    // The game places it at the origin, but that is the consumer's reading: the file has no
+    // Position, and one written back must not gain one.
+    it('leaves position off a hardpoint with no Position, and writes none back', () => {
+      const [hardpoint] = bare('Fixed', 'HpMount01')
+
+      strictEqual(hardpoint !== undefined && 'position' in hardpoint, false)
+      strictEqual(
+        writeHardpoints([hardpoint!]).getFile('Fixed', 'HpMount01', 'Position'),
+        undefined,
+      )
     })
 
     it('leaves a hardpoint with no Orientation unrotated', () => {

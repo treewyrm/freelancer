@@ -9,8 +9,8 @@
  * somewhere, and doing it once here spares every consumer from rediscovering the two names.
  *
  * `undefined` rather than a throw when the directories are absent: a caller handed an arbitrary
- * UTF file is asking whether this one carries effects, which is the same question `readMaterials`
- * answers by yielding nothing.
+ * UTF file is asking whether this one carries effects, which is the same question
+ * `readMaterialLibrary` answers by returning nothing.
  */
 import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
@@ -28,13 +28,18 @@ export interface Alchemy {
   effects: EffectLibrary
 }
 
-/** Whether the directory carries an effect library, asked before reading it. */
-export const hasAlchemy = (parent: Directory): boolean => !!parent.getDirectory(effectName)
+/**
+ * Whether the directory carries both libraries, asked before reading it. True exactly when
+ * {@link readAlchemy} returns something.
+ */
+export const hasAlchemy = (parent: Directory): boolean =>
+  !!parent.getDirectory(nodeName)?.getFile(nodeName) &&
+  !!parent.getDirectory(effectName)?.getFile(effectName)
 
 /**
  * Reads both libraries from a directory, looking for the two names within.
  *
- * Only the root level is searched, as `readMaterials` and `readTextures` do.
+ * Only the root level is searched, as `readMaterialLibrary` and `readTextureLibrary` do.
  * @param parent Parent directory (typically root)
  */
 export function readAlchemy(parent: Directory): Alchemy | undefined {

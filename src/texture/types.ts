@@ -7,7 +7,7 @@ import type { AnimatedTexture } from './animation.js'
  * punch-through block at all. `COMPRESSED_RGBA_S3TC_DXT1_EXT` decodes both modes correctly,
  * where the RGB variant would render those texels opaque black, so it is the only sane target.
  */
-export type TextureType =
+export type TextureFormat =
   | 'none'
   | 'rgb24_888' // Uncompressed 24bpp image (gl.RGB, gl.UNSIGNED_BYTE).
   | 'rgba32_8888' // Uncompressed 32bpp image with 8-bit transparency (gl.RGBA, gl.UNSIGNED_BYTE).
@@ -19,24 +19,22 @@ export type TextureType =
   | 'dxt5' // DXT5 compressed image (s3tc.COMPRESSED_RGBA_S3TC_DXT5_EXT).
 
 /**
- * Which on-disk form holds a texture's image data: one `MIPS` DirectDrawSurface, a `MIP0..n`
- * chain of uncompressed Targas, or a `CUBE` DirectDrawSurface holding six faces.
+ * Which on-disk form holds a flat texture's image data: one `MIPS` DirectDrawSurface, or a
+ * `MIP0..n` chain of uncompressed Targas. A cubemap is always a `CUBE` DirectDrawSurface, and is
+ * its own {@link CubeTexture} rather than a third storage.
  *
- * Not derivable from {@link TextureType}, which is why it is carried rather than inferred on
+ * Not derivable from {@link TextureFormat}, which is why it is carried rather than inferred on
  * write. Block compression implies `dds`, but retail authored `rgb24_888` both ways — 1,787
  * Targa chains against two surfaces.
  */
-export type TextureStorage = 'dds' | 'targa' | 'cube'
+export type TextureStorage = 'dds' | 'targa'
 
-/** What every texture entry carries, whatever form its image data takes. */
+/** What every texture entry with pixels carries, whatever form its image data takes. */
 interface TextureBase {
   name: string
 
-  /** Texture type specifying layout of data buffers.  */
-  type: TextureType
-
-  /** Which on-disk form the image data came from, and is written back as. */
-  storage: TextureStorage
+  /** Pixel layout of the data buffers. */
+  format: TextureFormat
 
   /** Texture base width. */
   width: number
@@ -53,10 +51,13 @@ interface TextureBase {
  *
  * Note the absence of a transparency flag. Whether a texture is drawn blended is decided by the
  * material that binds it — the `Oc`/`Ot` tokens in its `Type` string — never by the texture, so
- * a flag here would be both the wrong layer and fully implied by {@link TextureType}.
+ * a flag here would be both the wrong layer and fully implied by {@link TextureFormat}.
  */
 export interface Texture extends TextureBase {
-  storage: 'dds' | 'targa'
+  type: 'image'
+
+  /** Which on-disk form the image data came from, and is written back as. */
+  storage: TextureStorage
 
   /** Texture mipmap buffers. */
   levels: Uint8Array[]
@@ -81,22 +82,22 @@ export type CubeFaces = [
  *
  * Separate from {@link Texture} rather than a flag on it: a cubemap has six mip chains where a
  * flat texture has one, and there is no honest way to put those in a `levels` field without one
- * face standing in for the whole and the other five hiding behind it. Consumers narrow on
- * {@link TextureStorage}, which is what makes uploading a cubemap as a 2D texture a type error
- * rather than a silently wrong render.
+ * face standing in for the whole and the other five hiding behind it. Consumers narrow on `type`,
+ * which is what makes uploading a cubemap as a 2D texture a type error rather than a silently
+ * wrong render.
  *
  * Retail has exactly two — `FX/envmapbasic.mat` and `FX/envmapglass.txm` — both 64x64
  * `rgba32_8888` with a single level per face.
  */
 export interface CubeTexture extends TextureBase {
-  storage: 'cube'
+  type: 'cube'
 
   /** Mipmap buffers of each face. */
   faces: CubeFaces
 }
 
-/**
- * Any entry a `Texture library` holds. Narrow it on `type === 'animated'` first, since an
- * animation carries frames instead of pixels, then on {@link TextureStorage}.
- */
+/** Any entry a `Texture library` holds, told apart by `type`. */
 export type TextureEntry = Texture | CubeTexture | AnimatedTexture
+
+/** The entries of a `Texture library`, in directory order. */
+export type TextureLibrary = TextureEntry[]

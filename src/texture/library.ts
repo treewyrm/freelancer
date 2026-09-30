@@ -7,8 +7,8 @@ import {
   type CubeTexture,
   type Texture,
   type TextureEntry,
-  type TextureStorage,
-  type TextureType,
+  type TextureFormat,
+  type TextureLibrary,
 } from './types.js'
 import { Compression, CUBEMAP_FACES, readDirectDrawSurface, writeDirectDrawSurface } from './dds.js'
 import { readAnimatedTexture, writeAnimatedTexture, type AnimatedTexture } from './animation.js'
@@ -23,7 +23,7 @@ export function readMIP(parent: Directory): Texture | undefined {
   let height: number | undefined
   let depth: number | undefined
   let flip: boolean | undefined
-  let type: TextureType = 'none'
+  let format: TextureFormat = 'none'
 
   const levels: Uint8Array[] = []
 
@@ -51,12 +51,21 @@ export function readMIP(parent: Directory): Texture | undefined {
 
   // Set type according to bit depth.
   // Note: depth === 16 should not occur as readTarga is expected to expand 16-bit images to 24.
-  if (depth === 16) type = 'rgba16_5551'
-  else if (depth === 24) type = 'rgb24_888'
-  else if (depth === 32) type = 'rgba32_8888'
+  if (depth === 16) format = 'rgba16_5551'
+  else if (depth === 24) format = 'rgb24_888'
+  else if (depth === 32) format = 'rgba32_8888'
   else throw new RangeError(`Invalid targa mipmap bit depth: ${depth}`)
 
-  return { name: parent.name, storage: 'targa', width, height, type, levels, flip: flip ?? false }
+  return {
+    name: parent.name,
+    type: 'image',
+    storage: 'targa',
+    width,
+    height,
+    format,
+    levels,
+    flip: flip ?? false,
+  }
 }
 
 /**
@@ -69,11 +78,11 @@ export function readMIP(parent: Directory): Texture | undefined {
  * @returns
  */
 export function writeMIP(texture: Texture): File[] {
-  const { type, width, height, flip, levels } = texture
+  const { format, width, height, flip, levels } = texture
 
   let depth: number
 
-  switch (type) {
+  switch (format) {
     case 'rgb24_888':
       depth = 24
       break
@@ -81,7 +90,7 @@ export function writeMIP(texture: Texture): File[] {
       depth = 32
       break
     default:
-      throw new RangeError(`Cannot store ${type} texture ${texture.name} as a targa chain`)
+      throw new RangeError(`Cannot store ${format} texture ${texture.name} as a targa chain`)
   }
 
   return levels.map(
@@ -99,7 +108,7 @@ export function writeMIP(texture: Texture): File[] {
   )
 }
 
-const getTypeByMask = (r: number, g: number, b: number, a: number): TextureType => {
+const getFormatByMask = (r: number, g: number, b: number, a: number): TextureFormat => {
   switch (true) {
     case r === 0xf800 && g === 0x7e0 && b === 0x1f && a === 0:
       return 'rgb16_565'
@@ -116,11 +125,11 @@ const getTypeByMask = (r: number, g: number, b: number, a: number): TextureType 
   }
 }
 
-/** Texture type a surface's compression and pixel format decode to. */
-const getSurfaceType = (
+/** Texture format a surface's compression and pixel format decode to. */
+const getSurfaceTextureFormat = (
   compression: Compression,
   mask: { r: number; g: number; b: number; a: number },
-): TextureType => {
+): TextureFormat => {
   switch (compression) {
     case Compression.DXT1:
       return 'dxt1'
@@ -128,8 +137,8 @@ const getSurfaceType = (
       return 'dxt3'
     case Compression.DXT5:
       return 'dxt5'
-    case Compression.NONE:
-      return getTypeByMask(mask.r, mask.g, mask.b, mask.a)
+    case Compression.None:
+      return getFormatByMask(mask.r, mask.g, mask.b, mask.a)
     default:
       throw new RangeError(`Unsupported compression method in texture`)
   }
@@ -157,10 +166,10 @@ export function readCUBE(parent: Directory): CubeTexture | undefined {
   // DirectDrawSurface is always stored top row first.
   return {
     name: parent.name,
-    storage: 'cube',
+    type: 'cube',
     width,
     height,
-    type: getSurfaceType(compression, mask),
+    format: getSurfaceTextureFormat(compression, mask),
     faces: surfaces as CubeFaces,
     flip: true,
   }
@@ -187,18 +196,19 @@ export function readMIPS(parent: Directory): Texture | undefined {
   // DirectDrawSurface is always stored top row first.
   return {
     name: parent.name,
+    type: 'image',
     storage: 'dds',
     width,
     height,
-    type: getSurfaceType(compression, mask),
+    format: getSurfaceTextureFormat(compression, mask),
     levels: surfaces[0]!,
     flip: true,
   }
 }
 
-/** Pixel format {@link getTypeByMask} would decode back into the given type. */
-const getMaskByType = (type: TextureType) => {
-  switch (type) {
+/** Pixel format {@link getFormatByMask} would decode back into the given texture format. */
+const getMaskByFormat = (format: TextureFormat) => {
+  switch (format) {
     case 'rgb16_565':
       return { bitCount: 16, mask: { r: 0xf800, g: 0x7e0, b: 0x1f, a: 0 } }
     case 'rgba16_4444':
@@ -210,13 +220,13 @@ const getMaskByType = (type: TextureType) => {
     case 'rgba32_8888':
       return { bitCount: 32, mask: { r: 0xff0000, g: 0xff00, b: 0xff, a: 0xff000000 } }
     default:
-      throw new RangeError(`No DirectDrawSurface pixel format for ${type}`)
+      throw new RangeError(`No DirectDrawSurface pixel format for ${format}`)
   }
 }
 
-/** Compression and pixel format a texture type is stored back as. */
-const getSurfaceFormat = (type: TextureType) => {
-  switch (type) {
+/** Compression and pixel format a texture format is stored back as. */
+const getSurfaceFormat = (format: TextureFormat) => {
+  switch (format) {
     case 'dxt1':
       return { compression: Compression.DXT1, bitCount: 0, mask: { r: 0, g: 0, b: 0, a: 0 } }
     case 'dxt3':
@@ -224,7 +234,7 @@ const getSurfaceFormat = (type: TextureType) => {
     case 'dxt5':
       return { compression: Compression.DXT5, bitCount: 0, mask: { r: 0, g: 0, b: 0, a: 0 } }
     default:
-      return { compression: Compression.NONE, ...getMaskByType(type) }
+      return { compression: Compression.None, ...getMaskByFormat(format) }
   }
 }
 
@@ -246,13 +256,13 @@ const assertTopDown = ({ name, flip }: Texture | CubeTexture) => {
  * @returns
  */
 export function writeMIPS(texture: Texture): File {
-  const { type, width, height, levels } = texture
+  const { format, width, height, levels } = texture
 
   assertTopDown(texture)
 
   return new File(
     'MIPS',
-    writeDirectDrawSurface({ width, height, ...getSurfaceFormat(type), surfaces: [levels] }),
+    writeDirectDrawSurface({ width, height, ...getSurfaceFormat(format), surfaces: [levels] }),
   )
 }
 
@@ -262,13 +272,13 @@ export function writeMIPS(texture: Texture): File {
  * @returns
  */
 export function writeCUBE(texture: CubeTexture): File {
-  const { type, width, height, faces } = texture
+  const { format, width, height, faces } = texture
 
   assertTopDown(texture)
 
   return new File(
     'CUBE',
-    writeDirectDrawSurface({ width, height, ...getSurfaceFormat(type), surfaces: faces }),
+    writeDirectDrawSurface({ width, height, ...getSurfaceFormat(format), surfaces: faces }),
   )
 }
 
@@ -297,9 +307,10 @@ export function readTexture(parent: Directory): TextureEntry | undefined {
   return texture
 }
 
-/** Writes one texture library entry, in whichever form {@link TextureStorage} names. */
+/** Writes one texture library entry, in whichever form its `type` and `storage` name. */
 export function writeTexture(texture: TextureEntry): Directory {
   if (texture.type === 'animated') return writeAnimatedTexture(texture)
+  if (texture.type === 'cube') return new Directory(texture.name, [writeCUBE(texture)])
 
   // Captured before the switch narrows the union away, so the unreachable branch still reports
   // which entry carried the bad storage.
@@ -310,42 +321,45 @@ export function writeTexture(texture: TextureEntry): Directory {
       return new Directory(texture.name, [writeMIPS(texture)])
     case 'targa':
       return new Directory(texture.name, writeMIP(texture))
-    case 'cube':
-      return new Directory(texture.name, [writeCUBE(texture)])
     default:
       throw new RangeError(`Unknown texture storage in ${name}`)
   }
 }
 
 /**
- * Reads textures from directory.
- * Looks for `Texture library` directory within.
+ * Reads textures from directory, empty when it holds no `Texture library`.
+ *
+ * Only the root level is searched. Every entry is attempted before anything throws, so the one
+ * error names each entry that failed.
  * @param parent Parent directory (typically root)
- * @returns
+ * @throws AggregateError when any entry fails to read.
  */
-export function* readTextures(parent: Directory): Generator<TextureEntry> {
+export function readTextureLibrary(parent: Directory): TextureLibrary {
+  const textures: TextureLibrary = []
   const library = parent.getDirectory('Texture library')
-  if (!library) return
+  if (!library) return textures
 
   const errors: unknown[] = []
 
   for (const child of library.directories) {
     try {
       const texture = readTexture(child)
-      if (texture) yield texture
+      if (texture) textures.push(texture)
     } catch (error) {
       errors.push({ name: child.name, error })
     }
   }
 
   if (errors.length) throw new AggregateError(errors, 'Error reading one or more textures')
+
+  return textures
 }
 
 /**
  * Writes a `Texture library` directory, one entry per texture. Each entry writes itself in whichever
- * of the four storage forms it carries, so nothing here decides how the pixels are laid out.
+ * of the forms it carries, so nothing here decides how the pixels are laid out.
  */
-export function writeTextures(textures: Iterable<TextureEntry>): Directory {
+export function writeTextureLibrary(textures: Iterable<TextureEntry>): Directory {
   return new Directory(
     'Texture library',
     [...textures].map((texture) => writeTexture(texture)),

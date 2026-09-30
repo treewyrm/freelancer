@@ -1,5 +1,10 @@
 import type { Resource, ResourceOptions } from './types.js'
-import { CODE_PAGE_WINDOWS_1252, LANGUAGE_ENGLISH_US, LIBRARY_ID_RANGE, Type } from './data.js'
+import {
+  CODE_PAGE_WINDOWS_1252,
+  LANGUAGE_ENGLISH_US,
+  LIBRARY_ID_RANGE,
+  ResourceType,
+} from './data.js'
 import { readInfocards, writeInfocards } from './infocards.js'
 import { blockOf, readBlock, readStrings, writeStrings } from './strings.js'
 
@@ -38,7 +43,7 @@ export const libraryOf = (id: number): number => Math.floor(id / LIBRARY_ID_RANG
 export const localOf = (id: number): number => id % LIBRARY_ID_RANGE
 
 /** Everything a set of libraries resolves, in the global id space. */
-export interface Library {
+export interface ResourceLibrary {
   /** `ids_name` → text, from the `RT_STRING` tables. */
   names: Map<number, string>
 
@@ -56,7 +61,10 @@ export interface Library {
  * @param libraries Resource lists in load order, `resources.dll` first.
  * @param language LANGID to take, or every language when omitted.
  */
-export const readLibrary = (libraries: readonly Resource[][], language?: number): Library => {
+export const readLibrary = (
+  libraries: readonly Resource[][],
+  language?: number,
+): ResourceLibrary => {
   const names = new Map<number, string>()
   const infocards = new Map<number, string>()
 
@@ -80,7 +88,7 @@ export const readLibrary = (libraries: readonly Resource[][], language?: number)
  * for" drops it on the next write.
  */
 const consumes = (resource: Resource, language: number): boolean =>
-  (resource.type === Type.String || resource.type === Type.Html) &&
+  (resource.type === ResourceType.String || resource.type === ResourceType.Html) &&
   typeof resource.id === 'number' &&
   resource.language === language
 
@@ -105,7 +113,7 @@ export const languageOf = (resources: readonly Resource[]): number | undefined =
   let found: number | undefined
 
   for (const { type, language } of resources) {
-    if (type !== Type.String && type !== Type.Html) continue
+    if (type !== ResourceType.String && type !== ResourceType.Html) continue
     if (found === undefined) found = language
     else if (found !== language) return undefined
   }
@@ -158,7 +166,7 @@ export const writeLibrary = (
    * The two are told apart by reading the original: all holes when it was read, or emptied since.
    */
   const vacant = (resource: Resource): boolean =>
-    resource.type === Type.String &&
+    resource.type === ResourceType.String &&
     typeof resource.id === 'number' &&
     !occupied.has(resource.id) &&
     readBlock(resource.data, resource.id).size === 0

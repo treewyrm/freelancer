@@ -1,7 +1,8 @@
 import BufferView from '#/utility/bufferview.js'
 import Vector3 from '#/math/vector3.js'
 import { getIndices, type Hull } from './hull.js'
-import { getExtent, type Extent } from './extent.js'
+import type BoundingBox from '#/math/boundingbox.js'
+import { getExtent } from './extent.js'
 
 /** Quantization steps for {@link Node.boxSizes}. */
 const BOX_STEPS = 0xfa
@@ -39,9 +40,9 @@ export interface Node {
  * stepped past, so the quantised box always contains the one it came from. The half-extent never
  * exceeds the radius, so the count never exceeds 251 and always fits its byte.
  */
-function getBounds({ minimum, maximum }: Extent): Pick<Node, 'center' | 'radius' | 'boxSizes'> {
-  const center = Vector3.lerp(minimum, maximum, 0.5)
-  const half = Vector3.subtract(maximum, center)
+function getBounds({ min, max }: BoundingBox): Pick<Node, 'center' | 'radius' | 'boxSizes'> {
+  const center = Vector3.lerp(min, max, 0.5)
+  const half = Vector3.subtract(max, center)
   const radius = Vector3.magnitude(half)
 
   const step = (size: number) => (radius > 0 ? Math.trunc(size / (radius / BOX_STEPS)) + 1 : 1)
@@ -58,10 +59,10 @@ function getBounds({ minimum, maximum }: Extent): Pick<Node, 'center' | 'radius'
 }
 
 /** The axis-aligned box a node bounds, recovered from its sphere radius and quantised sizes. */
-export const getNodeExtent = ({ center, radius, boxSizes }: Node): Extent => {
+export const getNodeExtent = ({ center, radius, boxSizes }: Node): BoundingBox => {
   const half = Vector3.multiplyScalar(boxSizes, radius)
 
-  return { minimum: Vector3.subtract(center, half), maximum: Vector3.add(center, half) }
+  return { min: Vector3.subtract(center, half), max: Vector3.add(center, half) }
 }
 
 /** Leaf node bounding one terminal hull, from the points its faces index. */
@@ -81,7 +82,7 @@ export function mergeNodes(left: Node, right: Node, hull?: Hull): Node {
   const b = getNodeExtent(right)
 
   const node: Node = {
-    ...getBounds(getExtent([a.minimum, a.maximum, b.minimum, b.maximum])),
+    ...getBounds(getExtent([a.min, a.max, b.min, b.max])),
     padding: 0,
     left,
     right,
@@ -112,16 +113,18 @@ export function readNode(view: BufferView): Node {
 }
 
 /**
- * Writes a node's own 20-byte record at the cursor, requantising the box sizes back to bytes.
- * `padding` goes out as carried, which is zero in every file Freelancer ships.
+ * Writes a node's own 20-byte record, requantising the box sizes back to bytes. `padding` goes out
+ * as carried, which is zero in every file Freelancer ships.
  */
-export function writeNode(view: BufferView, node: Node) {
-  view.writeFloat32(node.center.x)
-  view.writeFloat32(node.center.y)
-  view.writeFloat32(node.center.z)
-  view.writeFloat32(node.radius)
-  view.writeUint8(Math.round(node.boxSizes.x * BOX_STEPS))
-  view.writeUint8(Math.round(node.boxSizes.y * BOX_STEPS))
-  view.writeUint8(Math.round(node.boxSizes.z * BOX_STEPS))
-  view.writeUint8(node.padding)
+export function writeNode(node: Node): BufferView {
+  return BufferView.allocate(20)
+    .writeFloat32(node.center.x)
+    .writeFloat32(node.center.y)
+    .writeFloat32(node.center.z)
+    .writeFloat32(node.radius)
+    .writeUint8(Math.round(node.boxSizes.x * BOX_STEPS))
+    .writeUint8(Math.round(node.boxSizes.y * BOX_STEPS))
+    .writeUint8(Math.round(node.boxSizes.z * BOX_STEPS))
+    .writeUint8(node.padding)
+    .rewind()
 }

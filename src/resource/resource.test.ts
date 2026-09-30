@@ -13,7 +13,7 @@ import {
   readLibrary,
   writeLibrary,
 } from './library.js'
-import { LANGUAGE_ENGLISH_US, LANGUAGE_NEUTRAL, Type } from './data.js'
+import { LANGUAGE_ENGLISH_US, LANGUAGE_NEUTRAL, ResourceType } from './data.js'
 import type { Resource } from './types.js'
 
 /**
@@ -84,7 +84,7 @@ const directory = (
 
 describe('isImage', () => {
   it('recognises a PE and nothing else', () => {
-    assert.ok(isImage(image(directory(Type.String, 1, 0x409, new Uint8Array(32)))))
+    assert.ok(isImage(image(directory(ResourceType.String, 1, 0x409, new Uint8Array(32)))))
     assert.ok(!isImage(new TextEncoder().encode('[Section]\n')))
     assert.ok(!isImage(new Uint8Array(3)))
   })
@@ -99,12 +99,14 @@ describe('isImage', () => {
 describe('read', () => {
   it('reads one resource with its type, id, language and code page', () => {
     const payload = Uint8Array.from([1, 2, 3, 4])
-    const resources = read(image(directory(Type.Html, 42, 0x409, payload, { codePage: 1252 })))
+    const resources = read(
+      image(directory(ResourceType.Html, 42, 0x409, payload, { codePage: 1252 })),
+    )
 
     assert.equal(resources.length, 1)
     assert.deepEqual(resources[0]!.data, payload)
     assert.partialDeepStrictEqual(resources[0]!, {
-      type: Type.Html,
+      type: ResourceType.Html,
       id: 42,
       language: 0x409,
       codePage: 1252,
@@ -123,7 +125,7 @@ describe('read', () => {
   })
 
   it('refuses a data entry that runs past the end of the image', () => {
-    const bytes = image(directory(Type.String, 1, 0x409, new Uint8Array(4)))
+    const bytes = image(directory(ResourceType.String, 1, 0x409, new Uint8Array(4)))
     new DataView(bytes.buffer).setUint32(0x1000 + 0x4c, 0x10000, true)
     assert.throws(() => read(bytes), RangeError)
   })
@@ -149,9 +151,27 @@ describe('read', () => {
 
 describe('write', () => {
   const resources: Resource[] = [
-    { type: Type.Html, id: 9, language: 0x409, codePage: 1252, data: Uint8Array.from([1, 2]) },
-    { type: Type.String, id: 1, language: 0x409, codePage: 1252, data: Uint8Array.from([3]) },
-    { type: Type.String, id: 1, language: 0x407, codePage: 1252, data: Uint8Array.from([4, 5, 6]) },
+    {
+      type: ResourceType.Html,
+      id: 9,
+      language: 0x409,
+      codePage: 1252,
+      data: Uint8Array.from([1, 2]),
+    },
+    {
+      type: ResourceType.String,
+      id: 1,
+      language: 0x409,
+      codePage: 1252,
+      data: Uint8Array.from([3]),
+    },
+    {
+      type: ResourceType.String,
+      id: 1,
+      language: 0x407,
+      codePage: 1252,
+      data: Uint8Array.from([4, 5, 6]),
+    },
   ]
 
   it('round-trips a resource list', () => {
@@ -394,7 +414,7 @@ describe('library', () => {
 })
 
 describe('languageOf', () => {
-  const at = (language: number, type: Type = Type.String): Resource => ({
+  const at = (language: number, type: ResourceType = ResourceType.String): Resource => ({
     type,
     id: 1,
     language,
@@ -407,7 +427,7 @@ describe('languageOf', () => {
   })
 
   it('ignores the version block, which sits at neutral', () => {
-    assert.equal(languageOf([at(LANGUAGE_NEUTRAL, Type.Version), at(0x409)]), 0x409)
+    assert.equal(languageOf([at(LANGUAGE_NEUTRAL, ResourceType.Version), at(0x409)]), 0x409)
   })
 
   it('gives up when they disagree, rather than picking one', () => {
@@ -415,7 +435,7 @@ describe('languageOf', () => {
   })
 
   it('has nothing to derive from a library with no content', () => {
-    assert.equal(languageOf([at(LANGUAGE_NEUTRAL, Type.Version)]), undefined)
+    assert.equal(languageOf([at(LANGUAGE_NEUTRAL, ResourceType.Version)]), undefined)
   })
 })
 
@@ -428,7 +448,7 @@ describe('languageOf', () => {
  */
 describe('writeLibrary', () => {
   const resource = (over: Partial<Resource> = {}): Resource => ({
-    type: Type.String,
+    type: ResourceType.String,
     id: 1,
     language: LANGUAGE_ENGLISH_US,
     codePage: 1252,
@@ -440,17 +460,17 @@ describe('writeLibrary', () => {
     resources.find((entry) => entry.type === type && entry.id === id)
 
   it('keeps a resource of a type it does not model', () => {
-    const version = resource({ type: Type.Version, data: Uint8Array.of(1, 2, 3) })
+    const version = resource({ type: ResourceType.Version, data: Uint8Array.of(1, 2, 3) })
     const written = writeLibrary([version], { names: new Map([[0, 'a']]) })
 
-    assert.deepEqual(find(written, Type.Version, 1), version)
+    assert.deepEqual(find(written, ResourceType.Version, 1), version)
   })
 
   it('keeps a string or card whose entry id is a name, which no reader consumes', () => {
     const named = resource({ id: 'PREPSTUBDATA', data: Uint8Array.of(9) })
     const written = writeLibrary([named], { names: new Map([[0, 'a']]) })
 
-    assert.deepEqual(find(written, Type.String, 'PREPSTUBDATA'), named)
+    assert.deepEqual(find(written, ResourceType.String, 'PREPSTUBDATA'), named)
   })
 
   it('keeps content at a language other than the one being written', () => {
@@ -469,7 +489,7 @@ describe('writeLibrary', () => {
 
     const written = writeLibrary([hollow], { names: new Map([[0, 'a']]) })
 
-    assert.deepEqual(find(written, Type.String, 2), hollow)
+    assert.deepEqual(find(written, ResourceType.String, 2), hollow)
     assert.equal(readStrings(written).size, 1)
   })
 
@@ -482,14 +502,14 @@ describe('writeLibrary', () => {
     const filled = writeStrings(new Map([[16, 'gone']]))
     const written = writeLibrary(filled, { names: new Map([[0, 'a']]) })
 
-    assert.equal(find(written, Type.String, 2), undefined)
+    assert.equal(find(written, ResourceType.String, 2), undefined)
   })
 
   it('carries each entry’s code page rather than stamping the option across them', () => {
     const original = writeStrings(new Map([[0, 'a']]), { codePage: 932 })
     const written = writeLibrary(original, { names: new Map([[0, 'b']]) })
 
-    assert.equal(find(written, Type.String, 1)?.codePage, 932)
+    assert.equal(find(written, ResourceType.String, 1)?.codePage, 932)
   })
 
   it('reproduces a list built from strings and cards', () => {

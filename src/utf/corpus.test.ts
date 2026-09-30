@@ -5,9 +5,10 @@ import { describe, it } from 'node:test'
 import { list, root as data, skip } from '#/corpus.js'
 import Directory from './directory.js'
 import File from './file.js'
+import { ENTRY_BYTE_LENGTH, VERSION_BYTE_LENGTH } from './data.js'
 import BufferView from '#/utility/bufferview.js'
 
-const { ENTRY_BYTE_LENGTH: entrySize } = Directory
+const entrySize = ENTRY_BYTE_LENGTH
 
 /**
  * Every UTF container Freelancer ships. `.ini` and `.thn` are text, `.sur` is its own chunked
@@ -60,13 +61,13 @@ function undated(output: Uint8Array): Uint8Array {
   const copy = Uint8Array.from(output)
   const view = BufferView.from(copy)
 
-  view.offset = Directory.VERSION_BYTE_LENGTH
+  view.offset = VERSION_BYTE_LENGTH
 
   const treeOffset = view.readUint32()
   const treeSize = view.readUint32()
 
   /** Header FILETIME, the last field of the header. */
-  copy.fill(0, Directory.VERSION_BYTE_LENGTH + 40, Directory.VERSION_BYTE_LENGTH + 48)
+  copy.fill(0, VERSION_BYTE_LENGTH + 40, VERSION_BYTE_LENGTH + 48)
 
   /** Create, access and modify DOS timestamps, the last three fields of every entry. */
   for (let offset = treeOffset; offset < treeOffset + treeSize; offset += entrySize)

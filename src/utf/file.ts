@@ -37,11 +37,11 @@ export default class File implements ArrayBufferView {
     }
   }
 
-  /** Writes values as 32-bit signed integers. */
-  writeIntegers(...values: number[]): this {
+  /** Replaces the payload with values as 32-bit signed integers. */
+  setIntegers(...values: number[]): this {
     const view = BufferView.allocate(values.length * Int32Array.BYTES_PER_ELEMENT)
     values.forEach((value) => view.writeInt32(value))
-    return this.append(view)
+    return this.replace(view)
   }
 
   /** Reads as 32-bit float point numbers. */
@@ -50,16 +50,16 @@ export default class File implements ArrayBufferView {
     while (view.byteRemain >= Float32Array.BYTES_PER_ELEMENT) yield view.readFloat32()
   }
 
-  /** Writes values as 32-bit float point numbers. */
-  writeFloats(...values: number[]): this {
+  /** Replaces the payload with values as 32-bit float point numbers. */
+  setFloats(...values: number[]): this {
     const view = BufferView.allocate(values.length * Float32Array.BYTES_PER_ELEMENT)
     values.forEach((value) => view.writeFloat32(value))
-    return this.append(view)
+    return this.replace(view)
   }
 
-  /** Writes values as NUL-terminated strings. */
-  writeStrings(...values: string[]): this {
-    return this.append(BufferView.from(values.join('\0') + '\0'))
+  /** Replaces the payload with values as NUL-terminated strings. */
+  setStrings(...values: string[]): this {
+    return this.replace(BufferView.from(values.join('\0') + '\0'))
   }
 
   /** Reads NUL-terminated strings. */
@@ -68,7 +68,16 @@ export default class File implements ArrayBufferView {
     while (view.byteRemain > 0) yield view.readStringZ()
   }
 
-  /** Appends buffer views to data. */
+  /**
+   * Makes a written view the payload. As bytes rather than as the view itself, whose cursor sits at
+   * the end after writing and would carry over into every later read.
+   */
+  private replace({ buffer, byteOffset, byteLength }: BufferView): this {
+    this.data = new Uint8Array(buffer, byteOffset, byteLength)
+    return this
+  }
+
+  /** Appends buffer views to data. The one method here that keeps what the payload held. */
   append(...chunks: ArrayBufferView[]): this {
     this.data = BufferView.join(this.data, ...chunks)
     return this

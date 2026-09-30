@@ -7,7 +7,11 @@
  * a tree by hand out of them and writes out bytes the game reads. Their methods are structural:
  * they know how a tree is shaped, never what any payload means. The modules above this one
  * (`rigid`, `texture`, `material`, …) are what supply the meaning.
+ *
+ * **The layout constants are not exported.** The header and entry records are what `Directory.read`
+ * walks and `write` emits, never something a caller lays out, and {@link isUTF} answers the only
+ * question the signature is good for. They stay in `data.ts`, as `ini/binary` and `resource` keep
+ * theirs.
  */
-export { default as Directory } from './directory.js'
+export { default as Directory, isUTF } from './directory.js'
 export { default as File } from './file.js'
-export type { Entry, Header } from './types.js'

@@ -60,7 +60,7 @@ export function writeLevel(level: Level, index = 0): Directory {
 
   return new Directory(`Mesh${index}`, [
     new Directory('Face_groups', [
-      new File('Count').writeIntegers(groups.length),
+      new File('Count').setIntegers(groups.length),
       ...groups.map((group, index) => writeFaceGroup(group, index)),
     ]),
     writeGeometry(geometry),
@@ -96,7 +96,7 @@ export function writeLevels(levels: Iterable<Level>): Directory {
   const list = [...levels]
 
   return new Directory('MultiLevel', [
-    new File('Fractions').writeFloats(...list.map(({ fraction }) => fraction)),
+    new File('Fractions').setFloats(...list.map(({ fraction }) => fraction)),
     ...list.map((level, index) => writeLevel(level, index)),
   ])
 }

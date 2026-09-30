@@ -4,7 +4,7 @@ import { load, skip } from '#/corpus.js'
 import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
 import { getResourceId } from '#/hash.js'
-import { readMaterials } from '#/material/library.js'
+import { readMaterialLibrary } from '#/material/library.js'
 import { listTreeElements } from '#/utility/tree.js'
 import {
   getBoneModel,
@@ -263,7 +263,7 @@ describe('deformable corpus', { skip }, () => {
     const missing: string[] = []
 
     for (const { path, root, model } of models()) {
-      const materials = new Set([...readMaterials(root)].map(({ name }) => getResourceId(name)))
+      const materials = new Set(readMaterialLibrary(root).map(({ name }) => getResourceId(name)))
 
       for (const { groups } of model.levels)
         for (const { material } of groups)
@@ -277,7 +277,7 @@ describe('deformable corpus', { skip }, () => {
     strictEqual(groups().length, 4184)
     deepStrictEqual(
       groups()
-        .filter(({ group }) => group.type !== 'strip')
+        .filter(({ group }) => group.primitive !== 'strip')
         .map(({ path }) => path),
       [],
     )

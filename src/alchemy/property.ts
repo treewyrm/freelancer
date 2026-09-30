@@ -11,7 +11,7 @@ import {
   writeBlending,
 } from './misc.js'
 import {
-  type Transform,
+  type AnimatedTransform,
   type AnimatedFloat,
   type AnimatedColor,
   type AnimatedCurve,
@@ -27,19 +27,29 @@ import {
 import BufferView from '#/utility/bufferview.js'
 import { isHex, parseHex, toHex } from '#/utility/string.js'
 
-/** Alchemy node property type. */
-export enum PropertyType {
-  None = 0,
-  Boolean = 0x1,
-  Integer = 0x2,
-  Float = 0x3,
-  String = 0x103,
-  Blending = 0x104,
-  Transform = 0x105,
-  AnimatedFloat = 0x200,
-  AnimatedColor = 0x201,
-  AnimatedCurve = 0x202,
-}
+/**
+ * The wire code of each property type: the 16-bit word a property opens with, less the boolean's
+ * value bit (`0x8000`). Codec-private — a {@link Property} is told apart by its string `type`, the
+ * same way an INI `Value` is.
+ */
+const CODES = {
+  boolean: 0x1,
+  integer: 0x2,
+  float: 0x3,
+  string: 0x103,
+  blending: 0x104,
+  transform: 0x105,
+  animatedFloat: 0x200,
+  animatedColor: 0x201,
+  animatedCurve: 0x202,
+} as const satisfies Record<PropertyType, number>
+
+/** The boolean's value, carried in the type word rather than in a payload. */
+const TRUE = 0x8000
+
+const TYPES = new Map<number, PropertyType>(
+  Object.entries(CODES).map(([type, code]) => [code, type as PropertyType]),
+)
 
 const knownPropertyNames = [
   'Node_Name',
@@ -119,137 +129,103 @@ const knownProperties = new Map<number, string>(
 /** Known alchemy node property names. */
 export type PropertyName = (typeof knownPropertyNames)[number] | (string & {})
 
-/** Alchemy node property */
-export type Property = (
-  | { type: PropertyType.Boolean; value: boolean }
-  | { type: PropertyType.Integer; value: number }
-  | { type: PropertyType.Float; value: number }
-  | { type: PropertyType.String; value: string }
-  | ({ type: PropertyType.Blending } & Blending)
-  | ({ type: PropertyType.Transform } & Transform)
-  | ({ type: PropertyType.AnimatedFloat } & AnimatedFloat)
-  | ({ type: PropertyType.AnimatedColor } & AnimatedColor)
-  | ({ type: PropertyType.AnimatedCurve } & AnimatedCurve)
-) & {
-  name: PropertyName
-}
+/**
+ * Alchemy node property. The payload sits under `value` whatever the type, so a property can be
+ * retyped by replacing it and never carries a previous type's fields along.
+ */
+export type Property = { name: PropertyName } & (
+  | { type: 'boolean'; value: boolean }
+  | { type: 'integer'; value: number }
+  | { type: 'float'; value: number }
+  | { type: 'string'; value: string }
+  | { type: 'blending'; value: Blending }
+  | { type: 'transform'; value: AnimatedTransform }
+  | { type: 'animatedFloat'; value: AnimatedFloat }
+  | { type: 'animatedColor'; value: AnimatedColor }
+  | { type: 'animatedCurve'; value: AnimatedCurve }
+)
 
-/** Reads alchem node property. */
-export function readProperty(view: BufferView): Property | null {
-  const type: PropertyType = view.readUint16()
-  if (!(type & 0x7fff)) return null
+/** Which of the nine kinds a property is. */
+export type PropertyType = Property['type']
+
+/** Narrows to the property of a given type, so a consumer can filter without a cast. */
+export type PropertyOf<T extends PropertyType> = Extract<Property, { type: T }>
+
+/**
+ * Reads alchemy node property, or `undefined` at the zero word that ends a node's list.
+ * @throws RangeError on a type code this reader does not know, whose payload length is unknown.
+ */
+export function readProperty(view: BufferView): Property | undefined {
+  const word = view.readUint16()
+  const code = word & ~TRUE
+  if (!code) return undefined
 
   const crc = view.readInt32()
   const name = knownProperties.get(crc) ?? toHex(crc)
 
-  switch (type & 0x7fff) {
-    case PropertyType.Boolean:
-      return {
-        name,
-        type: PropertyType.Boolean,
-        value: (type & 0x8000) > 0,
-      }
-
-    case PropertyType.Integer:
-      return {
-        name,
-        type: PropertyType.Integer,
-        value: readInteger(view),
-      }
-
-    case PropertyType.Float:
-      return {
-        name,
-        type: PropertyType.Float,
-        value: readFloat(view),
-      }
-
-    case PropertyType.String:
-      return {
-        name,
-        type: PropertyType.String,
-        value: readString(view),
-      }
-
-    case PropertyType.Blending:
-      return {
-        name,
-        type: PropertyType.Blending,
-        ...readBlending(view),
-      }
-
-    case PropertyType.Transform:
-      return {
-        name,
-        type: PropertyType.Transform,
-        ...readTransform(view),
-      }
-
-    case PropertyType.AnimatedFloat:
-      return {
-        name,
-        type: PropertyType.AnimatedFloat,
-        ...readAnimatedFloat(view),
-      }
-
-    case PropertyType.AnimatedColor:
-      return {
-        name,
-        type: PropertyType.AnimatedColor,
-        ...readAnimatedColor(view),
-      }
-
-    case PropertyType.AnimatedCurve:
-      return {
-        name,
-        type: PropertyType.AnimatedCurve,
-        ...readAnimatedCurve(view),
-      }
-
+  switch (TYPES.get(code)) {
+    case 'boolean':
+      return { name, type: 'boolean', value: (word & TRUE) > 0 }
+    case 'integer':
+      return { name, type: 'integer', value: readInteger(view) }
+    case 'float':
+      return { name, type: 'float', value: readFloat(view) }
+    case 'string':
+      return { name, type: 'string', value: readString(view) }
+    case 'blending':
+      return { name, type: 'blending', value: readBlending(view) }
+    case 'transform':
+      return { name, type: 'transform', value: readTransform(view) }
+    case 'animatedFloat':
+      return { name, type: 'animatedFloat', value: readAnimatedFloat(view) }
+    case 'animatedColor':
+      return { name, type: 'animatedColor', value: readAnimatedColor(view) }
+    case 'animatedCurve':
+      return { name, type: 'animatedCurve', value: readAnimatedCurve(view) }
     default:
-      throw new RangeError(`Unknown property type: ${type}`)
+      throw new RangeError(`Unknown property type: ${word}`)
   }
 }
 
 /** Writes alchemy node property. */
 export function writeProperty(property: Property): BufferView {
-  let type = property.type
+  let word: number = CODES[property.type]
   const crc = isHex(property.name) ? parseHex(property.name) : getResourceId(property.name, true)
   const value: BufferView[] = []
 
   switch (property.type) {
-    case PropertyType.Boolean:
-      if (property.value) type |= 0x8000
+    case 'boolean':
+      if (property.value) word |= TRUE
       break
-    case PropertyType.Integer:
+    case 'integer':
       value.push(writeInteger(property.value))
       break
-    case PropertyType.Float:
+    case 'float':
       value.push(writeFloat(property.value))
       break
-    case PropertyType.String:
+    case 'string':
       value.push(writeString(property.value))
       break
-    case PropertyType.Blending:
-      value.push(writeBlending(property))
+    case 'blending':
+      value.push(writeBlending(property.value))
       break
-    case PropertyType.Transform:
-      value.push(writeTransform(property))
+    case 'transform':
+      value.push(writeTransform(property.value))
       break
-    case PropertyType.AnimatedFloat:
-      value.push(writeAnimatedFloat(property))
+    case 'animatedFloat':
+      value.push(writeAnimatedFloat(property.value))
       break
-    case PropertyType.AnimatedColor:
-      value.push(writeAnimatedColor(property))
+    case 'animatedColor':
+      value.push(writeAnimatedColor(property.value))
       break
-    case PropertyType.AnimatedCurve:
-      value.push(writeAnimatedCurve(property))
+    case 'animatedCurve':
+      value.push(writeAnimatedCurve(property.value))
       break
   }
 
   return BufferView.join(
     BufferView.allocate(Uint16Array.BYTES_PER_ELEMENT + Int32Array.BYTES_PER_ELEMENT)
-      .writeUint16(type)
+      .writeUint16(word)
       .writeInt32(crc),
     ...value,
   )

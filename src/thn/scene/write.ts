@@ -9,26 +9,26 @@ import type {
   Event,
   FogProps,
   LightProps,
-  Matrix3,
+  Matrix3Rows,
   OrientationSplinePath,
   ParamCurve,
   PathProps,
   SplinePath,
   PsysProps,
-  Quaternion,
+  QuaternionTuple,
   Script,
   SpatialProps,
-  Unknown,
+  UnknownKeys,
   UserProps,
-  Vector3,
+  Vector3Tuple,
 } from './types.js'
 
 /** A field that is absent stays absent — {@link value.table} drops it. */
 type Fields = Record<string, Value | number | string | undefined>
 
-const vector = (v: Vector3 | Quaternion): TableValue => value.list(...v)
+const vector = (v: Vector3Tuple | QuaternionTuple): TableValue => value.list(...v)
 
-const matrix = (m: Matrix3): TableValue => value.list(...m.map(vector))
+const matrix = (m: Matrix3Rows): TableValue => value.list(...m.map(vector))
 
 /**
  * A flag set, written the symbolic way.
@@ -51,7 +51,7 @@ const block = <T>(source: T | undefined, as: (source: T) => Fields): Value | und
 const userProps = (source: UserProps | undefined): Value | undefined =>
   source === undefined ? undefined : value.table(source)
 
-const unknown = (source: Unknown | undefined): Fields => source ?? {}
+const unknown = (source: UnknownKeys | undefined): Fields => source ?? {}
 
 const spatialProps = (source: SpatialProps): Fields => ({
   pos: source.pos && vector(source.pos),

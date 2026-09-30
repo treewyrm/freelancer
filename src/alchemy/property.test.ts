@@ -2,9 +2,9 @@ import { deepStrictEqual, notStrictEqual, strictEqual, throws } from 'node:asser
 import { describe, it } from 'node:test'
 import { getResourceId } from '#/hash.js'
 import BufferView from '#/utility/bufferview.js'
-import { EaseType, WrapFlags } from './animation.js'
+import { EaseType, WrapMode } from './animation.js'
 import { BlendingMode } from './misc.js'
-import { PropertyType, readProperty, writeProperty, type Property } from './property.js'
+import { readProperty, writeProperty, type Property } from './property.js'
 
 const roundtrip = (property: Property) => readProperty(writeProperty(property).rewind())
 
@@ -16,14 +16,14 @@ const head = (property: Property) => {
 
 describe('property header', () => {
   it('terminates a list on a zero type', () => {
-    strictEqual(readProperty(BufferView.allocate(2)), null)
+    strictEqual(readProperty(BufferView.allocate(2)), undefined)
   })
 
   it('names the property by the case-sensitive CRC of a known name', () => {
     // The whole module hangs on this: fold the case, as every other CRC lookup in the library
     // does, and the name no longer matches what retail wrote.
     strictEqual(
-      head({ name: 'Node_LifeSpan', type: PropertyType.Float, value: 1 }).crc,
+      head({ name: 'Node_LifeSpan', type: 'float', value: 1 }).crc,
       getResourceId('Node_LifeSpan', true),
     )
 
@@ -33,7 +33,7 @@ describe('property header', () => {
   it('falls back to a hex name for a CRC it cannot resolve', () => {
     const crc = 0x1c65b7b9
     const view = BufferView.allocate(6)
-      .writeUint16(PropertyType.Boolean | 0x8000)
+      .writeUint16(0x1 | 0x8000)
       .writeInt32(crc)
 
     const property = readProperty(view.rewind())
@@ -46,7 +46,7 @@ describe('property header', () => {
 
   it('carries a negative CRC through its hex name unchanged', () => {
     const crc = 0xe63aa248 | 0
-    const view = BufferView.allocate(10).writeUint16(PropertyType.Float).writeInt32(crc)
+    const view = BufferView.allocate(10).writeUint16(0x3).writeInt32(crc)
     const property = readProperty(view.rewind())
 
     strictEqual(property?.name, '0xE63AA248')
@@ -59,7 +59,7 @@ describe('property values', () => {
   it('packs a boolean into the type field', () => {
     const property: Property = {
       name: 'BasicApp_FlipTexU',
-      type: PropertyType.Boolean,
+      type: 'boolean',
       value: true,
     }
 
@@ -72,14 +72,14 @@ describe('property values', () => {
   })
 
   it('never sets bit 15 for a non-boolean type', () => {
-    strictEqual(head({ name: 'Node_LifeSpan', type: PropertyType.Float, value: -1 }).type, 0x0003)
+    strictEqual(head({ name: 'Node_LifeSpan', type: 'float', value: -1 }).type, 0x0003)
   })
 
   it('round-trips integers, floats and strings', () => {
     const properties: Property[] = [
-      { name: 'Emitter_MaxParticles', type: PropertyType.Integer, value: -7 },
-      { name: 'Node_LifeSpan', type: PropertyType.Float, value: Math.fround(0.75) },
-      { name: 'Node_Name', type: PropertyType.String, value: 'my_node' },
+      { name: 'Emitter_MaxParticles', type: 'integer', value: -7 },
+      { name: 'Node_LifeSpan', type: 'float', value: Math.fround(0.75) },
+      { name: 'Node_Name', type: 'string', value: 'my_node' },
     ]
 
     for (const property of properties) deepStrictEqual(roundtrip(property), property)
@@ -89,41 +89,47 @@ describe('property values', () => {
     const properties: Property[] = [
       {
         name: 'BasicApp_BlendInfo',
-        type: PropertyType.Blending,
-        source: BlendingMode.SourceAlpha,
-        target: BlendingMode.One,
+        type: 'blending',
+        value: { source: BlendingMode.SourceAlpha, target: BlendingMode.One },
       },
       {
         name: 'Node_Transform',
-        type: PropertyType.Transform,
-        order: [4, 3, 5],
+        type: 'transform',
+        value: { order: [4, 3, 5] },
       },
       {
         name: 'BasicApp_Size',
-        type: PropertyType.AnimatedFloat,
-        easing: EaseType.Linear,
-        keyframes: [{ key: 0, easing: EaseType.Step, keyframes: [{ key: 0, value: 1 }] }],
+        type: 'animatedFloat',
+        value: {
+          easing: EaseType.Linear,
+          keyframes: [{ key: 0, easing: EaseType.Step, keyframes: [{ key: 0, value: 1 }] }],
+        },
       },
       {
         name: 'BasicApp_Color',
-        type: PropertyType.AnimatedColor,
-        easing: EaseType.Linear,
-        keyframes: [
-          { key: 0, easing: EaseType.Step, keyframes: [{ key: 0, value: { x: 1, y: 1, z: 1 } }] },
-        ],
+        type: 'animatedColor',
+        value: {
+          easing: EaseType.Linear,
+          keyframes: [
+            { key: 0, easing: EaseType.Step, keyframes: [{ key: 0, value: { x: 1, y: 1, z: 1 } }] },
+          ],
+        },
       },
       {
         name: 'Emitter_Frequency',
-        type: PropertyType.AnimatedCurve,
-        easing: EaseType.Linear,
-        keyframes: [
-          {
-            key: 0,
-            default: 0,
-            flags: WrapFlags.AfterCycle,
-            keyframes: [{ key: 0, value: { x: 1, y: 0, z: 0 } }],
-          },
-        ],
+        type: 'animatedCurve',
+        value: {
+          easing: EaseType.Linear,
+          keyframes: [
+            {
+              key: 0,
+              fallback: 0,
+              before: WrapMode.Hold,
+              after: WrapMode.Cycle,
+              keyframes: [{ key: 0, value: { x: 1, y: 0, z: 0 } }],
+            },
+          ],
+        },
       },
     ]
 
@@ -135,8 +141,8 @@ describe('property values', () => {
   })
 
   it('leaves the view on the next property', () => {
-    const first: Property = { name: 'Node_Name', type: PropertyType.String, value: 'a' }
-    const second: Property = { name: 'Node_LifeSpan', type: PropertyType.Float, value: 2 }
+    const first: Property = { name: 'Node_Name', type: 'string', value: 'a' }
+    const second: Property = { name: 'Node_LifeSpan', type: 'float', value: 2 }
 
     const view = BufferView.join(
       writeProperty(first),
@@ -146,6 +152,6 @@ describe('property values', () => {
 
     deepStrictEqual(readProperty(view), first)
     deepStrictEqual(readProperty(view), second)
-    strictEqual(readProperty(view), null)
+    strictEqual(readProperty(view), undefined)
   })
 })

@@ -40,9 +40,9 @@ it, and what a `[Ship]` or a `[Nebula]` means is yours to define.
 | Import                             | Contents                                                                            | Documentation                       |
 | ---------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------- |
 | `@treewyrm/freelancer`             | `getResourceId`, `getObjectId`, and the lookups built on them                       | [UTF.md](docs/modules/UTF.md#hashing)       |
-| `@treewyrm/freelancer/utf`         | `Directory`, `File` — the UTF container                                             | [UTF.md](docs/modules/UTF.md)               |
+| `@treewyrm/freelancer/utf`         | `Directory`, `File`, `isUTF` — the UTF container                                    | [UTF.md](docs/modules/UTF.md)               |
 | `@treewyrm/freelancer/utility`     | `BufferView`, windows-1252, tree, timestamp, number and name helpers                | [UTF.md](docs/modules/UTF.md#utilities)     |
-| `@treewyrm/freelancer/math`        | `Vector3`, `Vector4`, `Quat`, `Matrix3`, `Matrix4`, `Transform`, scalar helpers     | [MATH.md](docs/modules/MATH.md)     |
+| `@treewyrm/freelancer/math`        | Vectors, `Quat`, matrices, `Transform`, bounding volumes, scalar helpers            | [MATH.md](docs/modules/MATH.md)     |
 | `@treewyrm/freelancer/vmesh`       | VMesh geometry parts and mesh library                                               | [VMESH.md](docs/modules/VMESH.md)           |
 | `@treewyrm/freelancer/compound`    | The `Cmpnd` hierarchy shared by rigid and deformable models                         | [COMPOUND.md](docs/modules/COMPOUND.md)     |
 | `@treewyrm/freelancer/rigid`       | `.3db` / `.cmp` / `.sph` models: parts, cameras, spheres, material animation        | [RIGID.md](docs/modules/RIGID.md)           |
@@ -109,13 +109,20 @@ Building one by hand and writing it out is the same object graph in reverse:
 ```ts
 const root = new Directory()
 
-root.setFile('Cmpnd', 'Root', 'Transform').writeFloats(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
+root.ensureFile('Cmpnd', 'Root', 'Transform').setFloats(
+  ...[1, 0, 0, 0],
+  ...[0, 1, 0, 0],
+  ...[0, 0, 1, 0],
+  ...[0, 0, 0, 1],
+)
 
 const bytes = root.write()
 ```
 
-`File` implements `ArrayBufferView` and carries typed iterators — `readIntegers` / `writeIntegers`,
-`readFloats` / `writeFloats`, `readStrings` / `writeStrings` — with the write side chaining.
+`File` implements `ArrayBufferView` and carries typed iterators — `readIntegers` / `setIntegers`,
+`readFloats` / `setFloats`, `readStrings` / `setStrings` — with the `set` side replacing the payload
+and chaining. `ensureFile` and `ensureDirectory` get an entry or create it, and `getFile` and
+`getDirectory` only look.
 
 ### Models, characters, collision
 
@@ -127,7 +134,7 @@ import { getBoneModel, readDeformableModel } from '@treewyrm/freelancer/deformab
 const ship = readRigidModel(Directory.read(readFileSync('ships/li_fighter.cmp')))
 
 const body = readDeformableModel(Directory.read(readFileSync('characters/bodies/br_darcy_body.dfm')))
-const skeleton = getBoneModel(body) // the bone hierarchy, as a Model<Bone> tree
+const skeleton = getBoneModel(body) // the bone hierarchy, as a CompoundNode<Bone> tree
 ```
 
 `.sur` collision files are a standalone chunked binary rather than a UTF tree, so they take a
@@ -169,7 +176,7 @@ document iterates its sections directly, so `for (const section of document)` re
 A property can also coerce positionally, which is how the engine reads a line of several values:
 
 ```ts
-const [x, y, z] = document.getSection('Zone')!.getProperty('pos')!.format('float', 'float', 'float')
+const [x, y, z] = document.getSection('Zone')!.getProperty('pos')!.coerce('float', 'float', 'float')
 ```
 
 A value carries the type the file recorded, and you ask for the type you want — this is how the

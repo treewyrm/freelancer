@@ -96,9 +96,9 @@ export const getTextureCount = ({ frames }: AnimatedTexture): number =>
  * from the highest frame index — so neither can disagree with the frames beside it.
  */
 export function writeAnimatedTexture(texture: AnimatedTexture): Directory {
-  const textures = new File('Texture count').writeIntegers(getTextureCount(texture))
-  const count = new File('Frame count').writeIntegers(texture.frames.length)
-  const fps = new File('FPS').writeFloats(texture.rate)
+  const textures = new File('Texture count').setIntegers(getTextureCount(texture))
+  const count = new File('Frame count').setIntegers(texture.frames.length)
+  const fps = new File('FPS').setFloats(texture.rate)
   const view = BufferView.allocate(frameByteLength * texture.frames.length)
 
   for (const { index, u1, v1, u2, v2 } of texture.frames)

@@ -1,7 +1,7 @@
 import BufferView from '#/utility/bufferview.js'
 import { getResourceId } from '#/hash.js'
 import { readArray, readString, writeString } from './misc.js'
-import { type Property, PropertyType, readProperty, writeProperty } from './property.js'
+import { type Property, readProperty, writeProperty } from './property.js'
 
 const knownNodeTypes = [
   'FxNode',
@@ -79,20 +79,14 @@ export function writeNodeLibrary({ version, nodes }: NodeLibrary): BufferView {
 /** Retrieves alchemy node name from property Node_Name. */
 export const getNodeName = ({ properties }: Node) => {
   const property = properties.find(({ name }) => name === 'Node_Name')
-  if (!property || property.type !== PropertyType.String) return
+  if (!property || property.type !== 'string') return
 
   return property.value
 }
 
-/**
- * Assigns alchemy node name.
- *
- * The property is replaced rather than retyped in place: switching the discriminant on the
- * existing object would leave the previous variant's payload — keyframes, easing, blend modes —
- * attached to something now claiming to be a string, and the writer would emit it.
- */
+/** Assigns alchemy node name, replacing a `Node_Name` of whatever type the node carried. */
 export const setNodeName = ({ properties }: Node, value: string): void => {
-  const property: Property = { name: 'Node_Name', type: PropertyType.String, value }
+  const property: Property = { name: 'Node_Name', type: 'string', value }
   const index = properties.findIndex(({ name }) => name === 'Node_Name')
 
   index >= 0 ? properties.splice(index, 1, property) : properties.push(property)

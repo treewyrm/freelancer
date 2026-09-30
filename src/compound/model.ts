@@ -12,7 +12,7 @@ import type { Joint } from './joint.js'
  * `filename` names the fragment the part was read from, and `joint` is the connection to the parent,
  * absent on the root. Both come from the `Cons` constraint list rather than from directory nesting.
  */
-export interface Model<T> extends Tree<Model<T>> {
+export interface CompoundNode<T> extends Tree<CompoundNode<T>> {
   type: 'compound'
 
   /** Part name. */
@@ -35,14 +35,17 @@ export interface Model<T> extends Tree<Model<T>> {
  * Whether a file root holds a `Cmpnd` hierarchy — a multi-part `.cmp` or `.dfm` — rather than the
  * single part a `.3db` carries directly.
  */
-export const isCompoundModel = (directory: Directory) => !!directory.getDirectory('Cmpnd')
+export const isCompound = (directory: Directory) => !!directory.getDirectory('Cmpnd')
 
 /**
  * Arranges compound objects into hierarchy from constraints.
  * @param objects
  * @param constraints
  */
-export function arrangeByConstraints(objects: Model<unknown>[], constraints: Constraint[]): void {
+export function arrangeByConstraints(
+  objects: CompoundNode<unknown>[],
+  constraints: Constraint[],
+): void {
   /** Exclude root from array of children. */
   const [, ...children] = objects
 
@@ -63,11 +66,14 @@ export function arrangeByConstraints(objects: Model<unknown>[], constraints: Con
  * @param read Object fragment directory reader
  * @returns Root object
  */
-export function readModel<T>(parent: Directory, read: (parent: Directory) => T): Model<T> {
+export function readCompound<T>(
+  parent: Directory,
+  read: (parent: Directory) => T,
+): CompoundNode<T> {
   const compound = parent.getDirectory('Cmpnd')
   if (!compound) throw new Error('Missing compound directory')
 
-  let objects: Model<T>[] = []
+  let objects: CompoundNode<T>[] = []
   let constraints: Constraint[] = []
 
   for (const directory of compound.directories) {
@@ -88,7 +94,7 @@ export function readModel<T>(parent: Directory, read: (parent: Directory) => T):
         const fragment = parent.getDirectory(filename)
         if (!fragment) throw new Error('Missing object fragment directory')
 
-        const compound: Model<T> = {
+        const compound: CompoundNode<T> = {
           type: 'compound',
           name,
           index,
@@ -120,11 +126,11 @@ export function readModel<T>(parent: Directory, read: (parent: Directory) => T):
  * @param write Object fragment directory writer
  * @param parent Output directory
  */
-export function writeModel<T>(root: Model<T>, write: (value: T) => Directory): Directory {
+export function writeCompound<T>(root: CompoundNode<T>, write: (value: T) => Directory): Directory {
   const output = new Directory()
 
   /** Compound directory. */
-  const compound = output.setDirectory('Cmpnd')
+  const compound = output.ensureDirectory('Cmpnd')
 
   /** Model constraint list. */
   const constraints: Constraint[] = []
@@ -141,35 +147,38 @@ export function writeModel<T>(root: Model<T>, write: (value: T) => Directory): D
 
     names.add(name)
 
-    const directory = compound.setDirectory(object === root ? 'Root' : `Part_${name}`)
+    const directory = compound.ensureDirectory(object === root ? 'Root' : `Part_${name}`)
 
-    directory.setFile('Object name').writeStrings(name)
-    directory.setFile('Index').writeIntegers(index)
-    directory.setFile('File name').writeStrings(filename)
+    directory.ensureFile('Object name').setStrings(name)
+    directory.ensureFile('Index').setIntegers(index)
+    directory.ensureFile('File name').setStrings(filename)
 
     for (const { joint, name } of object.children)
       if (joint) constraints.push({ parent: object.name, child: name, joint })
 
-    const fragment = output.setDirectory(filename)
+    const fragment = output.ensureDirectory(filename)
     fragment.children = write(part).children
   }
 
   // Write constraints.
   for (const file of writeConstraints(constraints))
-    compound.setFile('Cons', file.name).append(file.data)
+    compound.ensureFile('Cons', file.name).append(file.data)
 
   return output
 }
 
-/** Finds hardpoint. */
-export function getModelHardpoint<T>(
-  root: Model<T>,
-  predicate: (part: T) => Hardpoint[],
+/**
+ * Finds a hardpoint anywhere in a compound, and the node whose part carries it.
+ * @param select Pulls a part's hardpoint list out of it, since the part type is the caller's.
+ */
+export function getCompoundHardpoint<T>(
+  root: CompoundNode<T>,
+  select: (part: T) => Hardpoint[],
   name: Hashable,
-) {
+): { hardpoint: Hardpoint; parent: CompoundNode<T> } | undefined {
   let hardpoint: Hardpoint | undefined
   name = getResourceId(name)
 
   for (const parent of listTreeElements(root))
-    if ((hardpoint = getHardpoint(predicate(parent.part), name))) return { hardpoint, parent }
+    if ((hardpoint = getHardpoint(select(parent.part), name))) return { hardpoint, parent }
 }

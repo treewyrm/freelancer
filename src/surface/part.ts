@@ -1,7 +1,8 @@
 import BufferView from '#/utility/bufferview.js'
 import { generateConvexHull, type ConvexHullOptions } from '#/math/convexhull.js'
+import type BoundingBox from '#/math/boundingbox.js'
 import type Vector3 from '#/math/vector3.js'
-import { createBox, getExtent, readExtent, writeExtent, type Extent } from './extent.js'
+import { createBox, getExtent, readExtent, writeExtent } from './extent.js'
 import type { TriangleIndices } from './face.js'
 import { createHull, HullType } from './hull.js'
 import { createNode, getNodeExtent } from './node.js'
@@ -28,7 +29,7 @@ const HARDPOINTS = 0x64697068 // 'hpid'
  * parts. What it carries beyond its own extent — the hierarchy, the hulls, the shared points, the
  * mass properties — comes from {@link Surface}.
  */
-export interface Part extends Extent, Surface {
+export interface Part extends BoundingBox, Surface {
   id: number
 
   /** Part is welded to the root. False when the `!fxd` chunk is present. */
@@ -171,7 +172,7 @@ export function createPart(id: number, hulls: HullGeometry[], options: PartOptio
       // before it was quantised. Taking the quantised box back would put its corners outside
       // the sphere, and every retail file keeps what a node holds inside it.
       const [a, b] = [getNodeExtent(left), getNodeExtent(right)]
-      const box = createBox(getExtent([a.minimum, a.maximum, b.minimum, b.maximum]))
+      const box = createBox(getExtent([a.min, a.max, b.min, b.max]))
 
       node.hull = createHull(0, points, reindex(box.triangles, share(box.points)), HullType.Skip)
     }
@@ -202,7 +203,7 @@ function writeHardpoints(hardpoints: number[]) {
  * Reads one part: its id, its chunk count, and then that many tagged chunks.
  *
  * Only `!fxd` is an absence rather than a payload — a part with no such chunk is fixed. The others
- * fill the part in place, so the defaults here are what a part missing one of them keeps.
+ * each supply their fields, so the defaults here are what a part missing one of them keeps.
  * @throws RangeError on an unrecognized chunk tag, which cannot be skipped: payloads are not
  * length-prefixed, so carrying on would desynchronize the rest of the file.
  */
@@ -211,8 +212,8 @@ export function readPart(view: BufferView): Part {
     id: view.readInt32(),
     fixed: true,
     hardpoints: [],
-    minimum: { x: 0, y: 0, z: 0 },
-    maximum: { x: 0, y: 0, z: 0 },
+    min: { x: 0, y: 0, z: 0 },
+    max: { x: 0, y: 0, z: 0 },
     massCenter: { x: 0, y: 0, z: 0 },
     rotationInertia: { x: 0, y: 0, z: 0 },
     radius: 0,
@@ -235,10 +236,10 @@ export function readPart(view: BufferView): Part {
         part.fixed = false
         break
       case EXTENTS:
-        readExtent(view, part)
+        Object.assign(part, readExtent(view))
         break
       case SURFACES:
-        readSurface(view, part)
+        Object.assign(part, readSurface(view))
         break
       case HARDPOINTS:
         part.hardpoints.push(...readHardpoints(view))

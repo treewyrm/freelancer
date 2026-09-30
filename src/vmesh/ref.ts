@@ -1,19 +1,8 @@
 import BufferView from '#/utility/bufferview.js'
 import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
-import type Vector3 from '#/math/vector3.js'
-
-/** Axis-aligned box between two opposite corners. */
-export interface BoundingBox {
-  a: Vector3
-  b: Vector3
-}
-
-/** Bounding sphere in the same frame as the geometry it encloses. */
-export interface BoundingSphere {
-  center: Vector3
-  radius: number
-}
+import type BoundingBox from '#/math/boundingbox.js'
+import type BoundingSphere from '#/math/boundingsphere.js'
 
 /**
  * A window into a mesh library: which mesh, and which slice of its groups, indices and vertices to
@@ -49,7 +38,7 @@ const byteLength = 60
  * @throws Error when the directory holds no `VMeshRef` file.
  * @throws RangeError when the file is shorter than the fixed 60 bytes.
  */
-export function readVMeshRef(parent: Directory) {
+export function readVMeshRef(parent: Directory): VMeshRef {
   const file = parent.getFile('VMeshRef')
   if (!file) throw new Error('Missing VMeshRef')
 
@@ -83,8 +72,8 @@ export function readVMeshRef(parent: Directory) {
     groupStart,
     groupCount,
     boundingBox: {
-      a: minimum,
-      b: maximum,
+      min: minimum,
+      max: maximum,
     },
     boundingSphere: {
       center: {
@@ -116,12 +105,12 @@ export function writeVMeshRef(ref: VMeshRef): File {
   view.writeUint16(ref.groupStart)
   view.writeUint16(ref.groupCount)
   // Components are interleaved as max, min per axis, not two contiguous vectors.
-  view.writeFloat32(ref.boundingBox.b.x)
-  view.writeFloat32(ref.boundingBox.a.x)
-  view.writeFloat32(ref.boundingBox.b.y)
-  view.writeFloat32(ref.boundingBox.a.y)
-  view.writeFloat32(ref.boundingBox.b.z)
-  view.writeFloat32(ref.boundingBox.a.z)
+  view.writeFloat32(ref.boundingBox.max.x)
+  view.writeFloat32(ref.boundingBox.min.x)
+  view.writeFloat32(ref.boundingBox.max.y)
+  view.writeFloat32(ref.boundingBox.min.y)
+  view.writeFloat32(ref.boundingBox.max.z)
+  view.writeFloat32(ref.boundingBox.min.z)
   view.writeFloat32(ref.boundingSphere.center.x)
   view.writeFloat32(ref.boundingSphere.center.y)
   view.writeFloat32(ref.boundingSphere.center.z)

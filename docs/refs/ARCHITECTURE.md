@@ -2,7 +2,7 @@
 
 Operating rules for working in this repository: commands, the three-layer model every format
 follows, the invariants that hold across all of them, directory structure, documentation
-conventions, and code style.
+conventions, code style, and the naming and shape rules that keep the modules alike.
 
 ## Commands
 
@@ -119,3 +119,29 @@ when the child merely depends on the parent (`rigid` consumes `utf` the same way
   including a nested module reaching its own parent (`ini/binary/read.ts` imports `#/ini/types.js`).
 - Prefer type-enforced invariants over redundant fields: model distinctions as discriminated unions
   so a wrong consumer breaks at compile time.
+
+## Naming and shape
+
+One rule per question, so that the same idea looks the same in every module. The API conventions
+suite in `src/api.test.ts` checks the rules marked ✓ against every export; the rest are held by
+review.
+
+| #   | Rule | |
+| --- | ---- | --- |
+| C1  | **`type` names the kind.** On a union it is the discriminant, a string literal. Anything else gets its own name: `format` (pixel or vertex layout), `primitive` (topology), `version`, `storage`. A record outside any union keeps `type` where the format itself calls the field that — `Resource.type`, surface `Hull.type`, Alchemy `Node.type`. | |
+| C2  | **One idiom per kind of enumeration.** Numeric wire codes are a TS `enum` with PascalCase members. A kind discriminant is a string-literal union — camelCase, or the file's verbatim vocabulary where there is one (THORN's `'SCENE'`). An open name vocabulary is a `KNOWN_…` const array plus `Known \| (string & {})`. A bitfield enum holds single bits only; a multi-bit field is a mask and shift constant pair and an accessor, never a member. | ✓ members |
+| C3  | **Exported constants are `SCREAMING_SNAKE_CASE`.** A companion object (`Vector3`, an interface and a const of one name) is a type first and keeps the type's name. No public static class constants. | ✓ |
+| C4  | **Acronyms stay upper case inside identifiers** — `CRC`, `UTF`, `DXT`, `MIPS` — except Freelancer's own `VMesh` and `VWire`. | |
+| C5  | **A tagged value's discriminant is a string literal**, and the wire code behind it lives in the codec. Alchemy's `Property` and INI's `Value` are the same shape for that reason. | |
+| C6  | **A tagged value's payload sits under `value`** in every arm, never spread beside `name` and `type`. | |
+| C7  | **Absence is `undefined` or a missing key, never `null`**, and a reader never fills in a value it would then write back — a default the game applies is the consumer's, or an evaluator's. An optional piece reads as `undefined`; a required piece missing or malformed throws. An `is…`/`has…` probe agrees exactly with when its reader succeeds. | ✓ `null` |
+| C8  | **Readers return arrays; writers accept `Iterable`.** Generators are for walks (`utility/tree`, `getMeshDraw`). A header-less list is `type XLibrary = X[]`, read by `readXLibrary`. | |
+| C9  | **Verbs mean one thing.** `get` finds one or `undefined`; `filter` finds all; `set` replaces by key or appends; `add`/`append` always push; `insert` places by position; `ensure` gets or creates; `delete` removes everything matching a key; `remove` removes one by identity and says whether it was there. `read`/`write` are for codecs, never for mutating a live object — `File.setFloats` replaces a payload, `File.append` extends one. | |
+| C10 | **Field vocabulary.** `orientation` is a frame (`Matrix3` or `Quat`), `rotation` an amount (an angle, Euler angles). `min`/`max` for bounds and limits; `start`/`count` for slices, an inclusive `end` only where the file stores one. `key` is a position on an animation axis, `time` absolute time, `duration` a span. Bounds are `./math`'s `BoundingBox` and `BoundingSphere` wherever they occur. | |
+| C11 | **Every arm of an exported union is exported**, under a qualified name (`FixedJoint`), with an `…Of<T>` narrowing helper where the union is large (`EntityOf`, `JointOf`, `PropertyOf`, `ValueOf`). **Type names are unique across related entry points** — those whose data names or contains the other's, so that one file imports both; the foundations (`.`, `./utility`, `./math`, `./utf`) relate to everything. Isolated modules may share a name: surface's `Node` and Alchemy's never meet. Only types a public signature mentions are exported. | ✓ names |
+| C12 | **`readonly` marks only the immutable tagged values** (INI and THN `Value`), which are replaced rather than edited. Records and their tuples are mutable. | |
+| C13 | **A key extractor is `select`;** `predicate` is only for a function returning a boolean. | |
+| C14 | **Codec shape.** `readX(source): T` and `writeX(value: T): BufferView \| File \| Directory`, with no out-parameters. Bare `read`/`write` only on a subpath that is a single document format (`ini/*`, `thn/*`, `resource`). | |
+
+Related entry points for C11 are declared in the conventions suite; adding an entry point means
+saying there what it relates to.

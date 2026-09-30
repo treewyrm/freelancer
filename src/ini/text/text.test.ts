@@ -146,9 +146,12 @@ describe('write', () => {
   })
 
   it('joins values with a comma and a space', () => {
-    const text = write(new Document(new Section('S', new Property('pos', ...value.list(1, 2, 3)))), {
-      newline: '\n',
-    })
+    const text = write(
+      new Document(new Section('S', new Property('pos', ...value.list(1, 2, 3)))),
+      {
+        newline: '\n',
+      },
+    )
 
     assert.equal(text, '[S]\npos = 1, 2, 3\n')
   })
@@ -188,13 +191,14 @@ describe('round-trip', () => {
   // The one type that does not survive, and the one type retail never uses: the text form has no
   // boolean syntax, so true comes back as the string the compiler would also have produced.
   it('loses a boolean to a string, as the format requires', () => {
-    const [section] = read(write(new Document(new Section('S', new Property('a', value.boolean(true)))))).sections
+    const [section] = read(
+      write(new Document(new Section('S', new Property('a', value.boolean(true))))),
+    ).sections
     assert.deepEqual(section?.properties[0]?.values, [value.string('true')])
   })
 
   it('preserves comments and blank lines through a read-write round trip', () => {
-    const text =
-      '; header\r\n\r\n[Good]\r\n; note\r\nprice = 100 ; gold\r\n\r\n[Bad]\r\n'
+    const text = '; header\r\n\r\n[Good]\r\n; note\r\nprice = 100 ; gold\r\n\r\n[Bad]\r\n'
     assert.equal(write(read(text), { newline: '\r\n' }), text)
   })
 })

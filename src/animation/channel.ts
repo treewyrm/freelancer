@@ -5,21 +5,24 @@ import { at, type Keyframe } from '#/math/animation.js'
 import Quat from '#/math/quat.js'
 import { clamp, lerp } from '#/math/scalar.js'
 import Vector3 from '#/math/vector3.js'
+import Vector4 from '#/math/vector4.js'
 
 /**
- * Channel keyframe contents, a bitfield stored in the channel `Header` file.
+ * Channel keyframe contents, a bitfield stored in the channel `Header` file as a `uint32`.
  *
  * At most one of the position bits and at most one of the quaternion bits may be set, and
- * {@link Angle} never combines with anything else.
+ * {@link Angle} never combines with anything else — the same combinations `engbase.dll` refuses,
+ * at load (`0x661db70`) or when the channel is bound (`0x6615950`).
  *
  * The low four bits are inherited verbatim from Conquest: Frontier Wars, where they are
  * `PersistDT_FLOAT`, `_VECTOR`, `_QUATERNION` and `_EVENT`. There they describe the joint's state
  * vector, and its width follows: 1, 3 and 4 floats, so `Position | Quaternion` is the 7 floats a
- * loose joint needs. The high four bits are Freelancer's own additions, all of them compression.
+ * loose joint needs. The five bits above them are Freelancer's own additions, all of them
+ * compression, which the engine expands into those four at load.
  *
- * A cylinder joint takes 2 floats — an angle and an offset along one shared axis — and no
- * combination of these bits comes to 2. That, rather than a missing decoder, is why cylinder
- * joints cannot be animated: the format has nowhere to put them.
+ * A cylinder joint takes 2 floats — an offset along one shared axis and an angle about it — and no
+ * combination of these bits comes to 2. The engine does keep a two-float state for a cylinder, but
+ * has no channel, player or blend case that could feed it, so cylinder joints cannot be animated.
  */
 export enum ChannelType {
   /** Single float: revolute joint angle in radians or prismatic joint offset. */
@@ -55,6 +58,13 @@ export enum ChannelType {
 
   /** Rotation quantized into the rotation axis scaled by angle, three int16. */
   AngleQuaternion = 0x80,
+
+  /**
+   * Rotation quantized whole, four int16 in W, X, Y, Z order, renormalized on read.
+   *
+   * No retail asset uses it; `engbase.dll` decodes it (`0x661e067`) all the same.
+   */
+  ShortQuaternion = 0x100,
 }
 
 /** Bits describing keyframe position. */
@@ -65,7 +75,14 @@ export const QUATERNION_MASK =
   ChannelType.Quaternion |
   ChannelType.IdentityQuaternion |
   ChannelType.VectorQuaternion |
-  ChannelType.AngleQuaternion
+  ChannelType.AngleQuaternion |
+  ChannelType.ShortQuaternion
+
+/** Every bit the engine gives a meaning to. */
+const TYPE_MASK = 0x1ff
+
+/** Byte length of the channel `Header` file. The engine refuses any other. */
+const HEADER_LENGTH = Uint32Array.BYTES_PER_ELEMENT * 3
 
 /** Quantized quaternion components are int16 fractions of this scale. */
 const QUANTIZATION_SCALE = 0x7fff
@@ -83,7 +100,7 @@ const countBits = (value: number): number => {
  */
 export function validateChannelType(type: number): ChannelType {
   if (type & ChannelType.Event) throw new RangeError('Channel event keyframes are unsupported')
-  if (type & ~0xff || type < 0) throw new RangeError(`Unknown channel type bits: ${type}`)
+  if (type & ~TYPE_MASK || type < 0) throw new RangeError(`Unknown channel type bits: ${type}`)
 
   if (type & ChannelType.Angle && type !== ChannelType.Angle)
     throw new RangeError('Channel angle cannot combine with other keyframe types')
@@ -115,6 +132,7 @@ export function keyframeByteLength(type: ChannelType, interval: number): number 
   if (type & ChannelType.Quaternion) size += Float32Array.BYTES_PER_ELEMENT * 4
   if (type & ChannelType.VectorQuaternion) size += Int16Array.BYTES_PER_ELEMENT * 3
   if (type & ChannelType.AngleQuaternion) size += Int16Array.BYTES_PER_ELEMENT * 3
+  if (type & ChannelType.ShortQuaternion) size += Int16Array.BYTES_PER_ELEMENT * 4
 
   return size
 }
@@ -198,34 +216,132 @@ export function writeAngleQuaternion(view: BufferView, quat: Quat): BufferView {
     .writeInt16(Math.round(clamp(z * scale, -1, 1) * QUANTIZATION_SCALE))
 }
 
-/** Animation keyframe. Which properties are set is dictated by the channel type. */
-export interface ChannelKeyframe extends Keyframe {
+/**
+ * Reads quaternion stored as four int16 fractions in W, X, Y, Z order.
+ *
+ * The engine renormalizes with a single Newton step, `k = (3 - |q|²) / 2`, rather than a square
+ * root, and so does this: the result is what the game computes, not an exactly unit quaternion.
+ */
+export function readShortQuaternion(view: BufferView): Quat {
+  const w = view.readInt16() / QUANTIZATION_SCALE
+  const x = view.readInt16() / QUANTIZATION_SCALE
+  const y = view.readInt16() / QUANTIZATION_SCALE
+  const z = view.readInt16() / QUANTIZATION_SCALE
+
+  const k = (3 - (w * w + x * x + y * y + z * z)) * 0.5
+
+  return { x: x * k, y: y * k, z: z * k, w: w * k }
+}
+
+/** Writes quaternion as four int16 fractions in W, X, Y, Z order. */
+export function writeShortQuaternion(view: BufferView, quat: Quat): BufferView {
+  const { x, y, z, w } = Vector4.normalize(quat)
+
+  return view
+    .writeInt16(Math.round(clamp(w, -1, 1) * QUANTIZATION_SCALE))
+    .writeInt16(Math.round(clamp(x, -1, 1) * QUANTIZATION_SCALE))
+    .writeInt16(Math.round(clamp(y, -1, 1) * QUANTIZATION_SCALE))
+    .writeInt16(Math.round(clamp(z, -1, 1) * QUANTIZATION_SCALE))
+}
+
+/**
+ * How a motion channel stores position: three floats per keyframe, or nothing because it is zero.
+ */
+export type PositionEncoding = 'vector' | 'zero'
+
+/**
+ * How a motion channel stores orientation: four floats, nothing because it is the identity, three
+ * int16 quantizing either the quaternion's vector part or its axis scaled by angle, or four int16
+ * quantizing the whole quaternion.
+ */
+export type OrientationEncoding = 'quaternion' | 'identity' | 'vector' | 'angle' | 'short'
+
+/** One keyframe of an {@link AngleChannel}. */
+export interface AngleKeyframe extends Keyframe {
   /** Time offset in seconds from the start of the script. */
   key: number
 
   /** Revolute joint angle in radians or prismatic joint offset. */
-  value?: number
+  value: number
+}
+
+/**
+ * One keyframe of a {@link MotionChannel}. A field is present exactly when the channel carries the
+ * matching encoding, zero and identity included.
+ */
+export interface MotionKeyframe extends Keyframe {
+  /** Time offset in seconds from the start of the script. */
+  key: number
 
   /** Position offset. */
   position?: Vector3
 
-  /** Rotation. */
-  rotation?: Quat
+  /** Orientation. */
+  orientation?: Quat
 }
 
-/** Keyframe track of a single animated property set. */
-export interface Channel {
+/**
+ * A channel driving one float: the angle of a revolute joint or the offset of a prismatic one.
+ * `ChannelType.Angle`, which combines with nothing.
+ */
+export interface AngleChannel {
+  type: 'angle'
+
   /**
-   * Keyframe interval in seconds. When negative every keyframe carries its own time marker,
-   * otherwise keyframes are evenly spaced and time markers are not stored.
+   * Keyframe interval in seconds. When negative every keyframe carries its own time marker, which
+   * is what -1, the only negative value retail uses, says; otherwise keyframes are evenly spaced
+   * and time markers are not stored.
    */
   interval: number
 
-  /** Keyframe contents. */
-  type: ChannelType
+  /** Keyframes in ascending time order. */
+  keyframes: AngleKeyframe[]
+}
+
+/**
+ * A channel driving position, orientation or both: an object map, or a sphere or loose joint.
+ * The two encodings are what the type bitfield records, apart from what the keyframes hold.
+ */
+export interface MotionChannel {
+  type: 'motion'
+
+  /** As {@link AngleChannel.interval}. */
+  interval: number
+
+  /** How position is stored. Absent when the channel does not animate it. */
+  position?: PositionEncoding
+
+  /** How orientation is stored. Absent when the channel does not animate it. */
+  orientation?: OrientationEncoding
 
   /** Keyframes in ascending time order. */
-  keyframes: ChannelKeyframe[]
+  keyframes: MotionKeyframe[]
+}
+
+/** Keyframe track of a single animated property set. */
+export type Channel = AngleChannel | MotionChannel
+
+const POSITION_BITS: Record<PositionEncoding, ChannelType> = {
+  vector: ChannelType.Position,
+  zero: ChannelType.ZeroPosition,
+}
+
+const ORIENTATION_BITS: Record<OrientationEncoding, ChannelType> = {
+  quaternion: ChannelType.Quaternion,
+  identity: ChannelType.IdentityQuaternion,
+  vector: ChannelType.VectorQuaternion,
+  angle: ChannelType.AngleQuaternion,
+  short: ChannelType.ShortQuaternion,
+}
+
+/** The type bitfield a channel is stored with. */
+export function getChannelType(channel: Channel): ChannelType {
+  if (channel.type === 'angle') return ChannelType.Angle
+
+  return (
+    (channel.position ? POSITION_BITS[channel.position] : 0) |
+    (channel.orientation ? ORIENTATION_BITS[channel.orientation] : 0)
+  )
 }
 
 /** Channel duration in seconds. */
@@ -244,8 +360,11 @@ export function readChannel(parent: Directory): Channel {
 
   const header = directory.getFile('Header')
   if (!header) throw new Error(`Missing channel header in ${parent.name}`)
-  if (header.byteLength < Uint32Array.BYTES_PER_ELEMENT * 3)
-    throw new RangeError(`Channel header in ${parent.name} is too short`)
+
+  // The engine refuses a header of any other length, and frames that are not exactly `count`
+  // keyframes long (`0x661d97b`, `0x661da30`); the map is then dropped rather than half-played.
+  if (header.byteLength !== HEADER_LENGTH)
+    throw new RangeError(`Channel header in ${parent.name} is not ${HEADER_LENGTH} bytes`)
 
   const view = BufferView.from(header)
 
@@ -256,79 +375,137 @@ export function readChannel(parent: Directory): Channel {
   const frames = directory.getFile('Frames')
   const length = keyframeByteLength(type, interval) * count
 
-  if ((frames?.byteLength ?? 0) < length)
-    throw new RangeError(`Channel frames in ${parent.name} hold fewer than ${count} keyframes`)
+  if ((frames?.byteLength ?? 0) !== length)
+    throw new RangeError(`Channel frames in ${parent.name} are not ${count} keyframes long`)
 
   const data = frames ? BufferView.from(frames) : BufferView.allocate(0)
-  const keyframes: ChannelKeyframe[] = new Array(count)
+  const key = (index: number) => (interval < 0 ? data.readFloat32() : index * interval)
+
+  if (type === ChannelType.Angle) {
+    const keyframes: AngleKeyframe[] = new Array(count)
+
+    for (let i = 0; i < count; i++) keyframes[i] = { key: key(i), value: data.readFloat32() }
+
+    return { type: 'angle', interval, keyframes }
+  }
+
+  const channel: MotionChannel = { type: 'motion', interval, keyframes: new Array(count) }
+
+  switch (type & POSITION_MASK) {
+    case ChannelType.Position:
+      channel.position = 'vector'
+      break
+    case ChannelType.ZeroPosition:
+      channel.position = 'zero'
+      break
+  }
+
+  switch (type & QUATERNION_MASK) {
+    case ChannelType.Quaternion:
+      channel.orientation = 'quaternion'
+      break
+    case ChannelType.IdentityQuaternion:
+      channel.orientation = 'identity'
+      break
+    case ChannelType.VectorQuaternion:
+      channel.orientation = 'vector'
+      break
+    case ChannelType.AngleQuaternion:
+      channel.orientation = 'angle'
+      break
+    case ChannelType.ShortQuaternion:
+      channel.orientation = 'short'
+      break
+  }
 
   for (let i = 0; i < count; i++) {
-    const keyframe: ChannelKeyframe = { key: interval < 0 ? data.readFloat32() : i * interval }
+    const keyframe: MotionKeyframe = { key: key(i) }
 
-    if (type & ChannelType.Angle) keyframe.value = data.readFloat32()
-
-    switch (type & POSITION_MASK) {
-      case ChannelType.Position:
+    switch (channel.position) {
+      case 'vector':
         keyframe.position = Vector3.read(data)
         break
-      case ChannelType.ZeroPosition:
+      case 'zero':
         keyframe.position = { ...Vector3.zero }
         break
     }
 
-    switch (type & QUATERNION_MASK) {
-      case ChannelType.Quaternion:
-        keyframe.rotation = readQuaternion(data)
+    switch (channel.orientation) {
+      case 'quaternion':
+        keyframe.orientation = readQuaternion(data)
         break
-      case ChannelType.VectorQuaternion:
-        keyframe.rotation = readVectorQuaternion(data)
+      case 'vector':
+        keyframe.orientation = readVectorQuaternion(data)
         break
-      case ChannelType.AngleQuaternion:
-        keyframe.rotation = readAngleQuaternion(data)
+      case 'angle':
+        keyframe.orientation = readAngleQuaternion(data)
         break
-      case ChannelType.IdentityQuaternion:
-        keyframe.rotation = { ...Quat.identity }
+      case 'short':
+        keyframe.orientation = readShortQuaternion(data)
+        break
+      case 'identity':
+        keyframe.orientation = { ...Quat.identity }
         break
     }
 
-    keyframes[i] = keyframe
+    channel.keyframes[i] = keyframe
   }
 
-  return { interval, type, keyframes }
+  return channel
 }
 
 /**
  * Writes animation channel into directory.
  * @param channel Animation channel
- * @returns
+ * @throws RangeError when a keyframe lacks a field its channel stores, or carries one its channel
+ * has no encoding for — either would be written as something other than what it says.
  */
 export function writeChannel(channel: Channel): Directory {
-  const { interval, keyframes } = channel
-  const type = validateChannelType(channel.type)
+  const { interval } = channel
+  const type = validateChannelType(getChannelType(channel))
 
-  const data = BufferView.allocate(keyframeByteLength(type, interval) * keyframes.length)
+  const data = BufferView.allocate(keyframeByteLength(type, interval) * channel.keyframes.length)
 
-  for (const { key, value = 0, position, rotation } of keyframes) {
-    if (interval < 0) data.writeFloat32(key)
-
-    if (type & ChannelType.Angle) data.writeFloat32(value)
-    if (type & ChannelType.Position) writeVector(data, position ?? Vector3.zero)
-
-    switch (type & QUATERNION_MASK) {
-      case ChannelType.Quaternion:
-        writeQuaternion(data, rotation ?? Quat.identity)
-        break
-      case ChannelType.VectorQuaternion:
-        writeVectorQuaternion(data, rotation ?? Quat.identity)
-        break
-      case ChannelType.AngleQuaternion:
-        writeAngleQuaternion(data, rotation ?? Quat.identity)
-        break
+  if (channel.type === 'angle')
+    for (const { key, value } of channel.keyframes) {
+      if (interval < 0) data.writeFloat32(key)
+      data.writeFloat32(value)
     }
-  }
+  else
+    for (const { key, position, orientation } of channel.keyframes) {
+      if (position && !channel.position)
+        throw new RangeError(`Keyframe at ${key} has a position its channel does not store`)
+      if (orientation && !channel.orientation)
+        throw new RangeError(`Keyframe at ${key} has an orientation its channel does not store`)
+
+      if (interval < 0) data.writeFloat32(key)
+
+      if (channel.position === 'vector') {
+        if (!position) throw new RangeError(`Keyframe at ${key} is missing its position`)
+        writeVector(data, position)
+      }
+
+      if (channel.orientation && channel.orientation !== 'identity' && !orientation)
+        throw new RangeError(`Keyframe at ${key} is missing its orientation`)
+
+      switch (channel.orientation) {
+        case 'quaternion':
+          writeQuaternion(data, orientation!)
+          break
+        case 'vector':
+          writeVectorQuaternion(data, orientation!)
+          break
+        case 'angle':
+          writeAngleQuaternion(data, orientation!)
+          break
+        case 'short':
+          writeShortQuaternion(data, orientation!)
+          break
+      }
+    }
 
   const header = BufferView.allocate(Uint32Array.BYTES_PER_ELEMENT * 3)
-    .writeUint32(keyframes.length)
+    .writeUint32(channel.keyframes.length)
     .writeFloat32(interval)
     .writeUint32(type)
 
@@ -339,26 +516,96 @@ export function writeChannel(channel: Channel): Directory {
 export interface ChannelSample {
   value?: number
   position?: Vector3
-  rotation?: Quat
+  orientation?: Quat
 }
 
+/** π and 2π as the engine holds them, in single precision (`0x66294ec`, `0x66294f0`). */
+const PI = Math.fround(Math.PI)
+const TAU = Math.fround(Math.PI * 2)
+
 /**
- * Samples channel at time, interpolating linearly between neighbouring keyframes.
+ * Samples channel at time, interpolating between neighbouring keyframes the way `engbase.dll` does.
+ *
+ * - Position and scalars interpolate linearly.
+ * - Rotations take a normalized linear interpolation on the near hemisphere — `Quat.nlerp`, which is
+ *   the engine's `3DMathEngine +0x58` (`x86math.dll` `0x6f724d0`) — not a slerp. The two agree at
+ *   keyframes and at the midpoint and differ in pace between them.
+ * - With `revolute`, the scalar is an angle and the pair of keyframes is brought within half a turn
+ *   first: `b ± 2π` once, whenever `b - a` leaves [-π, π]. The engine does this for every channel
+ *   driving a `Rev` joint (`0x661b8a0`) regardless of what the channel stores, so a sweep authored
+ *   past half a turn between two keyframes plays the short way round in game. Only the joint says a
+ *   channel is revolute — `ChannelType.Angle` also carries prismatic offsets, which never wrap.
+ *
+ * Time outside the keyframes holds the first or last; wrapping is {@link getChannelTime}'s.
  * @param channel Animation channel
  * @param time Time in seconds
+ * @param revolute The channel drives a revolute joint
  * @returns
  */
-export function sampleChannel({ keyframes }: Channel, time: number): ChannelSample {
-  const { start, end, span } = at(keyframes, time)
-  const sample: ChannelSample = {}
+export function sampleChannel(channel: Channel, time: number, revolute = false): ChannelSample {
+  if (channel.type === 'angle') {
+    const { start, end, span } = at(channel.keyframes, time)
+    const a = start.value
+    let b = end.value
 
-  if (start.value !== undefined && end.value !== undefined)
-    sample.value = lerp(start.value, end.value, span)
+    if (revolute) {
+      const d = b - a
+
+      if (d < -PI) b += TAU
+      else if (d > PI) b -= TAU
+    }
+
+    return { value: lerp(a, b, span) }
+  }
+
+  const { start, end, span } = at(channel.keyframes, time)
+  const sample: ChannelSample = {}
 
   if (start.position && end.position)
     sample.position = Vector3.lerp(start.position, end.position, span)
-  if (start.rotation && end.rotation)
-    sample.rotation = Quat.slerp(start.rotation, end.rotation, span)
+  if (start.orientation && end.orientation)
+    sample.orientation = Quat.nlerp(start.orientation, end.orientation, span)
 
   return sample
 }
+
+/**
+ * How a channel's clock behaves past its last keyframe: the play flags `engbase.dll` knows
+ * (`0x661b420`) — `0x2` loops, `0x4` bounces, neither plays once and holds.
+ */
+export type PlaybackMode = 'loop' | 'once' | 'pingPong'
+
+/**
+ * Maps time elapsed since a script started onto a channel's own time axis.
+ *
+ * Every map of a script runs its own clock and wraps at **its own** channel's duration, not the
+ * script's, so a short channel cycles inside a long one. `loop` wraps on reaching the end, so the
+ * end itself reads as the start; `pingPong` turns round there; `once` stops on it. Negative time is
+ * time played backwards, as a negative speed plays it. A channel of one keyframe is always at zero.
+ * @param channel Animation channel
+ * @param time Elapsed time in seconds
+ * @param mode Playback mode
+ * @returns
+ */
+export function getChannelTime(
+  channel: Channel,
+  time: number,
+  mode: PlaybackMode = 'loop',
+): number {
+  const duration = getChannelDuration(channel)
+  if (!(duration > 0)) return 0
+
+  switch (mode) {
+    case 'once':
+      return clamp(time, 0, duration)
+    case 'pingPong': {
+      const phase = modulo(time, duration * 2)
+      return phase > duration ? duration * 2 - phase : phase
+    }
+    case 'loop':
+      return modulo(time, duration)
+  }
+}
+
+/** Remainder with the sign of the divisor. */
+const modulo = (value: number, divisor: number) => ((value % divisor) + divisor) % divisor

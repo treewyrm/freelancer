@@ -147,10 +147,12 @@ export function readHull(view: BufferView): Hull {
 }
 
 /**
- * Writes one hull at the cursor, converting the flat edge indices back to the signed slot deltas
- * IVP stores, and deriving the header's index count from the face count.
+ * Writes one hull, converting the flat edge indices back to the signed slot deltas IVP stores, and
+ * deriving the header's index count from the face count.
  */
-export function writeHull(view: BufferView, hull: Hull): void {
+export function writeHull(hull: Hull): BufferView {
+  const view = BufferView.allocate(12 + hull.faces.length * 16)
+
   view.writeUint32(hull.id)
   view.writeUint32((getIndexCount(hull.faces.length) << 8) | (hull.type & 0xff))
   view.writeUint16(hull.faces.length)
@@ -178,4 +180,6 @@ export function writeHull(view: BufferView, hull: Hull): void {
 
     count++
   }
+
+  return view.rewind()
 }

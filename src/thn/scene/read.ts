@@ -30,20 +30,20 @@ import type {
   FogProps,
   LightProps,
   LightTypeName,
-  Matrix3,
+  Matrix3Rows,
   OrientedPoint,
   ParamCurve,
   PathFlagName,
   PathProps,
   PsysProps,
-  Quaternion,
+  QuaternionTuple,
   Script,
   SpatialProps,
   TargetTypeName,
   TruthName,
-  Unknown,
+  UnknownKeys,
   UserProps,
-  Vector3,
+  Vector3Tuple,
 } from './types.js'
 
 /** Drops the keys that were absent, so an optional property stays absent rather than becoming `undefined`. */
@@ -92,23 +92,23 @@ const tuple = (where: string, v: Value, length: number): number[] => {
   return list.map((x, index) => asNumber(`${where}[${index + 1}]`, x))
 }
 
-const asVector3 = (where: string, v: Value): Vector3 => {
+const asVector3 = (where: string, v: Value): Vector3Tuple => {
   const [x, y, z] = tuple(where, v, 3) as [number, number, number]
   return [x, y, z]
 }
 
-const asQuaternion = (where: string, v: Value): Quaternion => {
+const asQuaternion = (where: string, v: Value): QuaternionTuple => {
   const [x, y, z, w] = tuple(where, v, 4) as [number, number, number, number]
   return [x, y, z, w]
 }
 
-const asMatrix3 = (where: string, v: Value): Matrix3 => {
+const asMatrix3 = (where: string, v: Value): Matrix3Rows => {
   const rows = items(where, v)
   if (rows.length !== 3) throw at(where, `expected 3 rows, found ${rows.length}`)
   const [a, b, c] = rows.map((row, index) => asVector3(`${where}[${index + 1}]`, row)) as [
-    Vector3,
-    Vector3,
-    Vector3,
+    Vector3Tuple,
+    Vector3Tuple,
+    Vector3Tuple,
   ]
   return [a, b, c]
 }
@@ -214,7 +214,7 @@ const reader = (where: string, table: TableValue) => {
     },
 
     /** Whatever was never taken. Call last. */
-    unknown: (): Unknown | undefined => (rest.size ? Object.fromEntries(rest) : undefined),
+    unknown: (): UnknownKeys | undefined => (rest.size ? Object.fromEntries(rest) : undefined),
   }
 }
 
@@ -339,13 +339,13 @@ const pathData = (where: string, source: string): [PathFlagName, number[][]] => 
   return [pathFlag(where, head[1] as string), points]
 }
 
-const toVector3 = (where: string, numbers: number[]): Vector3 => {
+const toVector3 = (where: string, numbers: number[]): Vector3Tuple => {
   if (numbers.length !== 3) throw at(where, `expected 3 numbers, found ${numbers.length}`)
   const [x, y, z] = numbers as [number, number, number]
   return [x, y, z]
 }
 
-const toQuaternion = (where: string, numbers: number[]): Quaternion => {
+const toQuaternion = (where: string, numbers: number[]): QuaternionTuple => {
   if (numbers.length !== 4) throw at(where, `expected 4 numbers, found ${numbers.length}`)
   const [x, y, z, w] = numbers as [number, number, number, number]
   return [x, y, z, w]

@@ -2,12 +2,20 @@ import { deepStrictEqual, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import Directory from '#/utf/directory.js'
 import { getResourceId } from '#/hash.js'
-import { VertexFormat, Primitive, vertexByteLength, type VMeshData } from './data.js'
+import {
+  VertexFormat,
+  Primitive,
+  TEXTURE_COUNT_SHIFT,
+  vertexByteLength,
+  type VMeshData,
+} from './data.js'
 import { getMesh, getMeshDraw, readVMeshLibrary, writeVMeshLibrary } from './library.js'
 import type { VMeshGroup } from './group.js'
 import type { VMeshRef } from './ref.js'
 
-const stride = vertexByteLength(VertexFormat.Position | VertexFormat.Normal | VertexFormat.Texture1)
+const stride = vertexByteLength(
+  VertexFormat.Position | VertexFormat.Normal | (1 << TEXTURE_COUNT_SHIFT),
+)
 
 const group = (materialId: number, vertexStart: number, vertexEnd: number, elementCount: number) =>
   ({ materialId, vertexStart, vertexEnd, elementCount, padding: 0 }) satisfies VMeshGroup
@@ -18,9 +26,9 @@ const group = (materialId: number, vertexStart: number, vertexEnd: number, eleme
  */
 const mesh = (name: string): VMeshData => ({
   name,
-  type: 1,
+  version: 1,
   primitive: Primitive.TriangleList,
-  format: VertexFormat.Position | VertexFormat.Normal | VertexFormat.Texture1,
+  format: VertexFormat.Position | VertexFormat.Normal | (1 << TEXTURE_COUNT_SHIFT),
   groups: [group(0x11111111, 0, 2, 3), group(0x22222222, 3, 5, 6)],
   indices: Uint16Array.from([0, 1, 2, 3, 4, 5, 5, 4, 3]),
   vertices: Uint8Array.from({ length: 6 * stride }, (_, i) => i & 0xff),
@@ -34,7 +42,7 @@ const reference = (name: string, overrides: Partial<VMeshRef> = {}): VMeshRef =>
   indexCount: 9,
   groupStart: 0,
   groupCount: 2,
-  boundingBox: { a: { x: 0, y: 0, z: 0 }, b: { x: 1, y: 1, z: 1 } },
+  boundingBox: { min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } },
   boundingSphere: { center: { x: 0, y: 0, z: 0 }, radius: 1 },
   ...overrides,
 })
@@ -77,7 +85,7 @@ describe('readVMeshLibrary', () => {
 
   it('ignores loose files sitting alongside the mesh subdirectories', () => {
     const directory = writeVMeshLibrary([mesh('a.vms')])
-    directory.setFile('Notes').writeStrings('ignored')
+    directory.ensureFile('Notes').setStrings('ignored')
 
     strictEqual(readVMeshLibrary(new Directory('\\', [directory])).length, 1)
   })

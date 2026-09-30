@@ -11,8 +11,8 @@ export { type Sphere, isSphere, readSphere, writeSphere } from './sphere.js'
 export {
   type MaterialAnim,
   type MaterialAnimLibrary,
-  type MaterialKey,
-  type MaterialKeyframe,
+  type MaterialSegment,
+  type MaterialTransform,
   getMaterialAnim,
   getMaterialAnimDuration,
   readMaterialAnim,

@@ -26,7 +26,7 @@ export {
   LANGUAGE_NEUTRAL,
   LIBRARY_ID_RANGE,
   STRING_BLOCK_LENGTH,
-  Type,
+  ResourceType,
 } from './data.js'
 export { readCard, readInfocards, writeCard, writeInfocards } from './infocards.js'
 export {
@@ -38,7 +38,7 @@ export {
   partition,
   readLibrary,
   writeLibrary,
-  type Library,
+  type ResourceLibrary,
 } from './library.js'
 export { inspect, isImage, read, type Image } from './read.js'
 export { blockOf, indexOf, readBlock, readStrings, slotOf, writeStrings } from './strings.js'

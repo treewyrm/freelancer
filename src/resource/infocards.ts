@@ -1,5 +1,5 @@
 import type { Resource, ResourceOptions } from './types.js'
-import { CODE_PAGE_WINDOWS_1252, LANGUAGE_ENGLISH_US, Type } from './data.js'
+import { CODE_PAGE_WINDOWS_1252, LANGUAGE_ENGLISH_US, ResourceType } from './data.js'
 
 /**
  * `RT_HTML` resources: what every `ids_info` resolves to.
@@ -60,7 +60,7 @@ export const readInfocards = (resources: Resource[], language?: number): Map<num
   const cards = new Map<number, string>()
 
   for (const resource of resources) {
-    if (resource.type !== Type.Html) continue
+    if (resource.type !== ResourceType.Html) continue
     if (typeof resource.id !== 'number') continue
     if (language !== undefined && resource.language !== language) continue
 
@@ -87,6 +87,6 @@ export const writeInfocards = (
       if (!Number.isInteger(id) || id < 0)
         throw new RangeError(`Infocard id ${id} is not a non-negative integer`)
 
-      return { type: Type.Html, id, language, codePage, data: writeCard(text) }
+      return { type: ResourceType.Html, id, language, codePage, data: writeCard(text) }
     })
 }

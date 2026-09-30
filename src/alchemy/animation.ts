@@ -49,33 +49,41 @@ export interface EaseAnimation<T extends Keyframe> extends Animation<T> {
 }
 
 /**
- * What a looped curve does past each end: **two four-bit modes, not a bitfield** — the low nibble
- * before the first key, the next one after the last, each one of hold (0), cycle, cycle with
- * offset, oscillate and linear. Combine one `Before` member with one `After` member.
+ * What a looped curve does past one of its ends. The file packs two of these into the low byte of
+ * a 16-bit word — the low nibble before the first key, the next one after the last — and
+ * {@link LoopAnimation} keeps them apart as `before` and `after`.
  *
  * `alchemy.dll` switches on each nibble (`0x6246b00`, `0x6246c2f`); a nibble past 4 falls through
- * into the in-range search with an out-of-range key, which retail never does and `hermiteAt`
- * treats as hold. See [Wrap modes] in ALCHEMY.md.
+ * into the in-range search with an out-of-range key, which retail never does and `hermiteWhen`
+ * treats as hold. Such a nibble is still carried as read. See [Wrap modes] in ALCHEMY.md.
  */
-export enum WrapFlags {
-  None = 0,
-  BeforeCycle = 0x1,
-  BeforeCycleOffset = 0x2,
-  BeforeOscillate = 0x3,
-  BeforeLinear = 0x4,
-  AfterCycle = 0x10,
-  AfterCycleOffset = 0x20,
-  AfterOscillate = 0x30,
-  AfterLinear = 0x40,
+export enum WrapMode {
+  Hold,
+  Cycle,
+  CycleOffset,
+  Oscillate,
+  Linear,
 }
 
 /**
- * A keyframe list that says what happens outside its own range, and what an empty list evaluates to.
- * `flags` is the whole 16-bit word as read; only its low byte is ever consulted.
+ * A keyframe list that says what happens outside its own range, and what an empty list evaluates
+ * to.
  */
 export interface LoopAnimation<T extends Keyframe> extends Animation<T> {
-  default: number
-  flags: WrapFlags
+  /** What the list evaluates to with no keyframes at all, and nothing else. */
+  fallback: number
+
+  /** What the curve does before its first key. */
+  before: WrapMode
+
+  /** What the curve does after its last key. */
+  after: WrapMode
+
+  /**
+   * The stored word's high byte, which nothing consults. Present only when non-zero, which no
+   * retail list is, so a file that sets it still round-trips.
+   */
+  reserved?: number
 }
 
 /** A scalar animated on both axes: outer list keyed on sparam, inner lists on particle lifetime. */
@@ -97,24 +105,28 @@ export interface TransformPoint {
 /**
  * The three order bytes a transform opens with. `alchemy.dll` packs them into one word as nibbles
  * (`0x62439f0`), copies it and writes it back, and **never evaluates it**: the builder's rotation
- * order is fixed. Retail carries only {@link DefaultTransformOrder}. See [Transform] in
+ * order is fixed. Retail carries only {@link DEFAULT_TRANSFORM_ORDER}. See [Transform] in
  * ALCHEMY.md.
  */
 export type TransformOrder = [number, number, number]
 
 /** The order bytes every retail transform carries, and `alchemy.dll`'s own default (`0x435`). */
-export const DefaultTransformOrder: Readonly<TransformOrder> = [4, 3, 5]
+export const DEFAULT_TRANSFORM_ORDER: Readonly<TransformOrder> = [4, 3, 5]
+
+/** The nine curves of an animated transform, which the file stores all together or not at all. */
+export interface TransformCurves {
+  position: TransformPoint
+  rotation: TransformPoint
+  scale: TransformPoint
+}
 
 /**
- * Animated transform. The curves are all present or all absent; absent is the identity, which is
- * what the fourth header byte records (`0x80` with curves, `0x00` without) and what the writer
- * derives it from.
+ * Animated transform. Absent `curves` is the identity, which is what the fourth header byte records
+ * (`0x80` with curves, `0x00` without) and what the writer derives it from.
  */
-export interface Transform {
+export interface AnimatedTransform {
   order: TransformOrder
-  position?: TransformPoint
-  rotation?: TransformPoint
-  scale?: TransformPoint
+  curves?: TransformCurves
 }
 
 /** Reads a scalar keyframe: key then value, two floats. */
@@ -196,20 +208,28 @@ export function writeEaseAnimation<T extends Keyframe>(
 }
 
 /**
- * Reads a looped keyframe list: a fallback value, the {@link WrapFlags} governing keys outside the
- * list's own range, a count, then that many keyframes. The counts here are 16-bit, unlike an eased
- * list's.
+ * Reads a looped keyframe list: a fallback value, the 16-bit word holding the two {@link WrapMode}s
+ * that govern keys outside the list's own range, a count, then that many keyframes. The counts here
+ * are 16-bit, unlike an eased list's.
  * @param read Reader for one keyframe, which fixes the element type.
  */
 export function readLoopAnimation<T extends Keyframe>(
   view: BufferView,
   read: (view: BufferView) => T,
 ): LoopAnimation<T> {
-  return {
-    default: view.readFloat32(),
-    flags: view.readUint16(),
-    keyframes: readArray(view, read, view.readUint16()),
+  const fallback = view.readFloat32()
+  const word = view.readUint16()
+  const keyframes = readArray(view, read, view.readUint16())
+  const animation: LoopAnimation<T> = {
+    fallback,
+    before: word & 0xf,
+    after: (word >> 4) & 0xf,
+    keyframes,
   }
+
+  if (word >> 8) animation.reserved = word >> 8
+
+  return animation
 }
 
 /**
@@ -223,8 +243,10 @@ export function writeLoopAnimation<T extends Keyframe>(
   const view = BufferView.allocate(
     Float32Array.BYTES_PER_ELEMENT + Uint16Array.BYTES_PER_ELEMENT * 2,
   )
-    .writeFloat32(animation.default)
-    .writeUint16(animation.flags)
+    .writeFloat32(animation.fallback)
+    .writeUint16(
+      ((animation.reserved ?? 0) << 8) | ((animation.after & 0xf) << 4) | (animation.before & 0xf),
+    )
     .writeUint16(animation.keyframes.length)
 
   return BufferView.join(view, writeArray(animation.keyframes, write))
@@ -303,41 +325,41 @@ const CURVES = 0x80
  * Reads animated transform: three signed order bytes, a byte whose sign bit alone says whether
  * nine curves follow (`0x62280a0`), then those curves. The other seven bits are never read.
  */
-export function readTransform(view: BufferView): Transform {
+export function readTransform(view: BufferView): AnimatedTransform {
   const order: TransformOrder = [view.readInt8(), view.readInt8(), view.readInt8()]
 
   if ((view.readUint8() & CURVES) === 0) return { order }
 
   return {
     order,
-    position: readTransformPoint(view),
-    rotation: readTransformPoint(view),
-    scale: readTransformPoint(view),
+    curves: {
+      position: readTransformPoint(view),
+      rotation: readTransformPoint(view),
+      scale: readTransformPoint(view),
+    },
   }
 }
 
 /**
  * Writes animated transform. The curve byte is derived, as `alchemy.dll`'s writer derives it
- * (`0x6227ef0`): `0x80` and nine curves when all three points are present, `0x00` alone otherwise.
+ * (`0x6227ef0`): `0x80` and nine curves when `curves` is present, `0x00` alone otherwise.
  */
-export function writeTransform(transform: Transform): BufferView {
+export function writeTransform(transform: AnimatedTransform): BufferView {
   const {
     order: [a, b, c],
-    position,
-    rotation,
-    scale,
+    curves,
   } = transform
   const header = BufferView.allocate(Int8Array.BYTES_PER_ELEMENT * 4)
     .writeInt8(a)
     .writeInt8(b)
     .writeInt8(c)
 
-  if (!position || !rotation || !scale) return header.writeUint8(0)
+  if (!curves) return header.writeUint8(0)
 
   return BufferView.join(
     header.writeUint8(CURVES),
-    writeTransformPoint(position),
-    writeTransformPoint(rotation),
-    writeTransformPoint(scale),
+    writeTransformPoint(curves.position),
+    writeTransformPoint(curves.rotation),
+    writeTransformPoint(curves.scale),
   )
 }

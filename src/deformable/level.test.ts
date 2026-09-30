@@ -17,7 +17,7 @@ const geometry = (): Geometry => ({
 
 const level = (fraction: number): Level => ({
   fraction,
-  groups: [{ material: 'skin', type: 'strip', indices: Uint16Array.from([0, 1, 2]) }],
+  groups: [{ material: 'skin', primitive: 'strip', indices: Uint16Array.from([0, 1, 2]) }],
   geometry: geometry(),
 })
 
@@ -85,7 +85,7 @@ describe('readLevels', () => {
   // A level with no fraction has no switch point, which is not a value to invent.
   it('throws when the fractions and the meshes disagree in count', () => {
     const directory = writeLevels([level(1), level(0.5)])
-    directory.setFile('Fractions').data = new Uint8Array()
+    directory.ensureFile('Fractions').data = new Uint8Array()
 
     throws(() => readLevels(new Directory(undefined, [directory])), /fraction/i)
   })

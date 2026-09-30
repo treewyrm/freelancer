@@ -10,14 +10,14 @@ import {
   readMIP,
   readMIPS,
   readTexture,
-  readTextures,
+  readTextureLibrary,
   writeMIP,
   writeMIPS,
   writeTexture,
-  writeTextures,
+  writeTextureLibrary,
 } from './library.js'
 import { readTargaImage, swapBGRtoRGB, writeTargaImage } from './targa.js'
-import type { Texture, TextureType } from './types.js'
+import type { Texture, TextureFormat } from './types.js'
 
 /**
  * These cover what the retail corpus cannot reach. Every DXT chain in the game stops at 4x4 and
@@ -48,7 +48,7 @@ const surface = ({
   width,
   height,
   levels,
-  compression = Compression.NONE,
+  compression = Compression.None,
   bitCount = 32,
   mask = [0xff0000, 0xff00, 0xff, 0xff000000],
   faces = 1,
@@ -60,7 +60,7 @@ const surface = ({
     const blocks = Math.max(1, (w + 3) >> 2) * Math.max(1, (h + 3) >> 2)
 
     sizes.push(
-      compression === Compression.NONE
+      compression === Compression.None
         ? (Math.max(1, w) * Math.max(1, h) * bitCount) >>> 3
         : blocks * (compression === Compression.DXT1 ? 8 : 16),
     )
@@ -79,7 +79,7 @@ const surface = ({
   u32(28, levels)
   u32(76, 32)
 
-  if (compression === Compression.NONE) {
+  if (compression === Compression.None) {
     u32(80, 0x40) // DDPF_RGB
     u32(88, bitCount)
     u32(92, mask[0])
@@ -226,7 +226,7 @@ describe('readMIPS', () => {
     for (const [compression, type] of types) {
       const { file } = surface({ width: 4, height: 4, levels: 1, compression })
 
-      strictEqual(readMIPS(entry('texture', file))?.type, type)
+      strictEqual(readMIPS(entry('texture', file))?.format, type)
     }
   })
 
@@ -248,7 +248,7 @@ describe('readMIPS', () => {
         mask: [...mask] as [number, number, number, number],
       })
 
-      strictEqual(readMIPS(entry('texture', file))?.type, type, type)
+      strictEqual(readMIPS(entry('texture', file))?.format, type, type)
     }
   })
 
@@ -290,8 +290,8 @@ describe('readCUBE', () => {
   it('splits the surface into six faces, each with its own chain', () => {
     const texture = cube({ width: 4, height: 4, levels: 3 })
 
-    strictEqual(texture?.storage, 'cube')
-    strictEqual(texture.type, 'rgba32_8888')
+    strictEqual(texture?.type, 'cube')
+    strictEqual(texture.format, 'rgba32_8888')
     strictEqual(texture.width, 4)
     strictEqual(texture.height, 4)
     strictEqual(texture.faces.length, 6)
@@ -426,7 +426,7 @@ describe('readMIP', () => {
 
     strictEqual(texture?.levels.length, 3)
     strictEqual(texture.width, 4)
-    strictEqual(texture.type, 'rgb24_888')
+    strictEqual(texture.format, 'rgb24_888')
   })
 
   it('takes the vertical origin from the chain rather than assuming bottom-left', () => {
@@ -473,7 +473,10 @@ describe('readTexture', () => {
       targa({ width: 4, height: 4, depth: 24, pixels: new Array(48).fill(0) }),
     )
 
-    strictEqual(readTexture(entry('texture', file, chain))?.type, 'dxt1')
+    const texture = readTexture(entry('texture', file, chain))
+
+    strictEqual(texture?.type, 'image')
+    strictEqual(texture.format, 'dxt1')
   })
 
   it('returns undefined for an entry in no recognised form', () => {
@@ -481,7 +484,7 @@ describe('readTexture', () => {
   })
 })
 
-describe('readTextures', () => {
+describe('readTextureLibrary', () => {
   const library = (...children: Directory[]) =>
     new Directory('', [new Directory('Texture library', children)])
 
@@ -492,35 +495,29 @@ describe('readTextures', () => {
       ]),
     ])
 
-    strictEqual([...readTextures(root)].length, 1)
+    strictEqual(readTextureLibrary(root).length, 1)
   })
 
-  it('yields nothing when there is no library', () => {
-    deepStrictEqual([...readTextures(new Directory(''))], [])
+  it('reads nothing when there is no library', () => {
+    deepStrictEqual(readTextureLibrary(new Directory('')), [])
   })
 
   // The handler used to reference an undefined `name`, so every malformed texture surfaced as a
   // ReferenceError and discarded the real cause along with the AggregateError.
-  it('reports a failing entry by name, and still yields the entries that read', () => {
+  it('reports every failing entry by name, after attempting all of them', () => {
     const good = entry('good', surface({ width: 4, height: 4, levels: 1 }).file)
     const bad = entry('bad', new File('MIPS', new Uint8Array(200)))
 
-    let yielded: string[] = []
-
     throws(
-      () => {
-        for (const texture of readTextures(library(good, bad))) yielded.push(texture.name)
-      },
+      () => readTextureLibrary(library(bad, good, bad)),
       (error: unknown) => {
         ok(error instanceof AggregateError)
-        strictEqual(error.errors.length, 1)
+        strictEqual(error.errors.length, 2)
         strictEqual(error.errors[0].name, 'bad')
         ok(error.errors[0].error instanceof RangeError)
         return true
       },
     )
-
-    deepStrictEqual(yielded, ['good'])
   })
 })
 
@@ -531,7 +528,7 @@ describe('readTextures', () => {
  */
 
 const image = (
-  type: TextureType,
+  format: TextureFormat,
   {
     width = 4,
     height = 4,
@@ -541,8 +538,9 @@ const image = (
   }: { width?: number; height?: number; levels?: number; flip?: boolean; bytes: number[] },
 ): Texture => ({
   name: 'texture',
-  type,
-  storage: type === 'rgb24_888' || type === 'rgba32_8888' ? 'targa' : 'dds',
+  type: 'image',
+  format,
+  storage: format === 'rgb24_888' || format === 'rgba32_8888' ? 'targa' : 'dds',
   width,
   height,
   flip,
@@ -613,7 +611,7 @@ describe('writeDirectDrawSurface', () => {
             width: 4,
             height: 4,
             bitCount: 32,
-            compression: Compression.NONE,
+            compression: Compression.None,
             mask: { r: 0xff0000, g: 0xff00, b: 0xff, a: 0xff000000 },
             surfaces: Array.from({ length: count }, () => [new Uint8Array(64)]),
           }),
@@ -629,7 +627,7 @@ describe('writeDirectDrawSurface', () => {
           width: 4,
           height: 4,
           bitCount: 32,
-          compression: Compression.NONE,
+          compression: Compression.None,
           mask: { r: 0xff0000, g: 0xff00, b: 0xff, a: 0xff000000 },
           surfaces: Array.from({ length: 6 }, (_, face) =>
             face === 3 ? [new Uint8Array(64)] : [new Uint8Array(64), new Uint8Array(16)],
@@ -648,7 +646,7 @@ describe('writeDirectDrawSurface', () => {
           width: 4,
           height: 4,
           bitCount: 32,
-          compression: Compression.NONE,
+          compression: Compression.None,
           mask: { r: 0xff0000, g: 0xff00, b: 0xff, a: 0xff000000 },
           surfaces: [[new Uint8Array(64), new Uint8Array(64)]],
         }),
@@ -663,7 +661,7 @@ describe('writeDirectDrawSurface', () => {
           width: 4,
           height: 4,
           bitCount: 32,
-          compression: Compression.NONE,
+          compression: Compression.None,
           mask: { r: 0, g: 0, b: 0, a: 0 },
           surfaces: [],
         }),
@@ -731,8 +729,8 @@ describe('writeTargaImage', () => {
 })
 
 describe('writeMIPS', () => {
-  it('writes a pixel format each texture type reads back as itself', () => {
-    const sizes: Partial<Record<TextureType, number>> = {
+  it('writes a pixel format each texture format reads back as itself', () => {
+    const sizes: Partial<Record<TextureFormat, number>> = {
       dxt1: 8,
       dxt3: 16,
       dxt5: 16,
@@ -743,11 +741,11 @@ describe('writeMIPS', () => {
       rgba32_8888: 64,
     }
 
-    for (const [type, size] of Object.entries(sizes) as [TextureType, number][]) {
+    for (const [type, size] of Object.entries(sizes) as [TextureFormat, number][]) {
       const texture = image(type, { bytes: [size] })
       const written = readMIPS(entry('texture', writeMIPS(texture)))
 
-      strictEqual(written?.type, type, type)
+      strictEqual(written?.format, type, type)
       strictEqual(written.storage, 'dds', type)
       strictEqual(written.width, 4, type)
       strictEqual(written.height, 4, type)
@@ -761,7 +759,7 @@ describe('writeMIPS', () => {
     throws(() => writeMIPS(image('dxt1', { flip: false, bytes: [8] })), RangeError)
   })
 
-  it('refuses a texture type no pixel format covers', () => {
+  it('refuses a texture format no pixel format covers', () => {
     throws(() => writeMIPS(image('none', { bytes: [8] })), RangeError)
   })
 })
@@ -798,7 +796,7 @@ describe('writeMIP', () => {
 
     const written = readMIP(entry('texture', ...files))
 
-    strictEqual(written?.type, 'rgb24_888')
+    strictEqual(written?.format, 'rgb24_888')
     strictEqual(written.storage, 'targa')
     strictEqual(written.flip, false)
     deepStrictEqual(written.levels, texture.levels)
@@ -807,10 +805,10 @@ describe('writeMIP', () => {
   it('keeps a 32-bit chain 32-bit', () => {
     const texture = image('rgba32_8888', { width: 2, height: 2, bytes: [16] })
 
-    strictEqual(readMIP(entry('texture', ...writeMIP(texture)))?.type, 'rgba32_8888')
+    strictEqual(readMIP(entry('texture', ...writeMIP(texture)))?.format, 'rgba32_8888')
   })
 
-  it('refuses the types a Targa cannot hold', () => {
+  it('refuses the formats a Targa cannot hold', () => {
     for (const type of ['dxt1', 'dxt5', 'rgb16_565', 'rgba16_5551'] as const)
       throws(() => writeMIP(image(type, { bytes: [64] })), RangeError)
   })
@@ -854,7 +852,7 @@ describe('writeAnimatedTexture', () => {
 })
 
 describe('writeTexture', () => {
-  it('picks the on-disk form from storage, not from the texture type', () => {
+  it('picks the on-disk form from storage, not from the texture format', () => {
     const dds = writeTexture({ ...image('rgb24_888', { bytes: [48] }), storage: 'dds' })
     const targa = writeTexture({ ...image('rgb24_888', { bytes: [48] }), storage: 'targa' })
 
@@ -909,17 +907,20 @@ describe('writeTexture', () => {
   })
 })
 
-describe('writeTextures', () => {
+describe('writeTextureLibrary', () => {
   it('builds a library the reader finds again', () => {
     const textures = [
       { ...image('dxt1', { bytes: [8] }), name: 'compressed' },
       { ...image('rgba32_8888', { bytes: [64] }), name: 'raw' },
     ]
 
-    const root = new Directory('', [writeTextures(textures)])
+    const root = new Directory('', [writeTextureLibrary(textures)])
 
     deepStrictEqual(
-      [...readTextures(root)].map(({ name, type }) => [name, type]),
+      readTextureLibrary(root).map((texture) => [
+        texture.name,
+        texture.type === 'animated' ? texture.type : texture.format,
+      ]),
       [
         ['compressed', 'dxt1'],
         ['raw', 'rgba32_8888'],

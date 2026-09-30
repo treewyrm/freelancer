@@ -79,23 +79,44 @@ const DOC_OF: Record<string, string> = {
  */
 const KINDS = new Set(['function', 'interface', 'type', 'enum', 'const', 'class', 'namespace'])
 
-/** Every export of every barrel, resolved through the checker exactly as the document claims. */
-function resolveExports(): Record<string, string[]> {
+/** The checker over every barrel, built once and shared by both suites. */
+const program = (() => {
   const config = ts.readConfigFile(`${root}tsconfig.json`, ts.sys.readFile)
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root)
-  const program = ts.createProgram(
+
+  return ts.createProgram(
     Object.values(ENTRY_POINTS).map((path) => `${root}${path}`),
     parsed.options,
   )
-  const checker = program.getTypeChecker()
+})()
+
+const checker = program.getTypeChecker()
+
+/** The exports of one barrel, by exported name, aliases resolved to what they name. */
+function exportsOf(subpath: string): [name: string, symbol: ts.Symbol][] {
+  const path = ENTRY_POINTS[subpath]!
+  const source = program.getSourceFile(`${root}${path}`)
+  if (!source) throw new Error(`${path} is not in the program`)
+
+  const symbol = checker.getSymbolAtLocation(source)
+  if (!symbol) throw new Error(`${path} has no module symbol`)
+
+  return checker
+    .getExportsOfModule(symbol)
+    .map((entry) => [
+      entry.getName(),
+      entry.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(entry) : entry,
+    ])
+}
+
+/** Every export of every barrel, resolved through the checker exactly as the document claims. */
+function resolveExports(): Record<string, string[]> {
   const result: Record<string, string[]> = {}
 
-  for (const [subpath, path] of Object.entries(ENTRY_POINTS)) {
-    const source = program.getSourceFile(`${root}${path}`)
-    if (!source) throw new Error(`${path} is not in the program`)
-
-    const symbol = checker.getSymbolAtLocation(source)
-    if (!symbol) throw new Error(`${path} has no module symbol`)
+  for (const subpath of Object.keys(ENTRY_POINTS)) {
+    const path = ENTRY_POINTS[subpath]!
+    const source = program.getSourceFile(`${root}${path}`)!
+    const symbol = checker.getSymbolAtLocation(source)!
 
     result[subpath] = checker
       .getExportsOfModule(symbol)
@@ -192,9 +213,160 @@ describe('API documentation', () => {
     const total = Object.values(resolved).reduce((sum, names) => sum + names.length, 0)
     const points = Object.keys(ENTRY_POINTS).length
 
-    deepEqual(
-      document.match(/\*\*(\d+) exports across (\d+) entry points\.\*\*/)?.slice(1),
-      [String(total), String(points)],
-    )
+    deepEqual(document.match(/\*\*(\d+) exports across (\d+) entry points\.\*\*/)?.slice(1), [
+      String(total),
+      String(points),
+    ])
+  })
+})
+
+/**
+ * The naming and shape rules in ARCHITECTURE.md, as far as the checker can see them. Each failure
+ * names the export that breaks the rule, so a new export that drifts is caught where it is added.
+ */
+describe('API conventions', () => {
+  const TYPE_LIKE =
+    ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Enum | ts.SymbolFlags.Class
+
+  /** Whether a symbol is an exported constant: a variable that is neither callable nor a namespace. */
+  const isConstant = (symbol: ts.Symbol): boolean => {
+    if (!(symbol.flags & ts.SymbolFlags.Variable) || symbol.flags & TYPE_LIKE) return false
+
+    const declaration = symbol.valueDeclaration
+    if (!declaration) return false
+
+    return !checker.getTypeOfSymbolAtLocation(symbol, declaration).getCallSignatures().length
+  }
+
+  // C3. Companion objects (`Vector3`, an interface and a const of the same name) are types first
+  // and keep the type's name.
+  it('names exported constants in SCREAMING_SNAKE_CASE', () => {
+    const offenders: string[] = []
+
+    for (const subpath of Object.keys(ENTRY_POINTS))
+      for (const [name, symbol] of exportsOf(subpath))
+        if (isConstant(symbol) && !/^[A-Z][A-Z0-9_]*$/.test(name))
+          offenders.push(`${subpath}: ${name}`)
+
+    deepEqual(offenders, [])
+  })
+
+  // C2. Members are PascalCase, acronyms upper case within them (C4), never SCREAMING_SNAKE.
+  it('names enum members in PascalCase', () => {
+    const offenders: string[] = []
+
+    for (const subpath of Object.keys(ENTRY_POINTS))
+      for (const [name, symbol] of exportsOf(subpath))
+        if (symbol.flags & ts.SymbolFlags.Enum)
+          for (const member of checker.getExportsOfModule(symbol))
+            if (!/^[A-Z][A-Za-z0-9]*$/.test(member.getName()))
+              offenders.push(`${subpath}: ${name}.${member.getName()}`)
+
+    deepEqual(offenders, [])
+  })
+
+  /** Whether a type is `null` or a union with `null` in it. */
+  const hasNull = (type: ts.Type): boolean =>
+    !!(type.flags & ts.TypeFlags.Null) || (type.isUnion() && type.types.some(hasNull))
+
+  // C7. Absence is `undefined` or a missing key; a signature carrying `null` is how one leaks.
+  it('never takes or returns null', () => {
+    const offenders: string[] = []
+
+    for (const subpath of Object.keys(ENTRY_POINTS))
+      for (const [name, symbol] of exportsOf(subpath)) {
+        const declaration = symbol.valueDeclaration
+        if (!declaration) continue
+
+        const type = checker.getTypeOfSymbolAtLocation(symbol, declaration)
+
+        for (const signature of type.getCallSignatures()) {
+          const types = [
+            signature.getReturnType(),
+            ...signature
+              .getParameters()
+              .map((parameter) => checker.getTypeOfSymbolAtLocation(parameter, declaration)),
+          ]
+
+          if (types.some(hasNull)) offenders.push(`${subpath}: ${name}`)
+        }
+      }
+
+    deepEqual(offenders, [])
+  })
+
+  /**
+   * C11. Entry points whose data refers to one another, so that a consumer of one imports the
+   * other into the same file. The foundations — identity, utilities, math, the UTF container —
+   * relate to everything; past them, a pair is listed only where one module's data names or
+   * contains the other's. Adding an entry point means saying what it relates to.
+   */
+  const FOUNDATIONS = ['.', './utility', './math', './utf']
+
+  const RELATED: [string, string][] = [
+    ['./alchemy', './thn/scene'],
+    ['./alchemy', './texture'],
+    ['./animation', './compound'],
+    ['./animation', './rigid'],
+    ['./animation', './deformable'],
+    ['./animation', './thn/scene'],
+    ['./compound', './rigid'],
+    ['./compound', './deformable'],
+    ['./compound', './vmesh'],
+    ['./compound', './surface'],
+    ['./rigid', './vmesh'],
+    ['./rigid', './material'],
+    ['./rigid', './texture'],
+    ['./rigid', './surface'],
+    ['./rigid', './deformable'],
+    ['./vmesh', './material'],
+    ['./vmesh', './deformable'],
+    ['./material', './texture'],
+    ['./material', './deformable'],
+    ['./texture', './deformable'],
+    ['./ini', './ini/text'],
+    ['./ini', './ini/binary'],
+    ['./ini', './ini/save'],
+    ['./ini', './resource'],
+    ['./thn', './thn/text'],
+    ['./thn', './thn/bytecode'],
+    ['./thn', './thn/scene'],
+  ]
+
+  const related = (a: string, b: string): boolean =>
+    FOUNDATIONS.includes(a) ||
+    FOUNDATIONS.includes(b) ||
+    RELATED.some(([x, y]) => (x === a && y === b) || (x === b && y === a))
+
+  it('lists only entry points in its relations', () => {
+    for (const subpath of [...FOUNDATIONS, ...RELATED.flat()])
+      deepEqual(subpath in ENTRY_POINTS, true, subpath)
+  })
+
+  it('gives no two related entry points a type of the same name', () => {
+    const types = new Map<string, string[]>()
+
+    for (const subpath of Object.keys(ENTRY_POINTS))
+      for (const [name, symbol] of exportsOf(subpath))
+        if (symbol.flags & TYPE_LIKE) {
+          // A re-export of the same declaration is one type under two paths, not two types.
+          const declaration = symbol.declarations?.[0]
+          const owners = types.get(name) ?? []
+          owners.push(`${subpath}\0${declaration?.getSourceFile().fileName}:${declaration?.pos}`)
+          types.set(name, owners)
+        }
+
+    const clashes: string[] = []
+
+    for (const [name, owners] of types)
+      for (const [i, a] of owners.entries())
+        for (const b of owners.slice(i + 1)) {
+          const [pathA, fileA] = a.split('\0')
+          const [pathB, fileB] = b.split('\0')
+          if (fileA !== fileB && related(pathA!, pathB!))
+            clashes.push(`${name}: ${pathA}, ${pathB}`)
+        }
+
+    deepEqual(clashes, [])
   })
 })

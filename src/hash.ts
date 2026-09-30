@@ -30,7 +30,7 @@ export type Hash = (value: Hashable, caseSensitive?: boolean) => number
 /** Signature of the two by-key finders. */
 type FindByHash = <T>(
   items: Array<T>,
-  predicate: Hasher<T>,
+  select: Hasher<T>,
   value: Hashable,
   caseSensitive?: boolean,
 ) => T | undefined
@@ -38,13 +38,13 @@ type FindByHash = <T>(
 /** Signature of the two by-key filters. */
 type FilterByHash = <T>(
   items: Array<T>,
-  predicate: Hasher<T>,
+  select: Hasher<T>,
   value: Hashable,
   caseSensitive?: boolean,
 ) => Array<T>
 
 /** Signature of the two by-key setters, which replace in place or append. */
-type SetByHash = <T>(items: T[], predicate: Hasher<T>, value: T, caseSensitive?: boolean) => void
+type SetByHash = <T>(items: T[], select: Hasher<T>, value: T, caseSensitive?: boolean) => void
 
 /**
  * Converts ascii characters in buffer to lower case for case insensitive match.
@@ -98,7 +98,7 @@ export const getObjectId: Hash = (value, caseSensitive = false) =>
  * Finds entry by hash function.
  * @param hash
  * @param items
- * @param predicate
+ * @param select
  * @param value
  * @param caseSensitive
  * @returns
@@ -106,19 +106,19 @@ export const getObjectId: Hash = (value, caseSensitive = false) =>
 const find = <T>(
   hash: Hash,
   items: Array<T>,
-  predicate: Hasher<T>,
+  select: Hasher<T>,
   value: Hashable,
   caseSensitive?: boolean,
 ) => (
   (value = hash(value, caseSensitive)),
-  items.find((item) => hash(predicate(item), caseSensitive) === value)
+  items.find((item) => hash(select(item), caseSensitive) === value)
 )
 
 /**
  * Filters entries by hash function.
  * @param hash
  * @param items
- * @param predicate
+ * @param select
  * @param value
  * @param caseSensitive
  * @returns
@@ -126,12 +126,12 @@ const find = <T>(
 const filter = <T>(
   hash: Hash,
   items: Array<T>,
-  predicate: Hasher<T>,
+  select: Hasher<T>,
   value: Hashable,
   caseSensitive?: boolean,
 ) => (
   (value = hash(value, caseSensitive)),
-  items.filter((item) => hash(predicate(item), caseSensitive) === value)
+  items.filter((item) => hash(select(item), caseSensitive) === value)
 )
 
 /**
@@ -141,19 +141,19 @@ const filter = <T>(
  * matches nothing and appends every time.
  * @param hash
  * @param items
- * @param predicate
+ * @param select
  * @param value
  * @param caseSensitive
  */
 const set = <T>(
   hash: Hash,
   items: T[],
-  predicate: Hasher<T>,
+  select: Hasher<T>,
   value: T,
   caseSensitive?: boolean,
 ): void => {
-  const match = hash(predicate(value), caseSensitive)
-  const index = items.findIndex((item) => hash(predicate(item), caseSensitive) === match)
+  const match = hash(select(value), caseSensitive)
+  const index = items.findIndex((item) => hash(select(item), caseSensitive) === match)
 
   index >= 0 ? items.splice(index, 1, value) : items.push(value)
 }
