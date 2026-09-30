@@ -315,6 +315,7 @@ decisions not worth re-litigating.
 
 | Document                                     | Subject                                                                      |
 | --------------------------------------------- | ---------------------------------------------------------------------------- |
+| [VOCABULARY.md](docs/refs/VOCABULARY.md)     | Every term these documents use, in a sentence or two, linked to where it lives |
 | [UTF.md](docs/modules/UTF.md)                | The container, `Directory` / `File`, hashing, the utilities                  |
 | [MATH.md](docs/modules/MATH.md)              | Vectors, quaternions, matrices, transforms, convex hulls                     |
 | [VMESH.md](docs/modules/VMESH.md)            | Mesh parts, the `VMeshWire` overlay, the mesh library, LOD levels            |

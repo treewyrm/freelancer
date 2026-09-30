@@ -20,7 +20,7 @@ export {
   type EffectLibrary,
   readEffectLibrary,
   writeEffectLibrary,
-  DefaultId,
+  ControlRootId,
   WorldId,
 } from './effect.js'
 

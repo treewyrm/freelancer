@@ -57,6 +57,7 @@ Not tied to one module's source: vocabularies, corpora, and consumer-facing mapp
 
 | Doc                                          | Covers                                                          |
 | --------------------------------------------- | ------------------------------------------------------------------ |
+| [VOCABULARY.md](docs/refs/VOCABULARY.md)     | The project's terms, one or two sentences each, linked to the docs |
 | [THORN.md](docs/refs/THORN.md)               | The `./thn/scene` vocabulary: entities, events, properties         |
 | [ENGINE.md](docs/refs/ENGINE.md)             | INI vocabularies the executables hardcode (`type`, `shape`, …)     |
 | [SECTIONS.md](docs/refs/SECTIONS.md)         | Every section/property the engine reads, with its declared shape   |

@@ -169,11 +169,9 @@ export const entityFlagsOf = (type: EntityTypeName): Enum =>
 /**
  * `flags` on an `ATTACH_ENTITY` or a `START_PATH_ANIMATION`.
  *
- * `PARENT_CHILD` = 64 is the weakest value in this file and worth knowing as such: it rests on one
- * attach that appears as numeric `70` in one script and as `POSITION+ORIENTATION+PARENT_CHILD` in
- * another with the same targets, `target_part` and `offset`, corroborated by the frequencies. It also
- * contradicts the order `thorn.dll`'s flag printer emits. The corpus wins because it measures a
- * value where the printer only suggests an order.
+ * Every value is measured by the corpus and confirmed by the binary's registration routine;
+ * `PARENT_CHILD` = 64 contradicts only the order `thorn.dll`'s flag printer emits, and the printer's
+ * order is not the enum. What each bit does to an attach is in THORN.md, *What `ATTACH_ENTITY` does*.
  */
 export const ATTACH_FLAGS = {
   POSITION: 2,
@@ -188,10 +186,13 @@ export const ATTACH_FLAGS = {
 export const SOUND_FLAGS = { LOOP: 8 } as const
 
 /**
- * Flag names in `thorn.dll` with no measured bit.
+ * Flag names in `thorn.dll` that no retail script writes.
  *
- * Bit 16 is unclaimed in the attach namespace and `PATH_POSITION` and `USE_SCRIPT_DURATION` are the
- * two names left in it. That is suggestive and it is not evidence, so neither is given a value.
+ * Two of them are attach-namespace bits the binary settles: `USE_SCRIPT_DURATION` is bit 1 — the
+ * event never ends, and the parser sets it itself when `duration` is nil unless a `flags` key
+ * replaces it — and `PATH_POSITION` is bit 2, the same bit as `POSITION`. Bit 16 is read by no attach
+ * routine. None of them is in {@link ATTACH_FLAGS}, because no script in the corpus spells one; see
+ * THORN.md's flag table.
  */
 export const UNUSED_FLAGS = [
   'STREAM',

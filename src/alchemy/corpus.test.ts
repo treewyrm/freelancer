@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { list, load, skip, type TreeAsset as Asset } from '#/corpus.js'
 import { getResourceId } from '#/hash.js'
 import BufferView from '#/utility/bufferview.js'
-import { DefaultId, readEffectLibrary, writeEffectLibrary, type NodeInstance } from './effect.js'
+import { ControlRootId, readEffectLibrary, writeEffectLibrary, type NodeInstance } from './effect.js'
 import { colorAt, curveAt, floatAt, transformAt } from './evaluation.js'
 import { getNodeName, readNodeLibrary, writeNodeLibrary, type Node } from './node.js'
 import { DefaultTransformOrder, EaseType } from './animation.js'
@@ -392,9 +392,11 @@ describe('retail asset corpus', { skip }, () => {
   })
 
   describe('ALEffectLib', () => {
-    it('is version 1 or 1.1, the latter carrying four extra floats per effect', () => {
+    it('is version 1 or 1.1, the latter carrying a bounding sphere per effect', () => {
       let plain = 0
       let extended = 0
+      let spheres = 0
+      let sphereSet = 0
 
       for (const asset of assets()) {
         const { version, effects: list } = effects(asset)
@@ -402,23 +404,30 @@ describe('retail asset corpus', { skip }, () => {
         if (version === 1) {
           plain++
           for (const effect of list)
-            deepStrictEqual(
-              [effect.unknown1, effect.unknown2, effect.unknown3, effect.unknown4],
-              [0, 0, 0, 0],
-              asset.path,
-            )
+            deepStrictEqual([effect.center, effect.radius], [{ x: 0, y: 0, z: 0 }, 0], asset.path)
         } else {
           strictEqual(Math.fround(version), Math.fround(1.1), asset.path)
           extended++
 
-          // The fourth component is never negative, which is what a radius would do; the
-          // first three are unconstrained. Consistent with a bounding sphere, unconfirmed.
-          for (const effect of list) ok(effect.unknown4! >= 0, `${asset.path}/${effect.name}`)
+          // A centre and a radius: the radius is never negative, and a centre is never set
+          // without one. Most effects leave all four at zero.
+          for (const effect of list) {
+            const where = `${asset.path}/${effect.name}`
+            const { center, radius } = effect
+
+            spheres++
+            ok(radius! >= 0, where)
+
+            if (radius! > 0) sphereSet++
+            else deepStrictEqual(center, { x: 0, y: 0, z: 0 }, where)
+          }
         }
       }
 
       strictEqual(plain, 95)
       strictEqual(extended, 501)
+      strictEqual(spheres, 972)
+      strictEqual(sphereSet, 272)
     })
 
     // The point of the whole module: alchemy is the one place Freelancer hashes with the
@@ -435,7 +444,7 @@ describe('retail asset corpus', { skip }, () => {
         const folded = new Set(library.map((node) => id(node, false)))
 
         for (const instance of walk(effects(asset).effects.flatMap(({ children }) => children))) {
-          if (instance.crc === DefaultId) {
+          if (instance.crc === ControlRootId) {
             containers++
             continue
           }
@@ -451,14 +460,14 @@ describe('retail asset corpus', { skip }, () => {
       strictEqual(foldedAway, 2691)
     })
 
-    // Every effect hangs its instances off one synthetic root whose CRC names no node.
-    it('gives all but 70 effects a single DefaultId root container', () => {
+    // Every effect hangs its instances off one `Control Root` folder, whose CRC names no node.
+    it('gives all but 70 effects a single control root', () => {
       let withContainer = 0
       let without = 0
 
       for (const asset of assets())
         for (const effect of effects(asset).effects) {
-          const containers = [...walk(effect.children)].filter(({ crc }) => crc === DefaultId)
+          const containers = [...walk(effect.children)].filter(({ crc }) => crc === ControlRootId)
 
           if (!containers.length) {
             without++
@@ -484,7 +493,7 @@ describe('retail asset corpus', { skip }, () => {
 
     // The root is what a placement reaches, so a node beside it stays where the effect started. An
     // appearance there keeps its particles in a frame the placement never moves — a trail.
-    it('leaves appearances beside the DefaultId root in 277 effects', () => {
+    it('leaves appearances beside the control root in 277 effects', () => {
       let effectsBeside = 0
       let beside = 0
       let under = 0
@@ -494,7 +503,7 @@ describe('retail asset corpus', { skip }, () => {
         const appearance = ({ crc }: NodeInstance) => !!types.get(crc)?.endsWith('Appearance')
 
         for (const { children } of effects(asset).effects) {
-          const root = children.find(({ crc }) => crc === DefaultId)
+          const root = children.find(({ crc }) => crc === ControlRootId)
           if (!root) continue
 
           const top = children.filter((instance) => instance !== root && appearance(instance))
@@ -513,7 +522,7 @@ describe('retail asset corpus', { skip }, () => {
     it('is never itself a link target', () => {
       for (const asset of assets())
         for (const instance of walk(effects(asset).effects.flatMap(({ children }) => children)))
-          for (const target of instance.targets) notStrictEqual(target.crc, DefaultId, asset.path)
+          for (const target of instance.targets) notStrictEqual(target.crc, ControlRootId, asset.path)
     })
 
     // Entry identifiers are sparse, unordered handles the authoring tool left behind. Of the

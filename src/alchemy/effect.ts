@@ -1,3 +1,4 @@
+import type Vector3 from '#/math/vector3.js'
 import BufferView from '#/utility/bufferview.js'
 import { assemble, flatten } from '#/utility/hierarchy.js'
 import { readArray, readString, writeArray, writeString } from './misc.js'
@@ -54,9 +55,12 @@ export function writePair({ sourceId, targetId }: Pair): BufferView {
 export const WorldId = 0x8000
 
 /**
- * CRC that makes a container the effect's attachment root: the one node the host's placement
- * matrix reaches. It names no node in the library, is always a root, always carries `flags` 1, and
- * is never either end of a link.
+ * CRC of `"Control Root"`, the name that makes a container the effect's control root: the one node
+ * the host's placement matrix reaches. It names no node in the library, is always a root, always
+ * carries `flags` 1, and is never either end of a link.
+ *
+ * The name ships nowhere in retail. The authoring tool hashed it and wrote only the CRC, so the name
+ * was recovered by searching likely phrases against `0xee223b51`.
  *
  * **The flag makes a container; this CRC makes it the root.** `alchemy.dll` builds any flagged
  * instance as a bare folder without looking its CRC up, and then keeps the folder whose CRC is this
@@ -64,7 +68,7 @@ export const WorldId = 0x8000
  *
  * Signed, because instance CRCs are read as `int32` and would never compare equal otherwise.
  */
-export const DefaultId = 0xee223b51 | 0
+export const ControlRootId = 0xee223b51 | 0
 
 /**
  * One use of a library node within an effect: which node, how it is placed in the instance tree,
@@ -75,7 +79,7 @@ export const DefaultId = 0xee223b51 | 0
  * them in two separate lists.
  */
 export interface NodeInstance {
-  /** Node name CRC (case-sensitive), or {@link DefaultId} on the attachment root. */
+  /** Node name CRC (case-sensitive), or {@link ControlRootId} on the control root. */
   crc: number
 
   /** Non-zero for a container that references no node. */
@@ -103,14 +107,15 @@ export interface NodeInstance {
 /**
  * One named effect: a tree of node instances, hanging off the roots in `children`.
  *
- * The four unknowns are the version-2 floats, carried so a file that has them round-trips.
+ * `center` and `radius` are the version 1.1 bounding sphere: stored by the authoring tool, never read
+ * by the game, and all zero on most effects. See docs/modules/ALCHEMY.md#effect-library-versions.
  */
 export interface Effect {
   name: string
-  unknown1?: number
-  unknown2?: number
-  unknown3?: number
-  unknown4?: number
+  /** Bounding sphere centre, in the effect's space. Version 1.1 only. */
+  center?: Vector3
+  /** Bounding sphere radius; zero where the effect does not state one. Version 1.1 only. */
+  radius?: number
   children: NodeInstance[]
 }
 
@@ -123,20 +128,18 @@ export interface Effect {
  *
  * A target naming an identifier no entry hands out is dropped rather than throwing, since a link is
  * a reference and the format gives no way to tell a stale one from a damaged file.
- * @param version Library version; only past 1 does an effect carry the four unknown floats.
+ * @param version Library version; only past 1 does an effect carry its bounding sphere.
  */
 export function readEffect(view: BufferView, version = 1): Effect {
   const name = readString(view)
-  let unknown1 = 0
-  let unknown2 = 0
-  let unknown3 = 0
-  let unknown4 = 0
+  const center = { x: 0, y: 0, z: 0 }
+  let radius = 0
 
   if (version > 1) {
-    unknown1 = view.readFloat32()
-    unknown2 = view.readFloat32()
-    unknown3 = view.readFloat32()
-    unknown4 = view.readFloat32()
+    center.x = view.readFloat32()
+    center.y = view.readFloat32()
+    center.z = view.readFloat32()
+    radius = view.readFloat32()
   }
 
   const entries = readArray(view, readEntry, view.readInt32())
@@ -171,7 +174,7 @@ export function readEffect(view: BufferView, version = 1): Effect {
     },
   )
 
-  return { name, unknown1, unknown2, unknown3, unknown4, children }
+  return { name, center, radius, children }
 }
 
 /**
@@ -181,7 +184,7 @@ export function readEffect(view: BufferView, version = 1): Effect {
  * the rest are numbered into the gaps left over — retail's handles are sparse and unordered, and
  * renumbering them would still load but would no longer round-trip. Entries go out in each
  * instance's recorded `sort` order, which is the order the file had them in.
- * @param version Library version; only past 1 are the four unknown floats written.
+ * @param version Library version; only past 1 is the bounding sphere written.
  */
 export const writeEffect = (effect: Effect, version = 1): BufferView => {
   const pairs: Pair[] = []
@@ -233,10 +236,10 @@ export const writeEffect = (effect: Effect, version = 1): BufferView => {
   if (version > 1) {
     chunks.push(
       BufferView.allocate(Float32Array.BYTES_PER_ELEMENT * 4)
-        .writeFloat32(effect.unknown1 ?? 0)
-        .writeFloat32(effect.unknown2 ?? 0)
-        .writeFloat32(effect.unknown3 ?? 0)
-        .writeFloat32(effect.unknown4 ?? 0),
+        .writeFloat32(effect.center?.x ?? 0)
+        .writeFloat32(effect.center?.y ?? 0)
+        .writeFloat32(effect.center?.z ?? 0)
+        .writeFloat32(effect.radius ?? 0),
     )
   }
 

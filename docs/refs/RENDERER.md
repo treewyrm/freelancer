@@ -602,12 +602,13 @@ Four resolution rules, each of which produces a working renderer that draws the 
   names are defined in more than one file and 111 of those disagree**, so 219 references land on a
   name whose meaning depends on load order, and the consumer's load order is what settles them.
   Resolving one file at a time hides that rather than avoiding it.
-- **`flags` decides whether an instance names a node; `DefaultId` decides where the effect is
+- **`flags` decides whether an instance names a node; `ControlRootId` decides where the effect is
   placed.** An instance with `flags` set is a container, built without looking its CRC up. The
-  container whose CRC is `0xee223b51` is the effect's **attachment root**, and the placement matrix
+  container whose CRC is `0xee223b51`, the hash of `Control Root`, is the effect's **control
+  root**, and the placement matrix
   the host gives the effect is applied to that node alone. Retail sets both on all 1,143 containers,
   so either test recognizes one. See
-  [ALCHEMY.md](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-defaultid-makes-it-the-root).
+  [ALCHEMY.md](../modules/ALCHEMY.md#two-fields-two-jobs-flags-makes-a-container-controlrootid-makes-it-the-root).
 - **Place the root, not the effect.** Nodes under the root move with the placement; a node at the
   top level beside it does not. Particles are stored in their appearance's frame, so an emitter
   under the root and its appearance beside it leave a trail: every birth comes out where the emitter
@@ -748,12 +749,12 @@ orientation rule.
 
 ### 9.7 Culling
 
-Nothing in an effect states a bound. The four version-1.1 `Effect` floats are plausibly a centre and
-radius — `unknown4` is never negative and ranges to 56, the other three are unconstrained in sign —
-but this is inference and the reading is unconfirmed
-([ALCHEMY.md § TODO](../modules/ALCHEMY.md#todo)). It is also the only per-effect volume the format offers, so a
-renderer that wants to cull effects must either test that reading or derive a bound from the
-emitters.
+A version 1.1 `Effect` carries a bounding sphere — `center` in the effect's space and `radius`
+([ALCHEMY.md](../modules/ALCHEMY.md#effect-library-versions)) — but
+**only 272 of 972 effects set it, and the game culls on none of it**: it tests a sphere at the
+effect's position with the `radius` of its `[EffectType]` in `FX/effect_types.ini`. A renderer can
+frame or cull on the stated sphere where it is non-zero, and must derive a bound from the emitters
+everywhere else — which is most of the time, and every explosion.
 
 ## 10. Checklist
 

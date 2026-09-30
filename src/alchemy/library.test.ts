@@ -2,7 +2,7 @@ import { deepStrictEqual, strictEqual } from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
-import { DefaultId, type EffectLibrary } from './effect.js'
+import { ControlRootId, type EffectLibrary } from './effect.js'
 import { writeNodeLibrary, type NodeLibrary } from './node.js'
 import { PropertyType } from './property.js'
 import { hasAlchemy, readAlchemy, writeAlchemy, type Alchemy } from './library.js'
@@ -27,11 +27,9 @@ const effects: EffectLibrary = {
   effects: [
     {
       name: 'fx_test',
-      unknown1: 0,
-      unknown2: 0,
-      unknown3: 0,
-      unknown4: 0,
-      children: [{ crc: DefaultId, flags: 1, sort: 0, id: 7, children: [], targets: [] }],
+      center: { x: 0, y: 0, z: 0 },
+      radius: 0,
+      children: [{ crc: ControlRootId, flags: 1, sort: 0, id: 7, children: [], targets: [] }],
     },
   ],
 }
@@ -134,7 +132,7 @@ describe('readAlchemy', () => {
     strictEqual(effect?.name, 'fx_test')
     deepStrictEqual(
       effect.children.map(({ crc }) => crc),
-      [DefaultId],
+      [ControlRootId],
     )
   })
 })

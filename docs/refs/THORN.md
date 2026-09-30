@@ -12,12 +12,15 @@ Every row carries a provenance mark, because the sources disagree.
 | ---------- | --------------------------------------------- | ------------------------------------------------------------------------------------- |
 | **dll**    | `EXE/thorn.dll`'s string table                | that a name *exists* — nothing about its value or use                                 |
 | **binary** | `thorn.dll`'s **global-registration routine** | what the Lua global that name reads *holds*                                           |
+| **code**   | `thorn.dll`'s parser, event classes and engine | what the engine *does* with a value — which transform it writes, when, in what order |
 | **corpus** | the 1,506 retail scripts                      | that a name is *used*, how, and — against the numeric export form — what it *equals* |
 | **guide**  | the author's *Freelancer THN Scripting Guide* | what a thing is *for*; explicitly part guesswork                                      |
 
 dll and binary are the same file and not the same claim: the string table proves a name was compiled
 in, the registration routine proves what THORN pushes when a script reads it. A name can be
-registered twice, in which case only the last write survives.
+registered twice, in which case only the last write survives. **code** is the same file again, read
+further: the routines that consume a value, cited by address. It outranks the guide wherever the two
+describe the same thing.
 
 A value is recorded where the corpus measures it or the registration routine sets it, and the two are
 noted separately where both apply. Where the guide and a measurement disagree, the measurement wins.
@@ -146,27 +149,41 @@ The `SPATIAL` / `LIT_AMBIENT` collision is decidable because the two never appea
 type, so decoding a numeric entity flag is the one place the typed layer consults the entity's
 `type`.
 
-**`ATTACH_ENTITY` and `START_PATH_ANIMATION` `flags`** (corpus, every bit also binary):
+**`ATTACH_ENTITY` and `START_PATH_ANIMATION` `flags`** (values corpus, every bit also binary;
+meanings code, for `ATTACH_ENTITY` — [What `ATTACH_ENTITY` does](#what-attach_entity-does) has the
+composition, `P` the parent frame and `rel` the child's frame relative to it at the attach's start):
 
-| Name                   | Bit | Guide's description              |
-| ---------------------- | --- | -------------------------------- |
-| `POSITION`             | 2   | follow the parent's position     |
-| `PATH_POSITION`        | 2   | *unused in retail*               |
-| `ORIENTATION`          | 4   | inherit the parent's orientation |
-| `LOOK_AT`              | 8   | orient towards the parent        |
-| `ENTITY_RELATIVE`      | 32  | —                                |
-| `PARENT_CHILD`         | 64  | —                                |
-| `ORIENTATION_RELATIVE` | 128 | —                                |
+| Name                   | Bit | What it does on an `ATTACH_ENTITY`                                                                                   |
+| ---------------------- | --- | -------------------------------------------------------------------------------------------------------------------- |
+| `USE_SCRIPT_DURATION`  | 1   | the event **never ends**. Set by the parser itself when `duration` is nil, unless a `flags` key replaces it           |
+| `POSITION`             | 2   | writes the child's position every update: `P.t + offset`                                                             |
+| `PATH_POSITION`        | 2   | *unused in retail*; the same bit                                                                                     |
+| `ORIENTATION`          | 4   | writes the child's orientation every update: `P.R`                                                                   |
+| `LOOK_AT`              | 8   | aims the child's `front` axis at `P.t + offset`, `up` toward the scene's up — **only when `ORIENTATION` is clear**   |
+| —                      | 16  | read by no attach routine                                                                                            |
+| `ENTITY_RELATIVE`      | 32  | `offset` is in the parent's axes, `P.R · offset`, for `POSITION` and `LOOK_AT`                                       |
+| `PARENT_CHILD`         | 64  | rigid: `child = P · rel`, `POSITION`/`ORIENTATION` choosing which half is written; `offset` and the other bits unread |
+| `ORIENTATION_RELATIVE` | 128 | with `ORIENTATION`: `P.R · rel.R` in place of `P.R`, keeping the child's starting rotation relative to the parent    |
 
 `PARENT_CHILD` = 64 contradicts the order `thorn.dll`'s flag printer emits, which would put
 `ORIENTATION_RELATIVE` at 64. The printer's order is not the enum; the registration routine is.
+
+The guide's three readings — "follow the parent's position", "inherit the parent's orientation",
+"orient towards the parent" — are right as far as they go. What it missed: `offset` is in scene axes
+unless `ENTITY_RELATIVE`, `LOOK_AT` yields to `ORIENTATION`, and `PARENT_CHILD` replaces the whole
+rule.
+
+**`START_PATH_ANIMATION` reads the same bits differently** (code): `POSITION` places the object at
+the path's point plus `offset` in the *path's* frame, `ORIENTATION` takes the path's own orientation
+or, with `LOOK_AT`, aims along it; `LOOK_AT` without `ORIENTATION` and `ENTITY_RELATIVE` are unread.
 
 **`START_SOUND` `flags`**: `LOOP` = 8.
 
 **Registered but never used by any retail script** (binary): `STREAM` = 4, `FOG_PROPS_REMOVED` = 32,
 `PATH_POSITION` = 2, `USE_SCRIPT_DURATION` = 1. `PATH_POSITION` collides with `POSITION` and `STREAM`
 with `LIT_DYNAMIC` — the namespaces really are separate — and bit 16 stays unclaimed in the attach
-namespace.
+namespace. `USE_SCRIPT_DURATION` is written by no script and still in effect: it is the bit the
+parser sets on any event without a `duration` (code).
 
 ## The registry is closed
 
@@ -187,12 +204,19 @@ they hold (binary):
 | `PROPERTY_ANIM` | 0     | registered beside the flag sets; no key in retail takes it                  |
 | `ADD_PATH`      | 6     | shares the attach-flag namespace's spare region                             |
 | `LOOKAT_ENTITY` | 8     | collides with `LOOK_AT`, so plainly a different namespace                   |
-| `STOP`          | 21    | the three below are consecutive and far above every other value —           |
-| `STOP_IK`       | 22    | not flags, and not in either enum's range. An event **sub**-action, perhaps |
-| `START`         | 23    | but nothing measures it                                                     |
+| `STOP`          | 21    | as an `action`, **dropped**: the parser makes no event for it (code)        |
+| `STOP_IK`       | 22    | likewise dropped                                                            |
+| `START`         | 23    | as an `action`, **an alias** the parser rewrites (code) — see below         |
 
-21 through 23 sits just past the event enum's 0–19. Do not read that as "events 21–23" — the gap at
-20 says the guess is unforced, and no script exercises any of them. See [TODO](#todo).
+21 through 23 sits just past the event enum's 0–19, and the parser treats them as actions: before its
+per-action switch it rewrites `START` to `START_SOUND` when the event's target is a `SOUND` entity and
+to `START_MOTION` otherwise, and anything left outside 1–19 — `STOP`, `STOP_IK`, 0, 20 — is released
+without an event. No script exercises any of the three. Whether `STOP` and `STOP_IK` mean something
+outside the `action` slot is still open — see [TODO](#todo).
+
+The same pass rewrites one retail action: a `START_PATH_ANIMATION` whose second target is not a
+`MOTION_PATH` — an entity of type 1 to 8 — is parsed as an `ATTACH_ENTITY`. Every retail path
+animation targets a `MOTION_PATH`, so the rewrite never fires on retail data.
 
 ## Properties
 
@@ -310,6 +334,113 @@ Eleven curve types are registered; retail uses two. The other nine are dll only:
 | `floor_height`                                                                           | float                | `START_FLR_HEIGHT_ANIM`                                                         | dll, corpus, guide |
 | `strid`, `user_event_string`                                                             | —                    | `SUBTITLE`, `USER_EVENT`                                                        | dll                |
 | `percent1`, `percent2`, `loop`, `ik_id`                                                  | —                    |                                                                                 | dll                |
+
+`time` and `duration` are seconds in the script and **integer milliseconds** in the engine: the parser
+multiplies by 1000 and truncates (code, `0x6f25400`). A missing `duration` sets flag bit 1,
+`USE_SCRIPT_DURATION`, which on an attach, a connect or a prop anim means the event never ends.
+
+## What `ATTACH_ENTITY` does
+
+All code, read out of `thorn.dll`'s `ATTACH` event class (vtable `0x6f5b30c`), the engine that runs
+it, and the host routines it calls in `Freelancer.exe`. Addresses are VAs at the image bases,
+`0x06f20000` for `thorn.dll` and `0x00400000` for the decrypted `Freelancer.exe`.
+
+**Notation.** A frame is `F = [R | t]`, applied as `F(v) = R·v + t`; `A · B` applies `B` first;
+`inverse([R | t]) = [Rᵀ | −Rᵀ·t]`. This is `x86math.dll`'s own convention — rotation row-major,
+translation after it — which THORN calls for every product. An entity's frame is in **scene space**,
+the frame the whole scene is placed with; for a scene nobody places it is world space, and a host
+frame handed back (a hardpoint's) is taken out of world space by `inverse(S)`. The game never places
+THORN's scene frame — it keeps its own in the host — so in practice scene space is world space.
+
+**The parent frame `P`**, computed afresh at every update (`0x6f47c30`):
+
+| `target_type` | Parent entity                | `P` |
+| ------------- | ---------------------------- | --- |
+| `ROOT`        | any                          | the parent's own frame; a `target_part` beside it is ignored |
+| `HARDPOINT`   | `COMPOUND` or `DEFORMABLE`   | the hardpoint's frame: its `[R \| t]` relative to the part that owns it, composed onto that part's world (`Freelancer.exe` `0x451b90`, `0x452730`). The name is matched **ignoring case** — `HpEngine02` and `hpengine02` are one hardpoint — and the last duplicate wins; a name not found leaves the parent's own frame |
+| `PART`        | `COMPOUND` or `DEFORMABLE`   | on a `DEFORMABLE`, the named bone's frame, ignoring case; on a `COMPOUND`, only `"root"` or `""` resolve — to the root's frame — and any other name leaves the parent's own frame |
+| `HARDPOINT`, `PART` | anything else          | the parent's own frame |
+
+**At the attach's start** it records `rel = inverse(P) · child`, the child's frame relative to the
+parent at that instant — whatever the flags, though only `PARENT_CHILD` and `ORIENTATION_RELATIVE`
+read it — and writes nothing.
+
+**At every update**, with `o = offset`, or `P.R · offset` under `ENTITY_RELATIVE`:
+
+```
+if PARENT_CHILD:
+    POSITION     → child.t = (P · rel).t
+    ORIENTATION  → child.R = (P · rel).R
+else:
+    POSITION     → child.t = P.t + o
+    ORIENTATION  → child.R = P.R, or (P · rel).R = P.R · rel.R under ORIENTATION_RELATIVE
+    else LOOK_AT → child.R = lookAt(P.t + o − child.t, front, up)   unless that vector is zero
+```
+
+Position is written before orientation. The common cases: `POSITION|ORIENTATION` is
+`child = [P.R | P.t + offset]`; with `ENTITY_RELATIVE` it is `child = P · [I | offset]`, the offset
+riding in the parent's axes; `POSITION` alone moves the child and leaves its orientation alone.
+
+**`offset`, `up`, `front`** (defaults `(0, 0, 0)`, `Y_AXIS`, `NEG_Z_AXIS`; an `offset` with a nil
+component is taken as zero):
+
+| Key      | Read by                           | Frame |
+| -------- | --------------------------------- | ----- |
+| `offset` | `POSITION`, `LOOK_AT`             | scene axes, or the parent's under `ENTITY_RELATIVE`; not read under `PARENT_CHILD` |
+| `up`     | `LOOK_AT` only                    | the child's local axis that leans toward the scene's up |
+| `front`  | `LOOK_AT` only                    | the child's local axis that points at the target |
+
+So the near-universal `up = Y_AXIS, front = NEG_Z_AXIS` is no extra rotation — not because it is
+the identity, but because nothing but `LOOK_AT` builds a rotation from them.
+
+**`lookAt(d, front, up)`** (`0x6f2e440`) is the rotation `R` with `R·front = f` and `R·up = u`,
+right-handed, where `f = normalize(d)` and `u = normalize(U − (U·f)·f)` for `U` the scene entity's
+`up` axis. Within `|U·f| > 0.99` of the pole it switches reference: `u = s × f` with
+`s = −σ(front)·σ(up) · normalize(W − (W·f)·f)`, `W = U × F`, `F` the scene's `front` axis and `σ` the
+sign of an axis name. Every retail scene says `up = Y_AXIS, front = Z_AXIS`, so `U = Y` and `W = X`.
+The rule was fitted to the routine run under emulation, exactly, for all 24 `front`/`up` pairs and all
+24 scene axis pairs.
+
+**Timing.**
+
+- Before its `time` an attach does nothing.
+- From `time` to `time + duration` it rewrites the child at every update. Updates happen at every
+  event's start and end instant as well as at the end of each engine step, so a large step misses
+  none of them.
+- At the end it writes once more, at exactly `time + duration`, and stops. **Nothing is undone**:
+  the child keeps its last transform, and does not snap back or detach.
+- Within one instant the engine orders its active events so that every event acting on an entity
+  runs after the events of that entity's parent, however long the chain. On a single entity they run
+  by action number, then start order. Chains therefore resolve with no frame of lag. When two attaches
+  on one child are active together, the later-started one's writes win.
+
+**The clock** advances by a millisecond delta; there is no evaluate-at-time. A forward step visits
+every start and end inside it in order, so one step from 0 to *T* reaches the same state as any
+sequence of smaller steps. A backward step drops every running event and replays from 0 without
+restoring any entity, so a scrubbing evaluator reproduces THORN by replaying from 0 to *T* with those
+breakpoints.
+
+### The neighbours
+
+- **`CONNECT_HARDPOINTS`** is computed by the host, not THORN. At its start THORN hands the event —
+  both targets, `hardpoint`, `parent_hardpoint` — to the first target's compound control, and at its
+  end asks for a disconnect (`0x6f48389`, `0x6f48413`). The host (`Freelancer.exe` `0x44fdd0`) finds
+  the part owning each named hardpoint, ignoring case, and links the object's part under the
+  target's so that `childPart = parentPart · H_parent_hp · inverse(H_child_hp)` — the two hardpoints
+  coincide — until the event ends. Against an attach at a `HARDPOINT`: the attach puts the child's
+  *origin* at the parent's hardpoint, the connect puts the child's *hardpoint* there.
+- **`START_PSYS`** asks the effect to start at `time` and to stop when `duration` elapses; the
+  duration does nothing else. Stopping **kills** the effect at once (`Freelancer.exe` `0x5574a0`):
+  particles do not live out, so `duration` is the effect's visible life.
+- **A `PSYS` entity is placed like any other**: an attach's writes go to the host as a world
+  position, then a world orientation. The host caches both and hands the effect `[R | p]` at its next
+  advance, as the placement override on its `DefaultId` root (`0x45403c`), so an effect trails its
+  attach by one engine step. It never reads `psysprops.sparam` and starts every effect at its default
+  `sparam`, so a `sparam` set before `START_PSYS` is lost.
+- **`START_PSYS_PROP_ANIM`** takes the last `sparam` set on the entity as its start value and moves
+  it to `psysprops.sparam` over `duration`, as `from + (to − from)·u`, `u` being elapsed over
+  duration — linear and unclamped — or the event's `param_curve`. A zero duration is an instant set.
+  A second target that is itself a `PSYS` supplies `to` from its own current `sparam` instead.
 
 ## `userprops` is not THORN's
 
@@ -504,12 +635,15 @@ registered types: `FreeFormPCurve` (4,802) and `CatmullRomPCurve` (43).
 Pending observation in the running game.
 
 - **What `event_flags` means.** Bits 1, 2 and 128, with 128 dominant on both `START_MOTION` and
-  `START_IK`. The corpus never varies anything else while varying this. *Experiment*: flip a bit on a
+  `START_IK`. The corpus never varies anything else while varying this. The attach, connect and
+  `PSYS` events never read it (code: none of their routines touches the event's `+0x34`). *Experiment*: flip a bit on a
   `START_MOTION` in a scene that plays and watch the animation. Not the same question as the flag
   *values*, which the registration routine settles — this is what the engine does with them.
-- **What `STOP` = 21, `STOP_IK` = 22 and `START` = 23 are for.** Registered, never used, fitting none
-  of the tables above. *Experiment*: issue one as an `action`; a `nil` result would say they are
-  vestigial.
+- **What `STOP` = 21 and `STOP_IK` = 22 are for, outside the `action` slot.** As actions they are
+  settled — dropped by the parser, and `START` = 23 is an alias for `START_SOUND` or `START_MOTION`
+  (code; see [The registry is closed](#the-registry-is-closed)). Their names are referenced only by
+  the registration routine (`4f77`, `4f8f`, `4fa4`). *Experiment*: none left in the script; only a
+  host that reads the globals could use them.
 - **Whether `PROPERTY_ANIM`, `ADD_PATH` and `LOOKAT_ENTITY` do anything.** Same shape, same
   experiment.
 

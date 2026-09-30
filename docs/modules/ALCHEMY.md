@@ -368,7 +368,11 @@ Every rule below is ported from retail `alchemy.dll`, which evaluates in three p
   The sparam level above blends the results in float, and its `Auto` compares component sums.
 - **A looped curve takes its tangents exactly as stored** — the loader never recomputes them
   (`0x6227a20`). On keys shared by several keyframes the last of them wins, and an out-tangent whose
-  bits are all set steps rather than bends (`0x6246987`); no retail keyframe carries one.
+  bits are all set steps rather than bends (`0x6246987`); no retail keyframe carries one. The test
+  compares the word with `0xFFFFFFFF` and lives only in the span routine: a linear after-wrap runs
+  along the last out-tangent unchecked (`0x6246c7a`), so a stepping last keyframe gives NaN past the
+  last key, and the wrapper returns it as is (`0x62430e0`). Any other NaN is not a step, and it poisons
+  its span.
 
 Keyframe lookup for the eased levels comes from the math module: `at(keyframes, key)` returns
 `{ start, end, span }`, where `span` is the normalized position between the two keyframes.
@@ -419,7 +423,7 @@ The two 6s once counted here are the table's seventh entry, `AutoInverse`.
 
 ```ts
 interface NodeInstance {
-  crc: number      // CRC of the referenced node name, case-sensitive; DefaultId on the attachment root
+  crc: number      // CRC of the referenced node name, case-sensitive; ControlRootId on the control root
   flags: number    // non-zero marks a container that references no node
   sort: number     // serialization order
   id?: number      // on-disk entry identifier
@@ -429,10 +433,8 @@ interface NodeInstance {
 
 interface Effect {
   name: string
-  unknown1?: number // float32, version > 1 only
-  unknown2?: number
-  unknown3?: number
-  unknown4?: number
+  center?: Vector3 // float32 × 3, version > 1 only: bounding sphere centre, effect space
+  radius?: number // float32, version > 1 only: 0 where not stated
   children: NodeInstance[]
 }
 
@@ -445,7 +447,7 @@ interface EffectLibrary {
 Each effect is serialized as:
 
 1. Name string
-2. Four `float32` unknowns (version > 1 only)
+2. The bounding sphere, `center` then `radius`, four `float32` (version > 1 only)
 3. `int32` entry count + flat `Entry[]` array
 4. `int32` pair count + flat `Pair[]` array
 
@@ -457,7 +459,7 @@ Instances form a tree via `children`; cross-tree links — an appearance bound t
 `targets`, serialized as the separate flat `Pair` records. Walking only `children` finds the nodes
 and none of the pairings.
 
-### Two fields, two jobs: `flags` makes a container, `DefaultId` makes it the root
+### Two fields, two jobs: `flags` makes a container, `ControlRootId` makes it the root
 
 **Both fields matter, and they decide different things.** `alchemy.dll`'s effect build
 (`0x621efbc`–`0x621f0a0`) reads each entry and branches on `flags` alone:
@@ -468,23 +470,38 @@ and none of the pairings.
 - **`flags` non-zero** — a bare `FxNode` is made by class name, which the DLL's own messages call a
   **folder** ("couldn't create instace of folder"). The CRC is not looked up, so any value builds.
 
-Then, for a folder only, **the CRC is compared with `0xee223b51`** (`0x621f07e`). The folder that
-matches is kept as the effect's **attachment root** (the effect's `+0x18`, set at `0x621f2c9`), and
-it is the one node the host's placement reaches: the effect's matrix setter (`0x621f610`) hands a
-placement matrix to that folder and to nothing else. What hangs from it moves with the placement;
-**a node beside it, at the top level, does not.** An effect with no such folder hands the placement
-to every node instead.
+Then, for a folder only, **the CRC is compared with `0xee223b51`**, the hash of `Control Root`
+(`0x621f07e`). A match writes the folder's id over whatever an earlier match wrote (`0x621f088`),
+with no test for one, so **the last matching folder in entry order** is kept as the effect's
+**control root** (the effect's `+0x18`,
+set at `0x621f2c9`). It is the one node the host's placement reaches: the effect's matrix setter
+(`0x621f610`) hands a placement matrix to that folder and to nothing else. What hangs from it moves
+with the placement; **a node beside it, at the top level, does not.** An effect with no such folder
+hands the placement to each **top-level** instance instead — the setter walks the first `+0x4`
+entries, the count of those whose parent is the world (`0x621f30e`) — and what hangs from them
+follows.
 
 So a container carrying some other CRC is still a container, but the effect it sits in loses its
-root. Its nodes then take the placement one by one rather than through one parent. Neither case
-occurs in retail, where flag and CRC coincide on every instance
-([Corpus](#the-container-instance)), so a reader that recognizes the container by either field
-gets retail right. A writer has to set both.
+root. Its nodes then take the placement one by one rather than through one parent. **A second root
+is a plain folder**: only the last one in entry order is the root, and what hangs from an earlier one
+is not placed, exactly as though it sat beside the root. None of these cases occurs in retail, where
+flag and CRC coincide on every instance and no effect has two ([Corpus](#the-container-instance)), so
+a reader that recognizes the container by either field gets retail right. A writer has to set both,
+on one folder.
 
 Because retail never writes any other flag value, whether the field is a bitfield or an enum is
 untested. The DLL tests it against zero and nothing else.
 
 The constant is written `0xee223b51 | 0` because instance CRCs are read with `readInt32`.
+
+### The root's name was recovered, not read
+
+`0xee223b51` is `getResourceId('Control Root', true)`: two capitalized words and one space. The name
+appears nowhere in retail. None of the strings in the executables, the DLLs, or any file under
+`DATA` hashes to it, and `alchemy.dll` holds only the constant, at its one compare. The authoring tool
+hashed the name and wrote just the CRC. The name was found by hashing pairs of words about the node's
+role, about 590,000 candidates, so the odds of a chance match were about 1 in 7,000. It also names
+exactly what the folder does.
 
 ### Entry identifiers are not derivable
 
@@ -531,8 +548,8 @@ implementation detail. Reading those INIs is the consumer's.
 | `Blending`           | interface | `{ source: BlendingMode, target: BlendingMode }`.                                                  |
 | `BlendingMode`       | enum      | Blend factor, which is `D3DBLEND` verbatim.                                                        |
 | `colorAt`            | function  | `(animation: AnimatedColor, p, t): Vector3`                                                        |
+| `ControlRootId`      | const     | CRC of `Control Root`, which makes a container the root a placement reaches.                       |
 | `curveAt`            | function  | `(animation: AnimatedCurve, p, t): number`                                                         |
-| `DefaultId`          | const     | CRC that makes a container the effect's attachment root, the node a placement reaches.             |
 | `DefaultTransformOrder` | const  | The order bytes every retail transform carries, and `alchemy.dll`'s own default (`0x435`).         |
 | `ease`               | function  | `(type: EaseType, a, b, t): number`                                                                |
 | `EaseAnimation`      | interface | An `Animation` with an `easing` type.                                                              |
@@ -631,11 +648,12 @@ one or two each. `FX/EXPLOSIONS/gf_small_damage.ale`'s `gf_small_damage_smoke2.a
 Across the 6,648 instances, `flags` takes only the values 0 (5,505 times) and 1 (1,143 times), every
 flagged instance carries `0xee223b51`, and no unflagged one does. The two conditions coincide
 perfectly, and each does its own job in the DLL: the flag makes the container and the CRC makes it
-the root ([above](#two-fields-two-jobs-flags-makes-a-container-defaultid-makes-it-the-root)).
+the root ([above](#two-fields-two-jobs-flags-makes-a-container-controlrootid-makes-it-the-root)).
 
 The container occurs 1,143 times, always at root, never as either end of a link, and its direct
 children always have `flags` 0; 1,143 of the 1,213 effects have exactly one and the remaining 70 have
-none. No name in any library hashes to `0xee223b51`.
+none. No name in any library hashes to `0xee223b51`, the CRC of `Control Root`
+([above](#the-roots-name-was-recovered-not-read)).
 
 **277 of the 1,143 rooted effects keep appearances beside the root rather than under it** — 401
 appearance instances at the top level against 2,122 hanging from a root. The placement never
@@ -644,10 +662,18 @@ move on.
 
 ### Effect library versions
 
-Retail ships two: 1.1 in 501 files and 1 in 95. Only 1.1 carries the four `unknown` floats.
-`unknown4` is never negative anywhere and ranges up to 56, while the other three are unconstrained in
-sign — consistent with a centre and radius bounding the effect, though nothing confirms it. On a
-version 1 library they are absent and read back as zero.
+Retail ships two: 1.1 in 501 files and 1 in 95. Only 1.1 carries four more floats per effect, and they
+are **a bounding sphere: `center` in the effect's space, then `radius`**.
+Retail `alchemy.dll` reads them as one 16-byte block when the version is at least 1.1 (`0x6220462`),
+keeps it on the effect (`+0x34`), and hands it back only to its own library writer (`0x622020d`) —
+**the game never reads it**, and culls an effect on the `radius` of its `[EffectType]` in
+`FX/effect_types.ini` instead. It is the authoring tool's data, and a reader may use it for the same
+thing the tool did: sizing a view.
+
+**272 of the 972 effects in 1.1 libraries set it**, nearly all of them weapons; the rest hold four
+zeros, and a centre is never set without a radius. The radius ranges up to 56. On a version 1 library
+the block is absent and reads back as zero — and the DLL's writer always writes 1.1, so a version 1
+library it saves comes back 1.1 with zeros.
 
 ### Degenerate animation data
 
@@ -804,12 +830,6 @@ authoring residue that carries no meaning:
 
 Everything below reads, writes and round-trips byte for byte, so a one-byte edit is a controlled
 test. Items a `todo` test reports on every run are marked.
-
-### The four `Effect` floats
-
-Version 1.1 libraries carry `unknown1..4` per effect, consistent with a centre and radius bounding
-the effect but unconfirmed. *Experiment*: inflate `unknown4` on a small effect and see whether it
-survives being culled at a distance or off the edge of the screen where it previously vanished.
 
 ### The five unnamed property hashes
 
