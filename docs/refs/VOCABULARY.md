@@ -454,11 +454,16 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
   → [RESOURCE § `RT_HTML`](../modules/RESOURCE.md#rt_html--every-ids_info)
 - **String table** — Win32 strings stored sixteen to a block. An empty slot is a hole and reads as
   absent. → [RESOURCE § `RT_STRING`](../modules/RESOURCE.md#rt_string--every-ids_name)
-- **RDL** — the markup inside every infocard: a flat list of instructions to a text cursor, with no
-  nesting and no closing tags. → [RDL](RDL.md)
+- **RDL** — the markup inside every infocard: XML read by `common.dll` into a flat list of
+  instructions to a text cursor, whatever the nesting. Only `TEXT` needs its closing tag.
+  → [RDL](RDL.md)
 - **`TEXT`**, **`PARA`**, **`TRA`**, **`JUST`** — append text, end a paragraph, change the text
   style, set the alignment. → [RDL § The document](RDL.md#the-document),
   [RDL § `TRA` merges](RDL.md#tra-merges-and-unmasked-bits-keep-their-current-value)
+- **`PUSH`** / **`POP`** — save and restore the defaults a `TRA`'s `def` bits restore to; they do
+  not delimit content. **`POS`** and **`STYLE`** — move the cursor, call up a style registered in
+  code; the reader knows both, no infocard uses either.
+  → [RDL § `PUSH` and `POP`](RDL.md#push-and-pop-set-the-defaults)
 - **Voice bank** — a UTF file under `DATA/AUDIO`, one per speaker, holding one waveform per line of
   dialogue. Entries are named by the object id of the line's `msg`.
   → [AUDIO](AUDIO.md), [AUDIO § Layout](AUDIO.md#layout)
