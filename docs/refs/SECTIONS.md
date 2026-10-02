@@ -331,8 +331,8 @@ makes folds case, so the variants are one key and the choice here is cosmetic.
 | — literal only                                             | 651     |
 | — **no literal anywhere**                                  | **105** |
 | Property names read but never set anywhere in retail       | 180     |
-| — placed into a section                                    | 101     |
-| — section undetermined                                     | 79      |
+| — placed into a section                                    | 104     |
+| — section undetermined                                     | 76      |
 
 280 against [RETAIL.md](RETAIL.md#what-is-in-it)'s 256 is a sweep difference: that figure counts the
 1,251 BINI files alone; this one adds `initialworld.ini`, the three plain-text INIs under `EXE` and
@@ -380,25 +380,23 @@ action by `FuseAction::ReadFuseActionValue`. `fate`, `hardpoint`, `group_name`, 
 
 ## Read, section undetermined
 
-79 property names the engine matches that retail never sets and that no rule could place — almost all
+76 property names the engine matches that retail never sets and that no rule could place — almost all
 from `content.dll`'s mission scripting and the executable's interface widgets, where function
 boundaries are not recoverable. They are read; which section they belong to is open.
 
 `act_pilotparams`, `act_playerform`, `act_playnn`, `act_relocateform`, `act_repchangerequest`,
 `act_setflee`, `act_spawnshiprel`, `active_effect`, `attack_order`, `attacker_rep`, `back_hp`,
 `back_mesh`, `back_mouse`, `back_no_mesh_render`, `back_offset`, `cnd_cmptoplane`,
-`cnd_jumpgateact`, `cnd_npcsystemexit`, `cnd_rumorheard`, `comm_appr`, `const_effect_delay`,
-`descrip_strid`, `destroy_parent`, `formation_position`, `fps`, `hidden`, `ids_info_card`,
-`infocard_ids`, `initial_rep`, `jump_done_effect_nonplayer`, `jump_done_effect_player`,
-`last_base`, `linked_equip`, `max_range`, `min_range`, `multilevel`, `nextb_hp`, `nextb_mesh`,
-`nextb_mouse`, `nextb_no_mesh_render`, `nextb_offset`, `object_pos`, `object_ypr`, `page_size`,
-`pilot_id`, `prevb_hp`, `prevb_mesh`, `prevb_mouse`, `prevb_no_mesh_render`, `prevb_offset`,
-`rect_color`, `rot_speed`, `saved_formation`, `show_rect`, `show_wireframe`, `sizex`,
-`slider_behavior`, `speaker_offset`, `target_toughness_preference`, `target_tradelane`,
-`target_tradelane_name`, `thumb_hp0`, `thumb_hp1`, `thumb_mesh`, `thumb_mouse`,
+`cnd_jumpgateact`, `cnd_npcsystemexit`, `cnd_rumorheard`, `const_effect_delay`, `descrip_strid`,
+`destroy_parent`, `formation_position`, `fps`, `hidden`, `ids_info_card`, `infocard_ids`,
+`initial_rep`, `jump_done_effect_nonplayer`, `jump_done_effect_player`, `last_base`, `linked_equip`,
+`max_range`, `min_range`, `nextb_hp`, `nextb_mesh`, `nextb_mouse`, `nextb_no_mesh_render`,
+`nextb_offset`, `object_pos`, `object_ypr`, `page_size`, `pilot_id`, `prevb_hp`, `prevb_mesh`,
+`prevb_mouse`, `prevb_no_mesh_render`, `prevb_offset`, `rect_color`, `rot_speed`, `saved_formation`,
+`show_rect`, `show_wireframe`, `slider_behavior`, `speaker_offset`, `target_toughness_preference`,
+`target_tradelane`, `target_tradelane_name`, `thumb_hp0`, `thumb_hp1`, `thumb_mesh`, `thumb_mouse`,
 `thumb_no_mesh_render`, `thumb_offset0`, `thumb_offset1`, `tl_attack_chance`,
-`tl_attack_chance_read_in`, `trigger`, `tstamp`, `turret_sound`, `vibe`, `viewsize`,
-`wire_color`
+`tl_attack_chance_read_in`, `trigger`, `tstamp`, `turret_sound`, `vibe`, `viewsize`, `wire_color`
 
 (Five further entries — `*/`, `/*`, `content.dll`, `skipmachinewarnings`, `version` — are
 artefacts of the widened argument search described in
@@ -1059,7 +1057,11 @@ reader treats `visit` as an int.
 `space_costume`, `voice`, `atmosphere_range`, `burn_color`*, `spin`, `star`, `ambient_color`*,
 `ring`*, ~~`260800`~~, ~~`info_ids`~~, `faction`, `ambient`, `size`, ~~`info_card`~~,
 ~~`info_card_ids`~~, **`links`⁺**, **`local_faction`⁺**, **`NavMapScale`⁺**, **`real_pos`⁺**,
-**`strid_name`⁺**
+**`strid_name`⁺**, **`comm_appr`⁺**
+
+`space_costume` is a head, a body and then any number of accessories — no hands; `comm_appr` names a
+whole costume instead and writes the same slot, so whichever comes last wins (`CSolar::ReadObj`,
+`common.dll` `0x62b887b`–`0x62b8a02`).
 
 ### `[Trigger]` ‡
 
@@ -1457,6 +1459,13 @@ Archetype chain: `Explosion`.
 
 `nickname`, `body`, `righthand`*, `lefthand`*, `head`*, **`accessory`⁺**
 
+`body`, `head`, `lefthand` and `righthand` are not matched as names: any other key is looked up,
+case-insensitively, in the part-type table `Body`, `Head`, `LeftHand`, `RightHand` (`common.dll`
+`0x63ebd68`, from `load_costumes` `0x6300b80`), and an unknown one logs *Invalid part type*.
+`accessory` may repeat up to eight times; a ninth overruns the record unchecked. A nickname that
+`atol` reads as non-zero is taken as the id itself rather than hashed — true of every
+`bodyparts.ini` and `costumes.ini` nickname.
+
 ### `[Field]`
 
 154 sections.
@@ -1570,7 +1579,13 @@ Archetype chain: `Ship`.
 
 106 sections.
 
-`nickname`, `mesh`, `hardpoint`, `body_hardpoint`
+`nickname`, `mesh`, `hardpoint`, `body_hardpoint`, **`material_library`⁺**
+
+`hardpoint` is the prop's own hardpoint and `body_hardpoint` the character's (`common.dll`
+`get_accessory_hardpoint` `0x62b6cf0`, `get_character_hardpoint` `0x62b6d00`).
+`material_library` may repeat, each line appended in order and loaded with the prop
+(`load_accessory` `0x62ffef0`). Accessories ignore the `[Skeleton]`, `[DetailSwitchTable]` and
+`[PetalAnimations]` grouping the other parts take; see [COSTUME.md](COSTUME.md#accessories).
 
 ### `[Commodity]`
 
@@ -1588,7 +1603,7 @@ Archetype chain: `Commodity`.
 
 104 sections.
 
-`nickname`, `mesh`
+`nickname`, `mesh`, **`multilevel`⁺**
 
 ### `[AsteroidBillboards]` ‡
 
@@ -1631,7 +1646,7 @@ Archetype chain: `Commodity`.
 
 88 sections.
 
-`nickname`, `mesh`
+`nickname`, `mesh`, **`multilevel`⁺**
 
 ### `[asteroid]`
 
@@ -2277,7 +2292,12 @@ Archetype chain: `CloakingDevice`.
 
 7 sections.
 
-`switch`
+`switch`, **`fovx`⁺**, **`sizex`⁺**
+
+`DetailSwitchTable::read_from_ini` (`common.dll` `0x62feec0`). `switch` rows are appended in file order
+and looked up assuming the percentage descends. `fovx` is stored halved, defaulting to 40; `sizex`
+defaults to 1280 and is read but never used. Every part listed after a table takes it until the next;
+how a level's fraction becomes a distance is in [DEFORMABLE.md](../modules/DEFORMABLE.md#level-fractions).
 
 ### `[lens_flare]`
 
@@ -2298,11 +2318,19 @@ Archetype chain: `CloakingDevice`.
 
 `anim`
 
+Each header starts a fresh list that every part after it takes (`load_bodyparts` `0x6300500`), and
+**nothing reads the lists back**: `bodypart::get_petal_anims` has no caller in any retail binary. The
+scripts a character plays are found by name across the `.anm` files the global `[Animations]` lists.
+
 ### `[Skeleton]`
 
 7 sections.
 
 `sex`, **`nomotion`⁺**
+
+`sex` is `none`, `male` or `female` (0, 1, 2; anything else is 0), and every part listed after it takes
+it until the next `[Skeleton]`. Retail's hands are all in `none` groups. `nomotion` is read only to
+log that it is obsolete.
 
 ### `[BuzzPassByBlock]` ‡
 
@@ -2329,7 +2357,7 @@ Archetype chain: `CloakingDevice`.
 
 6 sections.
 
-`nickname`, `mesh`
+`nickname`, `mesh`, **`multilevel`⁺**
 
 ### `[MetaBehavior]`
 
@@ -2349,7 +2377,7 @@ Archetype chain: `CloakingDevice`.
 
 6 sections.
 
-`nickname`, `mesh`
+`nickname`, `mesh`, **`multilevel`⁺**
 
 ### `[Thruster]`
 

@@ -223,31 +223,35 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **`Bone to root`** — a bone's bind transform, stored inverted: it maps root space into bone space.
   Read it; do not invert it. → [RENDERER § 8](RENDERER.md#8-deformable-models)
 - **Bind pose** / **rig** — a body's `Cons` chain is the animation rig and is not its bind pose; for
-  heads and hands the two coincide.
+  heads and hands the two coincide. The game only ever poses the chain.
   → [DEFORMABLE § The chain is not the bind pose](../modules/DEFORMABLE.md#the-chain-is-not-the-bind-pose)
 - **Detached bone** — a bone no `Cmpnd` part claims. It carries one fixed hardpoint naming the host
   hardpoint it sits on, and is the seam between costume pieces.
   → [DEFORMABLE § Detached bones](../modules/DEFORMABLE.md#detached-bones)
 - **Skeleton** (`Skeleton/Name`) — names the `.cmp` whose animation library drives the model.
   → [DEFORMABLE § Layout](../modules/DEFORMABLE.md#layout)
-- **`Lod Bits`** — one bit per detail level on each bone: whether the bone takes part at that level.
+- **`Lod Bits`** — one bit per detail level on each bone; no retail binary reads it.
   → [DEFORMABLE § Lod Bits](../modules/DEFORMABLE.md#lod-bits)
-- **Fractions** — one float per detail level of a `.dfm`. The distances they stand for come from the
-  INI that places the character. → [DEFORMABLE § Level fractions](../modules/DEFORMABLE.md#level-fractions)
-- **UV bone** — facial animation on heads: a bone's translation slides eye and mouth UVs across a
-  sprite sheet. → [DEFORMABLE § The UV bone](../modules/DEFORMABLE.md#the-uv-bone)
-- **Costume** — a body, a head and two hands joined when loaded. `bodyparts.ini` declares the
-  pairing, and this library does not interpret it. → [COSTUME](COSTUME.md)
-- **Host** / **child** (costume) — the body is the host; heads and hands are its children.
-  → [COSTUME § The pieces and the seats](COSTUME.md#the-pieces-and-the-seats)
-- **Seat** — the host hardpoint a child's detached bone names.
-  → [COSTUME § The seam is a detached bone](COSTUME.md#the-seam-is-a-detached-bone-and-it-names-its-own-seat)
-- **Seam** — the child's bone slot for its detached bone. The host drives it, and it is the identity
-  at rest. → [COSTUME § Composing](COSTUME.md#composing-the-seam-is-the-hosts-both-halves-of-it)
-- **Connector** — a hardpoint only the host offers, such as `hp_neck`, that the seam binds to.
-  → [COSTUME § The pieces and the seats](COSTUME.md#the-pieces-and-the-seats)
-- **Rig family** — a group of bodies that seat the same heads exactly.
-  → [COSTUME § The seam frame is per rig family](COSTUME.md#the-seam-frame-is-per-rig-family-and-that-is-why-the-bind-is-captured-not-read)
+- **Fractions** — one float per detail level of a `.dfm`. Each is looked up in the part's
+  `[DetailSwitchTable]` for its distance. → [DEFORMABLE § Level fractions](../modules/DEFORMABLE.md#level-fractions)
+- **UV bone** — eye animation on heads: the eye bone's rotation offsets the texture of the `eye*`
+  face groups. → [DEFORMABLE § The UV bone](../modules/DEFORMABLE.md#the-uv-bone)
+- **Costume** — a body, a head and two hands joined when loaded, plus up to eight accessories.
+  `costumes.ini` declares the pairing, and this library does not interpret it. → [COSTUME](COSTUME.md)
+- **Host** / **child** (costume) — the body is the host, being first; heads and hands are its
+  children. → [COSTUME § How the game joins them](COSTUME.md#how-the-game-joins-them-one-rule-shared-names)
+- **Join** — the game links every later bone carrying a hardpoint name to the first bone carrying it,
+  so that the two hardpoints coincide. No name is hardcoded.
+  → [COSTUME § How the game joins them](COSTUME.md#how-the-game-joins-them-one-rule-shared-names)
+- **Attachment** — a shared name on the child's root bone, such as `hp_head`: the join that places
+  the whole child. → [COSTUME § The pieces and the seats](COSTUME.md#the-pieces-and-the-seats)
+- **Seat** — the host hardpoint a child's detached bone names, such as `hp_neck`.
+  → [COSTUME § The seam is a detached bone](COSTUME.md#the-seam-is-a-detached-bone-linked-like-any-other)
+- **Seam** — the child's bone slot for its detached bone, joined to its seat like any other bone; a
+  seam the host does not seat is destroyed.
+  → [COSTUME § The seam is a detached bone](COSTUME.md#the-seam-is-a-detached-bone-linked-like-any-other)
+- **Rig family** — a group of bodies that seat the same heads exactly; the two match `[Skeleton]
+  sex`. → [COSTUME § The seam frame is per rig family](COSTUME.md#the-seam-frame-is-per-rig-family-and-the-game-shows-it)
 
 ## Animation
 
@@ -527,8 +531,7 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
   `.sur` wraps. → [SURFACE § Relationship to IVP](../modules/SURFACE.md#relationship-to-ivp)
 - **MAXLancer**, **Librelancer**, **LancerEdit** — community tools cited for comparison. Each
   document notes where one agrees with the game and where it does not.
-  → [COSTUME § What Librelancer does](COSTUME.md#what-librelancer-does),
-  [COSTUME § What MAXLancer does](COSTUME.md#what-maxlancer-does-and-where-it-differs)
+  → [COSTUME § What Librelancer and MAXLancer do](COSTUME.md#what-librelancer-and-maxlancer-do)
 - **Discovery** — a large mod, used as a second corpus where retail never exercises a feature.
   → [RESOURCE § More than seven libraries](../modules/RESOURCE.md#more-than-seven-libraries)
 

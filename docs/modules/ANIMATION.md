@@ -292,6 +292,24 @@ The engine loads it beside the maps (`0x66114a4`) and hands it back through `IAn
 `START_FLR_HEIGHT_ANIM` — so it states how far off the floor of a room the character stands. A
 renderer with no room has nothing to apply it against.
 
+### A character script binds to the whole character
+
+A character is four `.dfm` files joined into one ([COSTUME.md](../refs/COSTUME.md)), and a script is
+started on the joined whole, never on one of them. `Freelancer.exe` plays a script through
+`deformable2.dll`'s `IDeformable +0x1c` (`0x65f1f00` → `0x65f41d0`) with the character's handle, a
+script name, a start time, a transition time, a time scale, a weight and flags — no part
+(`Freelancer.exe` `0x4522ee` for a THN `START_MOTION`, `0x4cb54b` for the comm window). Several scripts
+run at once in separate slots — four on a comm character, 32 on a THN actor — and each moves only the
+bones its joint maps name. So body, facial and hand scripts stay apart by what they name, not by
+where they are bound: a scene starts `Sc_MLHAND_*` and `Sc_dx_*` as separate motions on one actor, and
+the comm window starts a body unfold and a head script on the same handle.
+
+Which file a script comes from is a name lookup, not a property of the model. At start-up the game
+opens every `.anm` that `bodyparts.ini`'s `[Animations]` lists and maps each script name to its file
+(`Freelancer.exe` `0x4354e0` → `0x435100`); a script is loaded by name when first wanted and released
+when nothing plays it. The per-group `[PetalAnimations]` lists are read and never used
+([SECTIONS.md](../refs/SECTIONS.md#petalanimations)).
+
 ### A revolute angle is an angle, and one bit cannot say so
 
 `Angle` (`0x01`) carries a revolute joint's angle in radians **or** a prismatic joint's offset in

@@ -245,6 +245,74 @@ describe('deformable corpus', { skip }, () => {
     strictEqual(most, 4)
   })
 
+  /**
+   * What the game's skinning would disagree with, and retail never contains.
+   *
+   * `deformable2.dll` slices each point's influences cumulatively from `Point_bone_count` and never
+   * reads `Point_bone_first`, ignores the weight of a lone influence, and blends two to four without
+   * normalising (DEFORMABLE.md, *Skinning*). A file where any of that mattered would look different
+   * in game from what a weighted-sum renderer draws; none does.
+   */
+  it('lays every chain out the way the game reads it, with weights that need no correcting', () => {
+    let gaps = 0
+    let lone = 0
+    let loneOff = 0
+    let unnormalised = 0
+
+    for (const { model } of models())
+      for (const { geometry } of model.levels) {
+        const { boneFirst, boneCount, boneWeights } = geometry
+
+        let at = 0
+
+        for (let i = 0; i < boneCount.length; i++) {
+          const count = boneCount[i]!
+
+          if (boneFirst[i] !== at) gaps++
+
+          let sum = 0
+
+          for (let k = 0; k < count; k++) sum += boneWeights[at + k]!
+
+          if (count === 1) {
+            lone++
+            if (Math.abs(boneWeights[at]! - 1) > 1e-6) loneOff++
+          } else if (Math.abs(sum - 1) > 1e-6) unnormalised++
+
+          at += count
+        }
+      }
+
+    strictEqual(gaps, 0, 'Point_bone_first is the running sum of Point_bone_count')
+    strictEqual(lone, 239_931)
+    strictEqual(loneOff, 0, 'a lone influence always weighs one, to float precision')
+    strictEqual(unnormalised, 0)
+  })
+
+  /**
+   * The cursor `deformable2.dll` binds, links, destroys and skins up to is the last compound bone
+   * plus one, not the bone count. A detached bone after it would never be linked or skinned.
+   */
+  it('lists every detached bone ahead of the last compound bone', () => {
+    const late: string[] = []
+
+    for (const { path, model } of models()) {
+      let last = -1
+
+      model.bones.forEach((bone, index) => {
+        if (bone.name !== undefined) last = index
+      })
+
+      model.bones.forEach((bone, index) => {
+        if (bone.name === undefined && index > last) late.push(`${path}: ${bone.filename}`)
+      })
+
+      if (model.bones[0]?.name === undefined) late.push(`${path}: root is detached`)
+    }
+
+    deepStrictEqual(late, [])
+  })
+
   /** A face group's indices address the element list, which is what `Point_indices` builds. */
   it('indexes the element list from every face group', () => {
     const wrong: string[] = []

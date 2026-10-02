@@ -9,10 +9,10 @@ import { readDeformableModel, type DeformableModel } from './model.js'
  * How the four files of a character meet — the figures [COSTUME.md](../../docs/refs/COSTUME.md) rests on.
  *
  * Nothing here reads a costume declaration: which head goes on which body is an INI this library
- * does not interpret. What is asserted is what the *geometry* says — that every child names the host
- * hardpoint it wants, that the seam carries real weight, and that a child's stored seam frame is a
- * record of one rig family rather than a constant, which is the whole reason a composer must take
- * the seam's pose from the host.
+ * does not interpret. What is asserted is what the *geometry* says — that the game's join walk, which
+ * links every later bone carrying a hardpoint name to the first one, only ever lands on a child's root
+ * or on a detached bone; that the seam carries real weight; and that a child's stored seam frame is a
+ * record of one rig family rather than a constant, which is the gap the game shows at rest.
  */
 
 interface Piece {
@@ -150,7 +150,7 @@ describe('costume', { skip }, () => {
     strictEqual(seams.filter((seam) => seam.name === 'hp_neck').length, 104)
   })
 
-  it('splits into two rig families, which is why the seam pose belongs to the host', () => {
+  it('splits into two rig families, which is the gap the game shows at rest', () => {
     // A head mated at `hp_head` predicts where its seam hardpoint lands in the body's space. Bodies
     // fall into exactly two groups by how many heads that prediction is exact for — and no third.
     const exactness = new Set<number>()
@@ -182,5 +182,61 @@ describe('costume', { skip }, () => {
       '60,33,0',
       'two families and the bodies that belong to neither',
     )
+  })
+
+  it('carries no hardpoint name twice in one file', () => {
+    for (const piece of pieces) {
+      const names = piece.model.bones.flatMap((bone) =>
+        bone.hardpoints.map((hardpoint) => hardpoint.name.toLowerCase()),
+      )
+
+      strictEqual(new Set(names).size, names.length, piece.path)
+    }
+  })
+
+  it('shares names with a body only on a root or a detached bone, so no link is ever refused', () => {
+    // The join walk parents every later holder of a name under the first, and the engine refuses a
+    // child that already has a chain parent. Tally which bone of the child each shared name is on.
+    const tally = new Map<string, number>()
+
+    const roleOf = (index: number, bone: Bone) =>
+      index === 0 ? 'root' : bone.name === undefined ? 'detached' : 'chained'
+
+    for (const body of bodies)
+      for (const child of [...heads, ...hands])
+        child.model.bones.forEach((bone, index) => {
+          for (const hardpoint of bone.hardpoints) {
+            const name = hardpoint.name.toLowerCase()
+
+            if (!body.seats.has(name)) continue
+
+            const key = `${name}:${roleOf(index, bone)}`
+
+            tally.set(key, (tally.get(key) ?? 0) + 1)
+          }
+        })
+
+    strictEqual(
+      [...tally]
+        .sort()
+        .map(([key, count]) => `${key}=${count}`)
+        .join(),
+      [
+        'hp_head:root=9048',
+        'hp_lcollarbone:detached=117',
+        'hp_left a:detached=522',
+        'hp_left b:root=522',
+        'hp_neck:detached=9048',
+        'hp_rcollarbone:detached=117',
+        'hp_right a:detached=522',
+        'hp_right b:root=522',
+        'hp_upper torso:detached=126',
+      ].join(),
+    )
+
+    // A head and a hand never share a name, so neither is ever linked to the other.
+    for (const head of heads)
+      for (const hand of hands)
+        for (const name of hand.seats.keys()) strictEqual(head.seats.has(name), false, name)
   })
 })

@@ -559,18 +559,28 @@ the rigid one, so §5 applies unchanged — `getBoneModel` returns the same `Com
   bones gives the identity to 8.88e-16, and skinning every one of the 855,377 drawn vertices with the
   resulting table moves them 3.14e-7 at worst. Points are stored in bind-pose root space.
 
-- **A body's `Cons` chain is not its bind pose, so bind pose is what "rest" means.** For heads and
+- **A body's `Cons` chain is not its bind pose, and the game draws the chain.** For heads and
   hands the constraint chain reproduces the bind pose exactly — 6,543 of 6,543 head bones and 252 of
   252 hand bones — but all 88 bodies disagree, displacing their own points by 0.828 on average and
   4.556 at worst, and not rigidly: pairwise distances change by up to 1.19 on a figure 1.6 tall.
   `br_bartender_body.dfm`'s mesh spans y −0.97..0.63 while its chain lays the skeleton along
-  z −0.10..1.23. A renderer with no animation loaded takes each bone's pose from its own
-  `Bone to root`; composing down the chain draws every body mangled.
+  z −0.10..1.23. `deformable2.dll` only ever poses the chain — a character in game always has a
+  script playing, so the mangled body is never seen. A viewer showing a model with no animation
+  loaded takes each bone's pose from its own `Bone to root` to show it as it was skinned; that is a
+  choice of view, and a bone a playing script does not drive falls back to its joint's rest, not to
+  its bind. See [DEFORMABLE.md](../modules/DEFORMABLE.md#the-chain-is-not-the-bind-pose).
 - **At most 4 influences per point** across all 204 models — a `vec4` of weights and indices. Bones
-  per model reach 86; a character assembles from a head, a body and two hands sharing hardpoints, so
-  budget for the sum. At 86 bones a `mat4` array is 344 vec4s and even a `mat3x4` one is 258 — both
-  past the 256-vec4 floor WebGL2 guarantees for vertex uniforms. Use a uniform block (the guaranteed
-  16 KB holds 256 `mat4`) or a bone texture, not a plain uniform array.
+  per model reach 86. **Each part is skinned against its own table, relative to its own root** —
+  the game draws a head with the head root's world and its bones relative to that
+  ([DEFORMABLE.md](../modules/DEFORMABLE.md#skinning)) — so a character is four tables, not one table
+  of their sum. At 86 bones a `mat4` array is 344 vec4s and even a `mat3x4` one is 258 — both past
+  the 256-vec4 floor WebGL2 guarantees for vertex uniforms. Use a uniform block (the guaranteed 16 KB
+  holds 256 `mat4`, so one part per block range) or a bone texture, not a plain uniform array.
+- **A character is joined by shared hardpoint names, and the seam is the child's own frame.** Every
+  later bone carrying a name the body carries is parented to the body's bone at that hardpoint —
+  the head's root at `hp_head`, its detached neck bone at `hp_neck` — and a detached bone the body
+  does not seat is destroyed. No name needs hardcoding, and nothing is captured at assembly. See
+  [COSTUME.md](COSTUME.md#how-the-game-joins-them-one-rule-shared-names).
 - **Positions and UVs are indexed separately.** A drawn vertex is `Point_indices[i]` paired with
   `UV0_indices[i]`, which lets a UV seam split without splitting the skinning weights. GPUs have one
   index stream, so weld the pairs into unique vertices at load and rewrite the face group indices.

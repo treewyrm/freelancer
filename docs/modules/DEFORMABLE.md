@@ -4,8 +4,12 @@ A character's `.dfm` file holds one skinned mesh per detail level, plus a tree o
 it.
 
 A character is not one file. Body, head and each hand are separate models, each with its own bones,
-mesh, materials and textures, joined at load time through the hardpoints of the bones their
-skeletons share.
+mesh, materials and textures, joined at load time through the hardpoint names their bones share —
+see [COSTUME.md](../refs/COSTUME.md).
+
+What the game does with a `.dfm` is read out of retail `EXE/deformable2.dll` (image base
+`0x65f0000`, reached through the DACOM interface `IDeformable`, vtable `0x6601228`); addresses below
+are that binary's. The animation side is `engbase.dll`'s — [ANIMATION.md](ANIMATION.md).
 
 ## Layout
 
@@ -66,6 +70,18 @@ equals the position of the bone's `.3db` directory among the root's children, so
 `DeformableModel.bones` is an ordered array and `Index` is derived from position on write rather
 than carried. Reading a model whose two disagree throws.
 
+**The game goes by position and never reads `Index`.** `deformable2.dll` builds its bone table by
+enumerating `*.3db` directories in file order (`0x65f1100`), takes the first as the root
+(`0x65f14b1`), and binds each record to the engine's instance of that bone by a forward-only search in
+the same order (`0x65f14f0`) — so the compound's parts must be instantiated in `.3db` order too, or
+bones are skipped. The table holds 150 bones (`0x65f3898`) and nothing checks the bound.
+
+**The cursor.** After binding, the index of the last bone a `Cmpnd` part claims, plus one, is what
+bounds the hardpoint walk that joins a character, the pass that destroys unjoined bones, and skinning
+(`0x65f5a52`, `0x65f3d0a`, `0x65f6d0e`). A detached bone listed after every compound bone is never
+joined and never skinned — its slot keeps the identity. A writer must keep detached bones ahead of the
+last compound bone; every retail file does.
+
 ### Detached bones
 
 Some bone directories have no `Cmpnd` part: named by no constraint, animated by no script, invisible
@@ -73,14 +89,16 @@ to a reader that walks the compound. Every one carries exactly one fixed hardpoi
 is named `Neck`, `UpperTorso`, `LCollarBone`, `RCollarBone`, `L Wrist` or `R Wrist`, and occupies
 one of the gaps the part numbering leaves.
 
-They are the frame at which a head or a hand meets the body it attaches to. The bone belongs to the
+They are the frame at which a head or a hand meets the body it attaches to. The bone follows the
 host skeleton, so this model does not claim it as a part, but it holds a slot in the bone table and
 `Bone_id_chain` still skins vertices to it. They are carried as bones with no `name`. Dropping them
 unpicks both the attachment and the skin.
 
-**The hardpoint each one carries names the host hardpoint it seats on**, so a composer reads the join
-off the file rather than knowing about necks and wrists. What that means for assembling a character,
-and how far a child's stored seam frame can be trusted, is [COSTUME.md](../refs/COSTUME.md).
+**The hardpoint each one carries names the host hardpoint it seats on.** The game instantiates each
+as a standalone bone (`0x65f1617`) and links it to whichever bone of the host carries the same name —
+the same rule that places the whole head, with no name known to the binary. What that means for
+assembling a character, and what happens to a seam the host does not seat, is
+[COSTUME.md](../refs/COSTUME.md).
 
 ## Geometry
 
@@ -96,32 +114,88 @@ for (let i = boneFirst[p], end = i + boneCount[p]; i < end; i++)
   // boneIds[i] weighted by boneWeights[i]
 ```
 
-`UV1_indices` and `UV1` come as a pair or not at all.
+`UV1_indices` and `UV1` come as a pair or not at all. `deformable2.dll` reads neither — it builds its
+vertex buffer from `UV0` alone — so a character draws with one coordinate set whatever the file holds.
+
+### Skinning
+
+Each bone record holds the engine's world transform for the bone, `W`, and its `Bone to root`, `B`,
+**used as stored** — it is the inverse bind, and nothing inverts it. The skinning matrix is taken
+relative to the part's root (`0x65f1030`), and the mesh is drawn with the root's world (`0x65f740d`):
+
+```
+K(bone) = W(root)⁻¹ · W(bone) · B(bone)        v(world) = W(root) · Σ w · K · v
+```
+
+`W` is always the engine's pose of the compound — the `Cons` chain plus whatever a script has set —
+never the bind pose; see [The chain is not the bind pose](#the-chain-is-not-the-bind-pose).
+
+How the influences of a point combine depends on how many it has (`0x65f6ed9`–`0x65f7031`):
+
+| Influences | Position                                   | Normal                                  |
+| ---------- | ------------------------------------------ | --------------------------------------- |
+| 1          | `K · v` — **the weight is ignored**        | transformed, not renormalised           |
+| 2 – 4      | `Σ w · K · v` — weights not normalised     | blended, then renormalised              |
+| 5 or more  | `w₀ · K₀ · v` — only the first influence   | likewise                                |
+
+**`Point_bone_first` is never read.** The loader zips `Bone_id_chain` with `Bone_weight_chain` and
+slices each point's influences cumulatively from `Point_bone_count` (`0x65f8239`–`0x65f832a`); no
+retail binary contains the name. A file whose first-indices skip or overlap draws differently in game
+from what they say. Retail's never do, and its weights need none of the corrections above
+([Corpus](#corpus)).
+
+A level the caller marks unskinned (the create parameters' skinned-level count, `0x65f2793`) draws
+every bone with the identity — rigidly, at bind.
 
 ### The UV bone
 
-Eleven further files appear on `Mesh0` of every head and nowhere else, always as the complete set.
-One bone is named, its X and Y translation is scaled into a U and V delta, the delta is clamped to a
-min/max pair, and the result offsets the coordinates `UV_vertex_id` lists — whose unshifted values
-`UV_default_list` holds, two floats each.
+Eleven further files appear on `Mesh0` of every head and nowhere else, always as the complete set:
+per UV bone, a bone, a plane distance, an X-to-U and a Y-to-V scale, and a min/max clamp on each
+(`0x65f8480` loads them as one record each).
 
-This is facial animation: the eye and mouth patches slide across a sprite sheet in the diffuse
-texture while the head geometry stays put.
+This is the eyes: **only face groups whose material is the `EyeMaterial` class** — the one
+`deformable2.dll` registers for names matching `^eye*` (`0x65fdfbb`) — take it, and only the first UV
+bone (`0x65f75ca`). It moves no coordinate. Each frame the bone's Z axis, expressed in its parent's
+frame, becomes a **texture offset** for the whole group (`0x6600061`–`0x66001c0`):
 
-`UV_vertex_count` is derived from `UV_vertex_id` rather than carried, and `Face_groups/Count` from
-the group directories the same way.
+```
+d  = R(parent)ᵀ · Z(bone)                  (Z(bone) alone if the bone has no parent)
+du = clamp(X_to_U · d.x · plane, Min_du, Max_du)
+dv = clamp(Y_to_V · d.y · plane, Min_dv, Max_dv)
+uv' = uv + (du, dv)                        skipped when |du| and |dv| are both ≤ 1e-4 before clamping
+```
+
+So an eye looks by sliding its texture as the eye bone turns, while the geometry stays put.
+`UV_vertex_id` and `UV_default_list` are read by no retail binary, and `UV_vertex_count` is loaded and
+unused. `UV_vertex_count` is derived from `UV_vertex_id` rather than carried, and `Face_groups/Count`
+from the group directories the same way.
 
 ### Level fractions
 
 `Fractions` holds one float per `Mesh`, and the counts match in every model, so the fraction is
-carried on the `Level` rather than as a separate array. The distance each fraction stands for comes
-from the INI that places the character.
+carried on the `Level` rather than as a separate array.
+
+`deformable2.dll` loads up to `min(#Fractions, 8, what the caller asks)` levels, taking `Mesh`
+directories in the order it finds them rather than by the digit in their name (`0x65f39b4`–`0x65f3a2e`),
+and hands each level's fraction back to the caller (`0x65f3b7c`). It chooses nothing: the caller passes
+one level index per part on every update (`IDeformable +0x3c`, `0x65f3fd0`), and an index out of range
+hides the part.
+
+The caller is `Freelancer.exe`, and the distance a fraction stands for is the
+`[DetailSwitchTable]` of the part's `bodyparts.ini` group ([SECTIONS.md](../refs/SECTIONS.md#detailswitchtable)):
+`get_switch_distance(fraction × 100)` (`0x443dac`), interpolated linearly between the table's
+`switch = percent, distance` rows and clamped at both ends (`common.dll` `0x62fec00`). Every frame the
+camera's distance is scaled by `adjust_distance` — `tan(fov) / tan(fovx ÷ 2)` against the table's
+`fovx`, 40 by default (`common.dll` `0x62fecb0`, called at `0x445072`) — and **each part independently**
+takes the first level whose distance reaches it, or none (`0x444f90`–`0x445229`). The comm window pins
+every part to level 0 (`0x4cc809`).
 
 ### Lod Bits
 
 One byte per bone, one bit per level. Not a record of which levels reference the bone — bones with
 every bit set appear in no `Bone_id_chain` at all, and retail writes all bits or none, so it reads
-as a permission rather than an index.
+as a permission rather than an index. **No retail binary contains the name**, so the game never reads
+it.
 
 ### Edge angles
 
@@ -130,8 +204,8 @@ into `Points`, angles one `float32` each, descending within a group — the shap
 leaves when it ranks edges by crease sharpness. A handful are slightly negative, as a signed
 dihedral measure gives for a reflex edge.
 
-Nothing is known to read them. They are carried because dropping them shrinks two files. See
-[TODO](#todo).
+`deformable2.dll`, which reads a `.dfm`'s mesh, never names them. They are carried because dropping
+them shrinks two files. See [TODO](#todo).
 
 ## Not modelled
 
@@ -164,10 +238,15 @@ own chain displaces them by 0.828 on average and 4.556 at worst, and not rigidly
 distances change by up to 1.19 on a figure 1.6 tall. `br_bartender_body.dfm` spans y −0.97..0.63
 while the chain lays the skeleton along z −0.10..1.23, a Z-up rig against a Y-up mesh.
 
-The reading is that a body's `Cons` hierarchy is the animation rig — the frame an `.anm`'s joint
-maps drive — while `Bone to root` carries the skin's bind pose, and `pose · inverse(bindPose)`
-reconciles them. A consumer with no animation loaded poses each bone from its own `Bone to root`
-rather than by composing the chain.
+A body's `Cons` hierarchy is the animation rig — the frame an `.anm`'s joint maps drive — while
+`Bone to root` carries the skin's bind pose, and the skinning matrix reconciles them.
+
+**The game always poses the chain.** Every bone's world comes from the engine's instance of the
+`skel_<name>` compound built from `Cmpnd` and `Cons` (`0x65f1363`–`0x65f15f6`), and nothing in
+`deformable2.dll` poses a bone from its bind. A body with no script running is drawn in its chain
+pose, skin displaced as above; in game a character always has one. A consumer that wants the model as
+it was skinned poses each bone from its own `Bone to root` instead — that is a choice of view, not
+what the game draws.
 
 ## API
 
@@ -222,7 +301,10 @@ directories are detached.
 | `Exporter Version` values | 4, all build dates between June and November 2002 |
 
 Influences per point never exceed four: 239,931 at one bone, 117,626 at two, 20,261 at three, 849 at
-four. None has zero, and weights sum to one to `1.08e-7` at worst.
+four. None has zero, and weights sum to one to `1.08e-7` at worst — a lone influence included, so the
+game ignoring its weight changes nothing. In all 1,220 meshes `Point_bone_first` is the running sum of
+`Point_bone_count`, so the game's cumulative slicing reads every chain as the file states it. No
+detached bone is listed after the last compound bone, and every root is a compound bone.
 
 378,667 points are declared and 378,318 are reached. The 349 difference is points no `Point_indices`
 entry names, spread over 134 of the 1,220 meshes. The declared count is `Points` divided by three,
@@ -269,8 +351,10 @@ Lookups fold case, so the engine reads either.
 
 ### Does anything read `Edge_angles`?
 
-Two files carry them on 36 face groups; nothing is known to read them, and the other 202 models do
-without.
+Two files carry them on 36 face groups, and the other 202 models do without. `deformable2.dll`, the
+binary that reads a `.dfm`'s mesh, never names them. `rendcomp.dll` does — its `TriMesh` component
+reads the same `Mesh`/`Geometry`/`Face_groups` layout, edges included — but nothing read so far routes
+a character through `TriMesh`, so the question narrows to whether anything ever does.
 
 The experiment is subtractive. Both files write back byte for byte, so deleting the two files from
 one group and loading the character says whether the engine wants them: if it is a simplifier
@@ -280,12 +364,10 @@ and leaving the guard intact keeps a control.
 
 If nothing reads them they stay carried anyway — round-trip fidelity is the reason they are here.
 
-### The four-level models
-
-`Fractions` runs six entries on 202 models and four on two. What distance each fraction stands for
-comes from the INI that places the character, so how the engine maps a four-entry set onto the same
-distance bands is not derivable here. It wants watching a four-level character switch levels as the
-camera pulls back.
+*(Closed: how a four-entry `Fractions` set maps onto the distance bands. The game looks each level's
+distance up by the fraction's **value**, not its position — `get_switch_distance(fraction × 100)` — so
+the four-level models' `1, 0.8, 0.6, 0.2` take the same table rows as the six-level models' levels of
+those fractions; see [Level fractions](#level-fractions).)*
 
 ## References
 
