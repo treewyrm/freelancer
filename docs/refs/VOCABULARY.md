@@ -175,8 +175,10 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **`.vms`** — a file holding nothing but a mesh library. The game loads `interface.generic.vms`
   without being asked. → [VMESH § The one external reference](../modules/VMESH.md#the-one-external-reference)
 - **Level of detail** (`MultiLevel`, `Level<n>`, `Switch2`) — a rigid part picks one of several
-  meshes by camera distance; `Switch2` holds the breakpoints, and past the last one the part is not
-  drawn. → [VMESH § Levels of detail](../modules/VMESH.md#levels-of-detail),
+  meshes by view depth scaled by the field of view and the part's scale; `Switch2` holds the
+  breakpoints, only their upper ends are read, and past the last one the part is not drawn. An
+  archetype's `LODranges` overwrites `Switch2` entry by entry, and the rest stays the model's.
+  → [VMESH § Levels of detail](../modules/VMESH.md#levels-of-detail),
   [RENDERER § 4](RENDERER.md#4-level-of-detail)
 - **Material animation** (`MaterialAnim`: `MACount`, `MADeltas`, `MAKeys`, `MAFlags`) — a root-level
   directory beside `Cmpnd` that animates a material's UV transform over looping segments.

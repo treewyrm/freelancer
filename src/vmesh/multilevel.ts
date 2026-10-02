@@ -2,45 +2,46 @@ import Directory from '#/utf/directory.js'
 import { readVMeshPart, writeVMeshPart, type VMeshPart } from './part.js'
 
 /**
- * A part's detail levels, switched by camera distance.
+ * A part's detail levels, switched by how large the part is on screen.
  *
- * N levels want N+1 breakpoints, and the ranges are half-open: level `i` covers
- * `[ranges[i], ranges[i+1])`. Past the last breakpoint the part vanishes, which is a state the
- * format has and not an absence to clamp away. **LOD is per part, not per model.**
+ * N levels want N+1 breakpoints, and level `i` ends at `ranges[i + 1]`, inclusive. The game reads
+ * only these upper ends — `ranges[i]` is level `i`'s start for whoever writes the list, never for
+ * the selector. Past the last end the part is not drawn, which is a state the format has and not an
+ * absence to clamp away. **LOD is per part, not per model.**
  */
 export interface MultiLevel {
   type: 'multilevel'
 
   /**
-   * `Switch2`, the N+1 distance breakpoints for N levels. Absent when the directory has no
-   * `Switch2`, which four retail parts leave out — {@link getLevel} then takes the single range
-   * `[0, 1000]` the game assumes.
+   * `Switch2`, the N+1 breakpoints for N levels: the game counts the levels as this list's length
+   * − 1, not from the `Level<n>` directories. Absent when the directory has no `Switch2`, which four retail parts leave
+   * out — the game then has one level and two uninitialised breakpoints, so there is no range to
+   * assume and {@link getLevel} picks nothing.
    */
   ranges?: number[]
 
   levels: VMeshPart[]
 }
 
-/** The breakpoints the game assumes for a `MultiLevel` with no `Switch2`. */
-const DEFAULT_RANGES = [0, 1000]
-
 /**
- * Picks the detail level covering a camera distance.
+ * Picks the detail level the game draws at a metric — `rendcomp.dll`'s selector: the first level
+ * `i` whose upper end `ranges[i + 1]` is at least `metric`.
  *
- * `undefined` past the last breakpoint is the model's cue to vanish, so it is returned rather than
- * clamped away, and the breakpoint list is walked as given — four retail capital ships carry
- * denormal junk mid-list, and sorting it would change which level shows.
+ * `metric` is not a distance. The game computes it as the depth of the part's centre in view space
+ * × tan(fovx / 2) ÷ the largest axis scale of the instance transform, and compares it against the
+ * raw `Switch2` values; an archetype's `LODranges` overwrites those entry by entry before this sees
+ * them, which is the consumer's to apply.
+ *
+ * `undefined` past the last end is the model's cue to vanish, so it is returned rather than
+ * clamped away; it is also returned for a negative metric, and when `ranges` is absent, as the game
+ * leaves that part uninitialised. The breakpoint list is walked as given — four retail capital ships
+ * carry denormal junk mid-list, and sorting it would change which level shows.
  */
-export function getLevel(
-  { ranges = DEFAULT_RANGES, levels }: MultiLevel,
-  distance: number,
-): VMeshPart | undefined {
-  for (let i = 0, l = ranges.length - 1, min: number, max: number; i < l; i++) {
-    min = ranges[i] ?? 0
-    max = ranges[i + 1] ?? Infinity
+export function getLevel({ ranges, levels }: MultiLevel, metric: number): VMeshPart | undefined {
+  if (!ranges || metric < 0) return
 
-    if (distance >= min && distance < max) return levels[i]
-  }
+  for (let i = 0, l = Math.min(ranges.length - 1, levels.length); i < l; i++)
+    if (ranges[i + 1]! >= metric) return levels[i]
 
   return
 }
@@ -50,9 +51,8 @@ export function getLevel(
  * level. `undefined` when the part has no detail levels, so a caller can probe
  * (`readMultiLevel(parent) ?? readVMeshPart(parent)`).
  *
- * An absent `Switch2` leaves `ranges` off rather than filling in the game's default, so the
- * directory is written back without one. Levels stop at the first gap in the numbering rather than
- * being scanned for.
+ * An absent `Switch2` leaves `ranges` off, so the directory is written back without one. Levels stop
+ * at the first gap in the numbering rather than being scanned for.
  */
 export function readMultiLevel(parent: Directory): MultiLevel | undefined {
   const directory = parent.getDirectory('MultiLevel')

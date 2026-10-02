@@ -64,7 +64,7 @@ describe('readMultiLevel', () => {
     strictEqual(readMultiLevel(new Directory('part.3db')), undefined)
   })
 
-  // The game assumes a single 0..1000 range, but that is getLevel's to apply: a directory read
+  // The game leaves such a part uninitialised rather than assuming a range, and a directory read
   // without Switch2 must be written back without one.
   it('leaves ranges off when Switch2 is missing, and writes none back', () => {
     const directory = writeMultiLevel(sample())
@@ -74,8 +74,7 @@ describe('readMultiLevel', () => {
 
     strictEqual('ranges' in value, false)
     strictEqual(writeMultiLevel(value).getFile('Switch2'), undefined)
-    strictEqual(getLevel(value, 999), value.levels[0])
-    strictEqual(getLevel(value, 1000), undefined)
+    strictEqual(getLevel(value, 0), undefined)
   })
 
   // Retail parts carry a MultiLevel holding a single empty LevelN directory and no Switch2 at
@@ -102,22 +101,45 @@ describe('readMultiLevel', () => {
 describe('getLevel', () => {
   const value = sample()
 
-  it('selects the level whose bracket contains the distance', () => {
+  it('selects the first level whose upper end is at least the metric, inclusive', () => {
     strictEqual(getLevel(value, 0), value.levels[0])
-    strictEqual(getLevel(value, 99), value.levels[0])
-    strictEqual(getLevel(value, 100), value.levels[1])
-    strictEqual(getLevel(value, 499), value.levels[1])
-    strictEqual(getLevel(value, 500), value.levels[2])
-    strictEqual(getLevel(value, 999), value.levels[2])
+    strictEqual(getLevel(value, 100), value.levels[0])
+    strictEqual(getLevel(value, 100.5), value.levels[1])
+    strictEqual(getLevel(value, 500), value.levels[1])
+    strictEqual(getLevel(value, 501), value.levels[2])
+    strictEqual(getLevel(value, 1000), value.levels[2])
   })
 
-  it('returns undefined past the last breakpoint', () => {
-    strictEqual(getLevel(value, 1000), undefined)
+  it('returns undefined past the last end', () => {
+    strictEqual(getLevel(value, 1000.5), undefined)
     strictEqual(getLevel(value, 10000), undefined)
   })
 
-  it('returns undefined below the first breakpoint', () => {
+  it('never reads a lower bound', () => {
+    const raised: MultiLevel = { ...value, ranges: [50, 100, 500, 1000] }
+
+    strictEqual(getLevel(raised, 0), raised.levels[0])
+    strictEqual(getLevel(raised, 49), raised.levels[0])
+  })
+
+  it('returns undefined for a negative metric', () => {
     strictEqual(getLevel(value, -1), undefined)
+  })
+
+  it('returns undefined when ranges is absent', () => {
+    strictEqual(getLevel({ type: 'multilevel', levels: value.levels }, 0), undefined)
+  })
+
+  it('walks the list as given, skipping an end the metric passes', () => {
+    const junk: MultiLevel = { ...value, ranges: [0, 100, 1e-40, 1000] }
+
+    strictEqual(getLevel(junk, 200), junk.levels[2])
+  })
+
+  it('stops at the last level the part holds', () => {
+    const short: MultiLevel = { ...value, levels: [level(1)] }
+
+    strictEqual(getLevel(short, 200), undefined)
   })
 
   it('treats a trailing Infinity breakpoint as unbounded', () => {

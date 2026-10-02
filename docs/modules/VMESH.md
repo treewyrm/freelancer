@@ -17,7 +17,7 @@ VMeshLibrary (UTF directory)
   ├─ VMeshPart (UTF directory)  ── alternative to MultiLevel
   │    └─ VMeshRef (UTF file) ── meshId (CRC), slice offsets + counts, bounds
   ├─ MultiLevel (UTF directory) ── alternative to VMeshPart
-  │    ├─ Switch2 (float[] distance breakpoints)
+  │    ├─ Switch2 (float[] level breakpoints, N+1 for N levels)
   │    └─ Level0..N
   │         └─ VMeshPart
   └─ VMeshWire (UTF directory) ── optional, coexists with either
@@ -244,23 +244,37 @@ under-declares the span so the highest-numbered vertex falls outside it — see
 ```ts
 interface MultiLevel {
   type: 'multilevel'
-  ranges?: number[]    // N+1 float distance breakpoints for N levels; absent with no Switch2
+  ranges?: number[]    // N+1 float breakpoints for N levels; absent with no Switch2
   levels: VMeshPart[]  // Level0, Level1, … LevelN-1
 }
 ```
 
-A `MultiLevel` UTF directory holds `Switch2` — a float32 sequence of N+1 camera-distance
-breakpoints — and one `Level<n>` subdirectory per level, each containing a `VMeshPart`. Every retail
-`Switch2` holds exactly one more breakpoint than there are levels, and the writer refuses `ranges`
-that do not.
+A `MultiLevel` UTF directory holds `Switch2` — a float32 sequence of N+1 breakpoints — and one
+`Level<n>` subdirectory per level, each containing a `VMeshPart`. Every retail `Switch2` holds
+exactly one more breakpoint than there are levels, and the writer refuses `ranges` that do not. The
+game counts the levels from `Switch2` alone — its length − 1 (`rendcomp.dll` `0x6c33dd9`) — and then
+loads `Level0…` into those slots.
 
-`Switch2` can be absent — four retail parts leave it out, none with a readable level — and the game
-then assumes the single range `[0, 1000]`. That default is `getLevel`'s to apply: the reader leaves
-`ranges` off, so the directory is written back without a `Switch2` it never had.
+**There is no default range.** `Switch2` can be absent — four retail parts leave it out, none with a
+readable level — and the game then gives the part one level and two uninitialised breakpoints
+(`0x6c33dce`), so nothing can be said about where it draws. The reader leaves `ranges` off, so the
+directory is written back without a `Switch2` it never had. A bare `VMeshPart` with no `MultiLevel`
+is one level over `[0, 1 000 000]` (`0x6c33fe0`).
 
-`getLevel(multiLevel, distance)` returns the part whose range `[ranges[i], ranges[i+1])` contains
-the distance, and `undefined` past the last breakpoint — the model's cue to vanish, not a bug to
-clamp away. LOD is per part, not per model; a large ship's parts switch at different distances.
+**Only the upper ends are read, and they are inclusive.** The game's selector (`rendcomp.dll`
+`0x6c32040`) draws the first level `i` whose end `ranges[i+1]` is at least the metric, and nothing
+past the last end; `ranges[i]` is never read. The metric is not a camera distance but the view-space
+depth of the part's centre × tan(fovx½) ÷ the largest axis scale of the instance transform
+(`0x6c32f14`–`0x6c32f68`), compared against the raw breakpoints. `getLevel(multiLevel, metric)` is
+that selector: `undefined` past the last end — the model's cue to vanish, not a bug to clamp away —
+for a negative metric, and when `ranges` is absent.
+
+What the selector compares against is not always `Switch2`. An archetype's `LODranges`, or a `[LOD]`
+block naming the part, overwrites the part instance's copy **entry by entry**, only as far as the
+INI list reaches, and the remaining breakpoints stay the model's; the INI values are multiplied by
+tan 35° = 0.700208 as they are written (`Freelancer.exe` `0x5c7410`). That mix is the consumer's to
+apply — [SECTIONS.md](../refs/SECTIONS.md#lod) has the list's rules. LOD is per part, not per model;
+a large ship's parts switch at different distances.
 
 ## Mesh library
 
@@ -318,7 +332,7 @@ it.
 
 | Export                | Kind      |                                                                                      |
 | --------------------- | --------- | ------------------------------------------------------------------------------------ |
-| `getLevel`            | function  | Picks the detail level covering a camera distance; `undefined` past the last one.    |
+| `getLevel`            | function  | Picks the level the game draws at a metric; `undefined` past the last end.           |
 | `getMapCount`         | function  | Calculates number of UV maps for the vertex format.                                  |
 | `getMesh`             | function  | `(library: VMeshLibrary, name: Hashable): VMeshData \| undefined`                    |
 | `getMeshDraw`         | function  | Generator — yields one `MeshDraw` per group of a reference, in index order.          |

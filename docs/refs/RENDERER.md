@@ -26,7 +26,7 @@ Where a claim is inference rather than measurement it says so.
 One frame, per model:
 
 1. Walk the `Cmpnd` tree, composing a world transform per part (§5).
-2. Per part, pick a LOD level by camera distance (§4) — that yields one `VMeshRef`.
+2. Per part, pick a LOD level by view depth (§4) — that yields one `VMeshRef`.
 3. Resolve the ref against the mesh library by CRC, and walk its groups. Each group is one draw call
    with its own material CRC (§3).
 4. Bind the material's shader parameters and textures, resolved by CRC against the libraries in the
@@ -292,11 +292,24 @@ separate element buffer.
 
 A rigid part holds either a bare `VMeshPart` or a `MultiLevel` of them:
 
-- `Switch2` holds N+1 breakpoints for N levels; `ranges[0]` is 0 in every retail model. A part with
-  no `Switch2` has no `ranges`, and the game assumes `[0, 1000]`.
-- `getLevel(multiLevel, distance)` returns the level whose `[ranges[i], ranges[i+1])` contains the
-  camera distance, or `undefined` past the last breakpoint — the model's cue to vanish, not a bug to
-  clamp away. It applies the `[0, 1000]` default itself.
+- `Switch2` holds N+1 breakpoints for N levels, and the game takes N from its length − 1, not from
+  the `Level<n>` count (`rendcomp.dll` `0x6c33dd9`); `ranges[0]` is 0 in every retail model. There
+  is no default: a part with no `Switch2` has no `ranges`, and the game gives it one level and two
+  uninitialised breakpoints (`0x6c33dce`). A bare `VMeshPart` gets one level over `[0, 1 000 000]`
+  (`0x6c33fe0`).
+- **Only the upper ends are read, inclusive.** The selector (`rendcomp.dll` `0x6c32040`) draws the
+  first level `i` with `ranges[i+1] ≥ metric`, and nothing past the last end or for a negative
+  metric; `ranges[i]` is never read. The metric is not a distance: it is the view-space depth of the
+  part's centre × tan(fovx½) ÷ the largest axis scale of the instance transform
+  (`0x6c32f14`–`0x6c32f68`), so an object at the edge of the screen switches later than one dead
+  ahead. `getLevel(multiLevel, metric)` is that selector, and returns `undefined` past the last end
+  — the model's cue to vanish, not a bug to clamp away — and when `ranges` is absent.
+- An archetype's `LODranges` (or a `[LOD]` block naming the part) **overwrites `Switch2` entry by
+  entry** when the object is created, only as far as the INI list reaches; the remaining breakpoints
+  stay the model's. The INI values are multiplied by tan 35° = 0.700208 as they are written
+  (`Freelancer.exe` `0x5c7410`) and the `Switch2` values are not, so at the game's 70° field of view
+  an INI value is metres of view depth while a `Switch2` value lasts to 1 / tan 35° ≈ 1.43 times its
+  face value. Applying the list is the consumer's — see [SECTIONS.md](SECTIONS.md#lod).
 - LOD is per part, not per model. Each part carries its own `MultiLevel`, and a large ship's parts
   switch at different distances.
 - Four capital ships carry denormal junk in the middle of `Switch2`. The reader hands the breakpoints

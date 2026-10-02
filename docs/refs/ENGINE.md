@@ -125,19 +125,42 @@ it.
 ## Zone shapes
 
 `common.dll` `.data:18cb80`. `sphere` 1, `ellipsoid` 2, `BOX` 3, `CYLINDER` 4, `RING` 5, `MESH` 6.
-The mixed casing in the table is another sign the compare folds case.
+The mixed casing in the table is another sign the compare folds case: the zone reader matches
+`shape` with `stricmp`, and an unknown name logs `*** WARNING: invalid ZoneShape` and stores 0
+(`common.dll` `0x6336250`). **`RING` is used** — eight times, written `ring`, every one the zone
+an `[Object] ring = zone, ini` builds a planet ring on. Its `size` is outer radius, inner radius and
+full height. `MESH` is never used.
 
-Beware the key: `shape` is set 6,270 times overall and only 5,761 of those are zones. The balance
+Beware the key: `shape` is set 6,270 times overall and only 5,769 of those are zones. The balance
 belongs to other sections — asteroid and nebula exclusion shapes, lens-flare shapes — where the value
 is a model or effect nickname.
+
+Two more zone keys bear on the shapes. `edge_fraction` is clamped to [0, 1] and **defaults to 0**
+(`common.dll` `0x633789a`), so a zone without it has a hard edge. **`sort` is read by nothing** —
+5,754 of the 5,769 zones set it, and neither the zone reader (`0x6337520`–`0x6337e09`) nor any other
+binary takes it as a key.
 
 ## Zone property flags
 
 The one vocabulary here with no table and no literal. `[Zone] property_flags` is a bitfield the file
 writes as a number, so the engine tests bits rather than resolving a name. Searching the whole
 install for any name below returns nothing, in either ASCII or UTF-16. These names are the community
-reading, not recovered from a binary; what the corpus corroborates is the extent, not the names — see
-[Corpus](#zone-property-flags-1).
+reading, not recovered from a binary — but two things in the binaries bear on them, and both agree.
+
+**The top five bits are set by the reader itself.** The zone reader (`common.dll`
+`0x6337520`–`0x6337e09`) ORs `property_flags` into a word that other keys also write: `damage > 0`
+sets `0x40000`, `drag_modifier > 1` sets `0x80000`, a non-zero `interference` sets `0x100000`, and
+`spacedust` and `music` set `0x200000` and `0x400000` — exactly `DAMAGING`, `DRAG_MOD`,
+`SCANNER_MOD`, `DUST` and `MUSIC`. They are derived, not authored, which is why retail almost never
+writes them.
+
+**The nav map's pattern table names the rest by use.** The zone painter (`Freelancer.exe`
+`0x49b9c2`) picks a fill pattern per bit: `0x40` → 0, `0x80` → 1, `0x8000` → 2, `0x1000` → 3,
+`0x2000` → 4, `0x100` → 5, `0x200` → 6, `0x400` → 7, `0x800` → 8, and `0x30000` paints black. The
+six object bits and the two danger bits get patterns of their own, the nebula bit is the one pattern
+tinted — by `property_fog_color`, whose only consumer this is — and the two exclusion bits blank the
+zone out. `common.dll`'s nebula test (`0x6339030`) reads `flags & 0x18000`, the nebula and first
+exclusion bits together. What the corpus adds is the extent — see [Corpus](#zone-property-flags-1).
 
 | Bit        | Name                     | Bit        | Name                     |
 | ---------- | ------------------------ | ---------- | ------------------------ |
@@ -392,8 +415,11 @@ that covers them.
 
 ### Zone shapes
 
-Retail sets 5,761 — `CYLINDER` ×3,307, `SPHERE` ×1,878, `ELLIPSOID` ×361, `BOX` ×215. `RING` and
-`MESH` are never used.
+Retail sets 5,769 — `CYLINDER` ×3,307, `SPHERE` ×1,878, `ELLIPSOID` ×361, `BOX` ×215, `RING` ×8.
+`MESH` is never used. Every `RING` is written lowercase, `ring`, which is why a case-sensitive count
+once made it 5,761 and `RING` unused: `Zone_Br03_ross_ring`, `Zone_Ku02_Fuchu_ring`,
+`Zone_Ku03_Aso_ring`, `Zone_Rh04_Weisser_ring`, `Zone_Ew01_sun_ring`, `Zone_Ew03_gravity_ring`,
+`Zone_Ew05_lower_ring` and `Zone_Ew05_upper_ring`.
 
 ### Zone property flags
 
@@ -414,11 +440,12 @@ Four places where the data speaks to a name, and all four agree with it:
   two zones setting both `damage` and `interference`.
 - **`CRYSTAL_OBJECTS`** is set once, on `zone_Li02_Tahoe_ice_crystal_field`.
 
-The flag is not a gate on the key. `DRAG_MOD`, `DUST` and `MUSIC` are never set by any retail zone,
-yet `drag_modifier`, `spacedust` ×270 and `music` ×166 are authored on zones without them. `damage`
-is the same case from the other side: 173 zones set it and only the two above set `DAMAGING`. The one
-correlation that holds in both directions is `property_fog_color`, which appears 182 times and never
-on a zone without a `property_flags` word.
+The flag is not a gate on the key — it is the key's output. `DRAG_MOD`, `DUST` and `MUSIC` are never
+set by any retail zone, yet `drag_modifier`, `spacedust` ×270 and `music` ×166 are authored on zones
+without them; `damage` is the same case from the other side: 173 zones set it and only the two above
+set `DAMAGING`. The reader sets all five bits itself from those keys
+([above](#zone-property-flags)). The one correlation that holds in both directions is
+`property_fog_color`, which appears 182 times and never on a zone without a `property_flags` word.
 
 ### Good categories
 
@@ -545,8 +572,9 @@ Pending observation in the running game.
   4 with nothing naming the low values, and no string reaches them. *Experiment*: find a code path
   that produces one — likelier by watching a debug build's `unknown OBJECT_TYPE` path than by editing
   data.
-- **Whether `RING` and `MESH` zone shapes work.** Registered, never used by retail. *Experiment*:
-  author a zone with each and see whether it bounds anything.
+- **Whether the `MESH` zone shape works.** Registered, never used by retail. *Experiment*: author a
+  zone with it and see whether it bounds anything. (`RING` is closed: retail uses it eight times,
+  for planet rings.)
 - **Whether `MOON`, `BLACKHOLE` and `ASTEROID` do anything as a `[Solar] type`.** Named, and no
   archetype sets them. `ASTEROID`'s bit sits far from the other solar bits, which suggests it is
   assigned to objects the engine creates. Not evidence.
@@ -559,7 +587,9 @@ Pending observation in the running game.
   highest-use member of the set at 5,611.
 - **What matches the 651 keys with literals but no `is_value` call site.** Finding the other matcher
   — most likely `get_name_ptr` plus a local comparison — would fold them into the attributed set.
-  A reading problem rather than an in-game one.
+  A reading problem rather than an in-game one. Partly answered: `[LightSource]`'s reader is
+  `get_name_ptr` plus `stricmp`, and the asteroid field loader calls `is_header` and `is_value`
+  through a register; [SECTIONS.md](SECTIONS.md#legend) carries the sections disassembly has traced.
 
 ---
 

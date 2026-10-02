@@ -301,18 +301,24 @@ matches this name); plain is the weak one.
 
 ## Legend
 
-| Mark          | Meaning                                                                       |
-| ------------- | ----------------------------------------------------------------------------- |
-| `name`        | In retail data here; passed to `INI_Reader::is_value` — **proven read**       |
-| `name`*       | In retail data here; a literal exists but at no resolved call site            |
-| ~~`name`~~    | In retail data here; **no literal in any binary** — nothing matches this name |
-| **`name`⁺**   | **Not in retail data here** — the engine reads it in this section anyway      |
-| `[Section]` ‡ | The section header itself is never matched by `is_header`/`find_header`       |
+| Mark          | Meaning                                                                                                         |
+| ------------- | --------------------------------------------------------------------------------------------------------------- |
+| `name`        | In retail data here; passed to `INI_Reader::is_value`, or traced to its reader by disassembly — **proven read** |
+| `name`*       | In retail data here; a literal exists but at no resolved call site                                              |
+| ~~`name`~~    | In retail data here; **no literal in any binary** — nothing matches this name                                   |
+| **`name`⁺**   | **Not in retail data here** — the engine reads it in this section anyway                                        |
+| `[Section]` ‡ | The section header itself is never matched by `is_header`/`find_header`, and no reader has been traced          |
 
 Retail-observed properties come first, most-frequent first; engine-only ones follow, alphabetically.
 Spelling is retail's **most common** for that name — **76 names are written more than one way**
 (`shape` ×6,270 against `Shape` ×82, `ship` ×874 against `Ship` ×115) and every comparison the game
 makes folds case, so the variants are one key and the choice here is cosmetic.
+
+**Disassembly corrects the resolver.** The marks come from resolving matcher call sites, and a reader
+that calls `is_header` or `is_value` through a register, or compares `get_name_ptr()` itself, is
+invisible to that. Where disassembly has since traced a section's reader, the section's marks follow
+it and a note under the section gives the addresses. A key such a note says is **not read in that
+section** keeps its sweep mark, so the note, not the mark, is the claim.
 
 ## Totals
 
@@ -337,6 +343,10 @@ makes folds case, so the variants are one key and the choice here is cosmetic.
 280 against [RETAIL.md](RETAIL.md#what-is-in-it)'s 256 is a sweep difference: that figure counts the
 1,251 BINI files alone; this one adds `initialworld.ini`, the three plain-text INIs under `EXE` and
 the two `.fl` saves, which contribute the save-game and configuration sections.
+
+These are the resolver sweep's counts. The corrections from disassembly described under
+[Legend](#legend) — marks cleared, engine-only keys added, and the engine-only `[Lightning]`,
+`[ObjectFog]` and `[ThirdPersonCamera]` — are not folded into them.
 
 ## Sections the engine matches that retail never contains
 
@@ -1040,6 +1050,12 @@ reader treats `visit` as an int.
 ~~`pacedust`~~, ~~`spacedust_masparticles`~~, `reputation`, `spin`, ~~`power_modifier`~~,
 `drag_modifier`, ~~`spacedusr_maxparticles`~~, **`mesh`⁺**, **`name`⁺**
 
+**`sort` is read by nothing**: the literal exists, but the zone reader (`common.dll`
+`0x6337520`–`0x6337e09`) never takes it, and no other binary does. `edge_fraction` is clamped to
+[0, 1] and **defaults to 0** (`0x633789a`). `damage`, `drag_modifier`, `interference`, `spacedust`
+and `music` each also set a bit of the `property_flags` word — see
+[ENGINE.md](ENGINE.md#zone-property-flags).
+
 ### `[Hotspot]`
 
 3,581 sections.
@@ -1054,10 +1070,14 @@ reader treats `visit` as an int.
 `nickname`, `pos`, `archetype`, `ids_name`, `ids_info`, `rotate`, `reputation`, `behavior`,
 `loadout`, `pilot`, ~~`difficulty_level`~~, `next_ring`, `prev_ring`, `visit`,
 `tradelane_space_name`, `parent`, `base`, `dock_with`, `jump_effect`, `goto`, `msg_id_prefix`,
-`space_costume`, `voice`, `atmosphere_range`, `burn_color`*, `spin`, `star`, `ambient_color`*,
-`ring`*, ~~`260800`~~, ~~`info_ids`~~, `faction`, `ambient`, `size`, ~~`info_card`~~,
+`space_costume`, `voice`, `atmosphere_range`, `burn_color`, `spin`, `star`, `ambient_color`*,
+`ring`, ~~`260800`~~, ~~`info_ids`~~, `faction`, `ambient`, `size`, ~~`info_card`~~,
 ~~`info_card_ids`~~, **`links`⁺**, **`local_faction`⁺**, **`NavMapScale`⁺**, **`real_pos`⁺**,
 **`strid_name`⁺**, **`comm_appr`⁺**
+
+`ring` and `burn_color` are read by the client's own pass over the section (`Freelancer.exe`
+`0x5485ee`, `0x548688`), not by `CSolar::ReadObj`. `ring = zone, ini` builds a planet ring on a
+`RING` zone.
 
 `space_costume` is a head, a body and then any number of accessories — no hands; `comm_appr` names a
 whole costume instead and writes the same slot, so whichever comes last wins (`CSolar::ReadObj`,
@@ -1187,7 +1207,7 @@ Archetype chain: `Gun`.
 `explosion_resistance`, `debris_type`, `parent_impulse`, `child_impulse`, `volume`, `mass`,
 `damage_per_fire`, `power_usage`, `refire_delay`, `muzzle_velocity`, `toughness`,
 `projectile_archetype`, `separation_explosion`, `auto_turret`, `turn_rate`, `lootable`,
-`material_library`, `light_anim`, `flash_particle_name`, `flash_radius`, `LODranges`*,
+`material_library`, `light_anim`, `flash_particle_name`, `flash_radius`, `LODranges`,
 `hp_gun_type`, `use_animation`, `dry_fire_sound`, **`attachment_archetype`⁺**,
 **`dispersion_angle`⁺**, **`explosion_arch`⁺**, **`gun_azimuth`⁺**, **`gun_elevation`⁺**,
 **`inherit`⁺**, **`mission_property`⁺**, **`phantom_physics`⁺**, **`rotation_inertia`⁺**,
@@ -1293,7 +1313,18 @@ Archetype chain: `AttachedEquipment`.
 
 388 sections.
 
-`obj`, `LODranges`*
+`obj`, `LODranges`
+
+A sub-section of the archetype above it, read by `Freelancer.exe` `0x4023f0`. **`obj` is a part
+name**, hashed with `GetCRC32` (`0x40245c`) and matched against each part's `Object name` hashed the
+same way. Each block is **prepended** to its archetype's list (`0x4024b3`), so the last block comes
+first and the archetype's own `LODranges` last; a block whose `LODranges` never arrived is freed.
+
+`LODranges`, here and on every archetype, is read by `0x402310`: up to 8 values, then a −1, so at
+most seven levels, and a second line replaces the first. **`MinSpecLOD` defaults to 1, or to 0 when
+the list holds two values or fewer** (`0x4023b8`). When the object is created the list overwrites
+its parts' `Switch2` entry by entry, as far as it reaches — see
+[VMESH.md](../modules/VMESH.md#levels-of-detail).
 
 ### `[Solar]`
 
@@ -1302,7 +1333,7 @@ Archetype chain: `AttachedEquipment`.
 Archetype chain: `Solar`.
 
 `material_library`, `nickname`, `type`, `DA_archetype`, `solar_radius`, `shape_name`, `mass`,
-`docking_sphere`, `LODranges`*, `hit_pts`, `ids_info`, `ids_name`, `envmap_material`, `fuse`,
+`docking_sphere`, `LODranges`, `hit_pts`, `ids_info`, `ids_name`, `envmap_material`, `fuse`,
 `loadout`, `destructible`, `explosion_arch`, `surface_hit_effects`, `docking_camera`,
 `open_sound`, `close_sound`, `jump_out_hp`, `phantom_physics`, `shield_link`, `open_anim`,
 `distance_render`, `animated_textures`, `nomad`, **`attachment_archetype`⁺**,
@@ -1342,7 +1373,7 @@ Archetype chain: `Solar`.
 
 Archetype chain: `Root`.
 
-`nickname`, `DA_archetype`, `material_library`, `mass`, `LODranges`*, `hit_pts`, `MinSpecLOD`*,
+`nickname`, `DA_archetype`, `material_library`, `mass`, `LODranges`, `hit_pts`, `MinSpecLOD`,
 **`attachment_archetype`⁺**, **`explosion_arch`⁺**, **`explosion_resistance`⁺**,
 **`ids_info`⁺**, **`ids_name`⁺**, **`mission_property`⁺**, **`phantom_physics`⁺**,
 **`rotation_inertia`⁺**, **`type`⁺**
@@ -1425,6 +1456,9 @@ Archetype chain: `Root`.
 `shell_scalar`, `exclude_dynamic_asteroids`, `empty_cube_frequency`, `billboard_count`,
 `color`, ~~`exclude`~~
 
+In a nebula INI (`Freelancer.exe` `0x505ac1`) **`color` is not read**; retail's one use, in
+`ku04_hiyo_cloud.ini`, has no effect.
+
 ### `[Power]`
 
 164 sections.
@@ -1470,8 +1504,14 @@ case-insensitively, in the part-type table `Body`, `Head`, `LeftHand`, `RightHan
 
 154 sections.
 
-`cube_size`*, `fill_dist`*, `empty_cube_frequency`, `diffuse_color`*, `ambient_color`*,
-`ambient_increase`*, `tint_field`*, `max_alpha`, `contains_fog_zone`*
+`cube_size`, `fill_dist`, `empty_cube_frequency`, `diffuse_color`, `ambient_color`,
+`ambient_increase`, `tint_field`, `max_alpha`, `contains_fog_zone`, **`LOD`⁺**,
+**`test_asteroid_placement`⁺**
+
+Read by the client's field loader (`Freelancer.exe` `0x520ae2`–`0x520e2d`), in file order, so a
+`diffuse_color` after `tint_field` wins. `contains_fog_zone` and `test_asteroid_placement` are read
+by presence alone; the second makes the cube draw return at once (`0x522a80`). `LOD` is read as an
+integer.
 
 ### `[Cube]`
 
@@ -1485,12 +1525,16 @@ case-insensitively, in the part-type table `Body`, `Head`, `LeftHand`, `RightHan
 
 `nickname`, `state`, `ids_name`, `ids_info`, `key`
 
-### `[DynamicAsteroids]` ‡
+### `[DynamicAsteroids]`
 
 145 sections.
 
-`asteroid`, `count`, `placement_radius`*, ~~`placement_offset`~~, `max_velocity`*,
-`max_angular_velocity`, `color_shift`*
+`asteroid`, `count`, `placement_radius`, ~~`placement_offset`~~, `max_velocity`,
+`max_angular_velocity`, `color_shift`, **`zone`⁺**
+
+Matched at `Freelancer.exe` `0x521071` and read by `0x525800`; `zone` is read by the field loader
+(`0x521160`) and defaults to the field's own. `placement_offset`, set 145 times, is still read by
+nothing.
 
 ### `[RMBonusLoot]` ‡
 
@@ -1506,12 +1550,24 @@ case-insensitively, in the part-type table `Body`, `Head`, `LeftHand`, `RightHan
 `weight`, `Hostile_group`*, `difficulty`*, `Implemented`, `Allowable_zone_types`*,
 `Failure_text`*, `Reward_text`*
 
-### `[LightSource]` ‡
+### `[LightSource]`
 
 140 sections.
 
-`nickname`, `pos`, `color`, `range`, `type`, `atten_curve`*, `attenuation`*, `direction`*,
-`color_curve`*, `rotate`, `ids_name`, `behavior`
+`nickname`, `pos`, `color`, `range`, `type`, `atten_curve`, `attenuation`, `direction`,
+`color_curve`, `rotate`, `ids_name`, `behavior`, **`ambient_curve`⁺**
+
+Matched by the system loader (`Freelancer.exe` `0x553d7a`), which hands every key to `EngineLight`'s
+property reader (`0x411690`). That reader compares `get_name_ptr()` with `stricmp` instead of
+calling `is_value`, which is why the resolver found no call site. It has no branch for `nickname`,
+`rotate`, `ids_name` or `behavior`, and nothing else reads `[LightSource]`, so **those four are not
+read in this section**; an unknown key is dropped silently.
+
+`type` is `AMBIENT` (−2), `POINT` (1), `CONE` (2) or `DIRECTIONAL` (3), case folded (`0x411838`);
+anything else logs `invalid [LightSource] type` and stores −1. `atten_curve` is `name[, type]`: the
+optional second value re-types the light (`0x411ae7`) before the first names an `[IGraph]`, which on
+an `AMBIENT` light becomes its ambient curve. `ambient_curve` names the graph that weights an
+`AMBIENT` light by distance (`0x411a5c`).
 
 ### `[SystemConnections]`
 
@@ -1535,7 +1591,7 @@ Archetype chain: `ShieldGenerator`.
 `shield_hit_effects`, `nickname`, `DA_archetype`, `material_library`, `ids_name`, `ids_info`,
 `mass`, `volume`, `hit_pts`, `HP_child`, `debris_type`, `regeneration_rate`,
 `constant_power_draw`, `rebuild_power_draw`, `max_capacity`, `offline_rebuild_time`,
-`offline_threshold`, `shield_collapse_sound`, `shield_rebuilt_sound`, `LODranges`*,
+`offline_threshold`, `shield_collapse_sound`, `shield_rebuilt_sound`, `LODranges`,
 `explosion_resistance`, `parent_impulse`, `child_impulse`, `toughness`, `hp_type`,
 `separation_explosion`, `lootable`, `shield_type`, `shield_collapse_particle`,
 **`attachment_archetype`⁺**, **`explosion_arch`⁺**, **`hp_shield_type`⁺**, **`inherit`⁺**,
@@ -1561,7 +1617,7 @@ Archetype chain: `ShieldGenerator`.
 
 Archetype chain: `Ship`.
 
-`hp_type`, `surface_hit_effects`, `material_library`, `fuse`, `nickname`, `LODranges`*,
+`hp_type`, `surface_hit_effects`, `material_library`, `fuse`, `nickname`, `LODranges`,
 `DA_archetype`, `type`, `ids_name`, `ids_info`, `mass`, `hold_size`, `linear_drag`, `hit_pts`,
 `explosion_arch`, `steering_torque`, `angular_drag`, `rotation_inertia`, `nudge_force`,
 `num_exhaust_nozzles`, `HP_tractor_source`, `msg_id_prefix`, `mission_property`,
@@ -1605,12 +1661,15 @@ Archetype chain: `Commodity`.
 
 `nickname`, `mesh`, **`multilevel`⁺**
 
-### `[AsteroidBillboards]` ‡
+### `[AsteroidBillboards]`
 
 99 sections.
 
-`count`, `start_dist`*, `fade_dist_percent`*, `shape`, `size`, `color_shift`*,
-`ambient_intensity`*
+`count`, `start_dist`, `fade_dist_percent`, `shape`, `size`, `color_shift`, `ambient_intensity`
+
+Matched at `Freelancer.exe` `0x521014` and read by `0x54dbe0`. `fade_dist_percent` is clamped to
+[0, 1], and the two `size` values are sorted. One of the 99 sits, with a `[Field]`, in the system
+file `li02.ini`, where nothing reads either.
 
 ### `[GunBlock]` ‡
 
@@ -1675,7 +1734,11 @@ Archetype chain: `Asteroid`.
 
 82 sections.
 
-`name`, `x`*, `y`*, `w`*, `h`*
+`name`, `x`, `y`, `w`, `h`, **`shape_name`⁺**
+
+In a shape file (`Freelancer.exe` `0x425b30`): `name`, or `shape_name`, the same key, and `x`, `y`,
+`w`, `h`, on the texture last selected by `name` or `texture_name` — whatever header came between.
+After a bare `tex_shape` it logs `bad texture id`.
 
 ### `[LootableZone]`
 
@@ -1684,6 +1747,9 @@ Archetype chain: `Asteroid`.
 `asteroid_loot_container`, `asteroid_loot_commodity`, `dynamic_loot_container`,
 `dynamic_loot_commodity`, `asteroid_loot_count`, `dynamic_loot_count`,
 `asteroid_loot_difficulty`, `dynamic_loot_difficulty`, `zone`
+
+The four `asteroid_loot_*` keys are matched and discarded (`common.dll` `0x62a54bb`–`0x62a54f0`);
+only the `dynamic_loot_*` keys and `zone` build anything.
 
 ### `[DecisionNode]` ‡
 
@@ -1710,12 +1776,17 @@ Archetype chain: `Projectile`.
 **`requires_ammo`⁺**, **`rotation_inertia`⁺**, **`tractored_explosion`⁺**, **`type`⁺**,
 **`units_per_container`⁺**, **`use_count`⁺**, **`volume`⁺**
 
-### `[Band]` ‡
+### `[Band]`
 
 74 sections.
 
-`render_parts`*, `shape`, `height`*, `offset_dist`*, `fade`*, `texture_aspect`*,
-`color_shift`*, `vert_increase`*, `ambient_intensity`*
+`render_parts`, `shape`, `height`, `offset_dist`, `fade`, `texture_aspect`, `color_shift`,
+`vert_increase`, `ambient_intensity`, **`offset_percent`⁺**
+
+Matched by the asteroid field loader at `Freelancer.exe` `0x520e43` — `is_header` called through a
+register, which the resolver did not follow — and read by `0x54c630`. `offset_percent` is the
+alternative to `offset_dist`: the same field, flagged as a fraction rather than a distance
+(`0x54c748`). `texture_aspect` is stored × 1.15.
 
 ### `[ignite_fuse]`
 
@@ -1729,23 +1800,35 @@ Archetype chain: `Projectile`.
 
 Archetype chain: `Light`.
 
-`nickname`, `inherit`, `flare_cone`*, `bulb_size`*, `glow_size`*, `avg_delay`*,
-`blink_duration`*, `color`, `min_color`*, `intensity`*, `glow_color`*, `lightsource_cone`*,
-`always_on`, `docking_light`, **`attachment_archetype`⁺**, **`DA_archetype`⁺**,
-**`explosion_arch`⁺**, **`explosion_resistance`⁺**, **`hit_pts`⁺**, **`ids_info`⁺**,
-**`ids_name`⁺**, **`lootable`⁺**, **`mass`⁺**, **`mission_property`⁺**, **`phantom_physics`⁺**,
-**`rotation_inertia`⁺**, **`tractored_explosion`⁺**, **`type`⁺**, **`units_per_container`⁺**,
-**`use_count`⁺**, **`volume`⁺**
+`nickname`, `inherit`, `flare_cone`, `bulb_size`, `glow_size`, `avg_delay`, `blink_duration`,
+`color`, `min_color`, `intensity`, `glow_color`, `lightsource_cone`, `always_on`,
+`docking_light`, **`attachment_archetype`⁺**, **`DA_archetype`⁺**, **`explosion_arch`⁺**,
+**`explosion_resistance`⁺**, **`hit_pts`⁺**, **`ids_info`⁺**, **`ids_name`⁺**, **`lootable`⁺**,
+**`mass`⁺**, **`mission_property`⁺**, **`phantom_physics`⁺**, **`rotation_inertia`⁺**,
+**`tractored_explosion`⁺**, **`type`⁺**, **`units_per_container`⁺**, **`use_count`⁺**,
+**`volume`⁺**
+
+The running-light keys are read by `Freelancer.exe` `0x40ab30` (`FlashLight.cpp`). `glow_color`
+defaults to `color` (`0x40abc6`), and `flare_cone` is two angles.
 
 ### `[Exterior]`
 
 70 sections.
 
-`shape`, `color`, `shape_weights`*, `fill_shape`*, `plane_slices`*, `bit_radius`*,
-`bit_radius_random_variation`*, `min_bits`*, `max_bits`*, `move_bit_percent`*, `equator_bias`*,
-`opacity`*, `thickness_edge`*, `outer_edge`*, `inner_edge`*, `num_segments`*, ~~`fade_range`~~,
-`detail_shape`*, `detail_tile`*, `transition_dist`*, ~~`ball_scale`~~, ~~`flash`~~,
+`shape`, `color`, `shape_weights`, `fill_shape`, `plane_slices`, `bit_radius`,
+`bit_radius_random_variation`, `min_bits`, `max_bits`, `move_bit_percent`, `equator_bias`,
+`opacity`, `thickness_edge`, `outer_edge`, `inner_edge`, `num_segments`, ~~`fade_range`~~,
+`detail_shape`, `detail_tile`, `transition_dist`, ~~`ball_scale`~~, ~~`flash`~~,
 `flash_radius`, `flash_size`*, `spin`
+
+**Two sections under one name.** In a nebula INI (`Freelancer.exe` `0x504fb0`–`0x5053ea`) it reads
+`shape` (at most 8), `shape_weights`, `fill_shape`, `plane_slices`, `bit_radius`,
+`bit_radius_random_variation`, `min_bits`, `max_bits`, `move_bit_percent`, `equator_bias`, `opacity`
+and `color`. In a planet-ring INI (`PlanetRing.cpp`, `0x50a3a6`–`0x50a6eb`) it reads `shape`,
+`color`, `opacity`, `thickness_edge`, `inner_edge`, `outer_edge`, `num_segments`, `detail_shape`,
+`detail_tile` and `transition_dist`. **`flash_radius`, `flash_size` and `spin` are not `[Exterior]`
+keys**: their strings belong to the gun, munition and `[Cursor]` readers (`0x40a4e5`, `0x42e73d`,
+`0x41e31b`), and the `SOLAR/BLACKHOLE` INIs that set them here are referenced by no system.
 
 ### `[CharacterEncounter]`
 
@@ -1758,11 +1841,20 @@ Archetype chain: `Light`.
 
 66 sections.
 
-`puff_shape`*, `max_distance`*, `puff_colora`*, `puff_weights`*, `puff_drift`*, `puff_count`*,
-`puff_radius`*, `puff_colorb`*, `near_fade_distance`*, `puff_max_alpha`*,
-`lightning_intensity`*, `lightning_color`*, `lightning_gap`*, `lightning_duration`*,
-~~`puff_density`~~, ~~`puff_cloud_size`~~, ~~`puff_particles`~~, ~~`puff_size`~~,
-`puff_opacity`*
+`puff_shape`, `max_distance`, `puff_colora`, `puff_weights`, `puff_drift`, `puff_count`,
+`puff_radius`, `puff_colorb`, `near_fade_distance`, `puff_max_alpha`, `lightning_intensity`,
+`lightning_color`, `lightning_gap`, `lightning_duration`, ~~`puff_density`~~,
+~~`puff_cloud_size`~~, ~~`puff_particles`~~, ~~`puff_size`~~, `puff_opacity`,
+**`disable_batcher`⁺**, **`disable_clouds`⁺**, **`disable_lightning_bolts`⁺**,
+**`disable_lightning_flash`⁺**, **`disable_wisps`⁺**, **`lightning_shape`⁺**,
+**`lightning_size`⁺**, **`llight_color`⁺**, **`llight_range`⁺**, **`no_cloud_blend`⁺**,
+**`zwrite_clouds`⁺**
+
+Read by `Freelancer.exe` `0x550240`, for a nebula and for a planet ring alike. `puff_opacity` is
+matched and discarded (`0x5504ee`). **`puff_colora` and `puff_colorb` are taken by order, not by
+name**: the first colour line is A and the second B, and a lone line sets both (`0x550973`). Of the
+engine-only keys, `lightning_shape`, `lightning_size`, `llight_range` and `llight_color` are stored
+and never drawn, and only `disable_lightning_flash` is read back by the draw.
 
 ### `[critical_loot]`
 
@@ -1793,19 +1885,30 @@ Archetype chain: `Engine`.
 
 61 sections.
 
-`color`, ~~`fog_enabled`~~, `near`*, `distance`*, `opacity`*
+`color`, ~~`fog_enabled`~~, `near`, `distance`, `opacity`*
 
-### `[Nebula]` ‡
+In a nebula INI the reader (`Freelancer.exe` `0x5054d0`) takes only `near` (default 0), `distance`
+(default 10 000) and `color`. **`opacity` is not read here** — it is the nebula `[Exterior]`'s key
+(`0x5053c4`) — and `fog_enabled` is read by nothing. The `[Fog] is obsolete` warning belongs to the
+base-room reader (`common.dll` `0x6277559`), not to nebulae.
+
+### `[Nebula]`
 
 60 sections.
 
 `file`, `zone`
 
-### `[NebulaLight]` ‡
+Matched by the system loader (`Freelancer.exe` `0x553fd5`).
+
+### `[NebulaLight]`
 
 60 sections.
 
-`ambient`, `sun_burnthrough_intensity`*, `sun_burnthrough_scaler`*
+`ambient`, `sun_burnthrough_intensity`, `sun_burnthrough_scaler`
+
+Read by the nebula INI's header loop (`Freelancer.exe` `0x504f90`–`0x506014`), as are
+`[BackgroundLightning]` and `[DynamicLightning]`. The loop also recognises two headers no retail
+file contains, [`[ObjectFog]`](#objectfog) and [`[Lightning]`](#lightning).
 
 ### `[JobBlock]` ‡
 
@@ -1854,23 +1957,35 @@ Archetype chain: `Engine`.
 `DirectX8`*, `TextureLibrary`*, `VMeshLibrary`*, `SoundManager`*, `SoundStreamer`*,
 `MaterialAnimation`*, `MaterialBatcher`*, `alchemy`*, `FxRuntime`*, `MaterialLibrary`*
 
-### `[ambient]` ‡
+This is `universe.ini`'s system list. Inside a system file the header `[System]` is another name for
+[`[SystemInfo]`](#systeminfo).
+
+### `[ambient]`
 
 54 sections.
 
 `color`
 
-### `[BackgroundLightning]` ‡
+Matched by the system loader (`Freelancer.exe` `0x553b5e`); `color` is three bytes, truncated and
+not clamped (`0x553b95`).
+
+### `[BackgroundLightning]`
 
 54 sections.
 
-`duration`*, `gap`, `color`
+`duration`, `gap`, `color`, **`intensity`⁺**
 
-### `[Dust]` ‡
+Read by the nebula INI's header loop (`Freelancer.exe` `0x504f90`–`0x506014`); `intensity` defaults
+to 1.
+
+### `[Dust]`
 
 54 sections.
 
 `spacedust`
+
+Read by the system loader (`Freelancer.exe` `0x553cf5`), which takes **only `spacedust`**
+(`0x553d30`); the particle budgets are hard-coded.
 
 ### `[Music]`
 
@@ -1888,7 +2003,12 @@ Archetype chain: `Engine`.
 
 54 sections.
 
-`space_color`*, `local_faction`, `name`, `rpop_solar_detection`
+`space_color`, `local_faction`, `name`, `rpop_solar_detection`, **`space_farclip`⁺**
+
+Read by the system loader (`Freelancer.exe` `0x554183`), which also accepts the header `[System]`
+(`0x5537ca`). `space_color` is three bytes and is never reset, so a file without it keeps the
+previous system's. `space_farclip` is the far plane: clamped to at least 1000, with the cull
+distance 1000 less, and **reset to 21 000 on every load** (`0x553768` → `0x410130`).
 
 ### `[AttachedFX]`
 
@@ -1913,7 +2033,16 @@ Archetype chain: `Root`.
 
 51 sections.
 
-`tex_shape`*, `file`, `shape_name`, `dim`*, `name`, `texture_name`*
+`tex_shape`, `file`, `shape_name`, `dim`, `name`, `texture_name`
+
+In a shape file — anything a `[TexturePanels] file` names, and `stararch.ini` — the reader is the
+ShapeDB (`Freelancer.exe` `0x425b30`). `file` loads a `.txm` into the object's pool; `texture_name`,
+or `name`, the same key, selects a texture by `GetCRC32` of its name across every library the pool
+has loaded so far; `shape_name` declares a shape on it and a following `dim = x, y, w, h` gives its
+rectangle; `tex_shape` declares a shape that is the whole texture of that name. Each pair of `dim`
+values is a fraction when both are at most 1 and texels otherwise, and every shape's rectangle is
+inset by 0.01 texel. Shape names compare on their first 23 characters, case folded, and the first
+definition wins.
 
 ### `[FactionGood]`
 
@@ -1921,17 +2050,23 @@ Archetype chain: `Root`.
 
 `MarketGood`, `faction`
 
-### `[Background]` ‡
+### `[Background]`
 
 46 sections.
 
-`nebulae`*, `basic_stars`*, `complex_stars`*
+`nebulae`, `basic_stars`, `complex_stars`, **`file`⁺**
+
+Read by `Freelancer.exe` `0x553c04`, which resets all three paths when it reaches the header — so a
+system file without `[Background]` keeps the previous system's sky. **`file` is an alias of
+`complex_stars`** (`0x553cba`).
 
 ### `[star_glow]`
 
 46 sections.
 
-`nickname`, `shape`, `scale`, `inner_color`*, `outer_color`*
+`nickname`, `shape`, `scale`, `inner_color`, `outer_color`, **`alpha`⁺**
+
+Read by `Freelancer.exe` `0x50c950`. `alpha` is read and never used by the draw.
 
 ### `[EffectType]` ‡
 
@@ -1959,6 +2094,11 @@ Archetype chain: `Root`.
 
 `nickname`, `star_glow`, `radius`, `star_center`, `intensity_fade_in`, `intensity_fade_out`,
 `zone_occlusion_fade_in`, `zone_occlusion_fade_out`, `lens_glow`, `lens_flare`, `spines`
+
+Read by `Freelancer.exe` `0x511020`. **`zone_occlusion_fade_in` and `zone_occlusion_fade_out` are
+stored over `intensity_fade_in` and `intensity_fade_out`** (`0x511381`, `0x5113b7`). Every retail
+`[star]` writes them after the intensity keys, so every star's intensity fades over 1 s, and the
+zone-occlusion fades keep their 2 s defaults, which no file can change.
 
 ### `[destroy_root]`
 
@@ -1992,11 +2132,17 @@ Archetype chain: `AttachedEquipment`.
 **`tractored_explosion`⁺**, **`type`⁺**, **`units_per_container`⁺**, **`use_count`⁺**,
 **`volume`⁺**
 
-### `[CockpitCamera]` ‡
+### `[CockpitCamera]`
 
 34 sections.
 
-`znear`*, `fovx`
+`znear`, `fovx`, **`fovy`⁺**, **`zfar`⁺**
+
+`DATA/cameras.ini` is read by `Freelancer.exe` `0x549830`, which accepts `[WinCamera]`,
+`[CockpitCamera]`, `[ThirdPersonCamera]`, `[TurretCamera]`, `[RearViewCamera]` and `[DeathCamera]`
+and logs `Unknown camera type?` for anything else — retail's `[ChaseCamera]` among them. Each takes
+`fovx`, `fovy`, `znear` and `zfar` (`0x40f5f0`); both angles are full angles in degrees, halved on
+read, and setting one derives the other through the aspect ratio.
 
 ### `[cockpit]`
 
@@ -2008,7 +2154,10 @@ Archetype chain: `AttachedEquipment`.
 
 33 sections.
 
-`tether`*, `yaw_rotate_speed`*, `pitch_rotate_speed`*, `accel_speed`*
+`tether`*, `yaw_rotate_speed`*, `pitch_rotate_speed`*, `accel_speed`*, **`fovx`⁺**,
+**`fovy`⁺**, **`zfar`⁺**, **`znear`⁺**
+
+The four engine-only keys are `cameras.ini`'s — see [`[CockpitCamera]`](#cockpitcamera).
 
 ### `[EvadeDodgeBlock]` ‡
 
@@ -2028,7 +2177,7 @@ Archetype chain: `AttachedEquipment`.
 
 Archetype chain: `Equipment`.
 
-`nickname`, `DA_archetype`, `hit_pts`, `mass`, `explosion_arch`, `LODranges`*,
+`nickname`, `DA_archetype`, `hit_pts`, `mass`, `explosion_arch`, `LODranges`,
 `material_library`, **`attachment_archetype`⁺**, **`explosion_resistance`⁺**, **`ids_info`⁺**,
 **`ids_name`⁺**, **`inherit`⁺**, **`lootable`⁺**, **`mission_property`⁺**,
 **`phantom_physics`⁺**, **`rotation_inertia`⁺**, **`tractored_explosion`⁺**, **`type`⁺**,
@@ -2099,11 +2248,13 @@ Archetype chain: `Armor`.
 
 `node_id`, `documentation`, `child_node`
 
-### `[DynamicLightning]` ‡
+### `[DynamicLightning]`
 
 20 sections.
 
-`gap`, `duration`*, `color`, `ambient_intensity`*, `intensity_increase`*
+`gap`, `duration`, `color`, `ambient_intensity`, `intensity_increase`
+
+Read by the nebula INI's header loop (`Freelancer.exe` `0x504f90`–`0x506014`).
 
 ### `[MissileBlock]` ‡
 
@@ -2118,11 +2269,13 @@ Archetype chain: `Armor`.
 
 `nickname`, `anim`, `Hotspot`*, `blend`*, `scale`, `spin`, `color`
 
-### `[archetype]` ‡
+### `[archetype]`
 
 18 sections.
 
-`ship`, `Simple`*, `snd`*, `equipment`, `Solar`, `voice`
+`ship`, `Simple`, `snd`, `equipment`, `Solar`, `voice`, **`asteroid`⁺**
+
+A system file's preload lists, read by the system loader (`Freelancer.exe` `0x5538e7`).
 
 ### `[BuzzHeadTowardBlock]` ‡
 
@@ -2149,7 +2302,9 @@ Archetype chain: `Armor`.
 
 16 sections.
 
-`spine`*, `nickname`, `radius_scale`*, `shape`, `min_radius`*, `max_radius`*
+`spine`, `nickname`, `radius_scale`, `shape`, `min_radius`, `max_radius`
+
+Read by `Freelancer.exe` `0x50fba0`.
 
 ### `[CargoPod]`
 
@@ -2157,7 +2312,7 @@ Archetype chain: `Armor`.
 
 Archetype chain: `AttachedEquipment`.
 
-`nickname`, `DA_archetype`, `hit_pts`, `mass`, `HP_child`, `LODranges`*, `material_library`,
+`nickname`, `DA_archetype`, `hit_pts`, `mass`, `HP_child`, `LODranges`, `material_library`,
 `debris_type`, `explosion_arch`, `parent_impulse`, `child_impulse`,
 **`attachment_archetype`⁺**, **`explosion_resistance`⁺**, **`ids_info`⁺**, **`ids_name`⁺**,
 **`inherit`⁺**, **`lootable`⁺**, **`mission_property`⁺**, **`phantom_physics`⁺**,
@@ -2188,6 +2343,10 @@ Archetype chain: `AttachedEquipment`.
 11 sections.
 
 `point`, `nickname`, `type`
+
+`type` is `FLOAT`, `COLOR` or `INTEGER`, and `point = x, y`; a `COLOR` point's `y` is a signed
+32-bit ARGB. Loaded by `Freelancer.exe` `0x4197e0` (`GraphLibrary.cpp`) and evaluated piecewise
+linearly between points.
 
 ### `[SolarFormation]`
 
@@ -2229,7 +2388,7 @@ Archetype chain: `Launcher`.
 `nickname`, `ids_name`, `ids_info`, `DA_archetype`, `material_library`, `HP_child`, `hit_pts`,
 `explosion_resistance`, `debris_type`, `parent_impulse`, `child_impulse`, `volume`, `mass`,
 `damage_per_fire`, `power_usage`, `refire_delay`, `muzzle_velocity`, `toughness`,
-`projectile_archetype`, `dry_fire_sound`, `separation_explosion`, `lootable`, `LODranges`*,
+`projectile_archetype`, `dry_fire_sound`, `separation_explosion`, `lootable`, `LODranges`,
 **`attachment_archetype`⁺**, **`explosion_arch`⁺**, **`inherit`⁺**, **`mission_property`⁺**,
 **`phantom_physics`⁺**, **`rotation_inertia`⁺**, **`tractored_explosion`⁺**, **`type`⁺**,
 **`units_per_container`⁺**, **`use_animation`⁺**, **`use_count`⁺**
@@ -2303,7 +2462,9 @@ how a level's fraction becomes a distance is in [DEFORMABLE.md](../modules/DEFOR
 
 7 sections.
 
-`bead`*, `nickname`, `shape`, `min_radius`*, `max_radius`*
+`bead`, `nickname`, `shape`, `min_radius`, `max_radius`
+
+Read by `Freelancer.exe` `0x50f3a0`.
 
 ### `[MsnRandEnc]`
 
@@ -2388,7 +2549,7 @@ Archetype chain: `Thruster`.
 `nickname`, `ids_name`, `ids_info`, `DA_archetype`, `HP_child`, `hit_pts`,
 `explosion_resistance`, `debris_type`, `parent_impulse`, `child_impulse`, `volume`, `mass`,
 `max_force`, `particles`, `hp_particles`, `power_usage`, `lootable`, `separation_explosion`,
-`LODranges`*, `material_library`, **`attachment_archetype`⁺**, **`explosion_arch`⁺**,
+`LODranges`, `material_library`, **`attachment_archetype`⁺**, **`explosion_arch`⁺**,
 **`inherit`⁺**, **`mission_property`⁺**, **`phantom_physics`⁺**, **`rotation_inertia`⁺**,
 **`toughness`⁺**, **`tractored_explosion`⁺**, **`type`⁺**, **`units_per_container`⁺**,
 **`use_count`⁺**
@@ -2431,8 +2592,11 @@ Archetype chain: `Thruster`.
 
 5 sections.
 
-`nickname`, `shape`, `radius_scale`*, `inner_color`*, `outer_color`*, `glow_fade_in_seconds`*,
-`glow_fade_out_seconds`*
+`nickname`, `shape`, `radius_scale`, `inner_color`, `outer_color`, `glow_fade_in_seconds`,
+`glow_fade_out_seconds`, **`interior_ray_tween`⁺**, **`interior_tween`⁺**, **`max_LOD`⁺**
+
+Read by `Freelancer.exe` `0x50d420`. `interior_tween` defaults to 0.5, `interior_ray_tween` to 1.0
+and `max_LOD` to 5.
 
 ### `[StrafeBlock]` ‡
 
@@ -2553,12 +2717,16 @@ Archetype chain: `CounterMeasureDropper`.
 `nickname`, `engine_kill_use_afterburner`*, `engine_kill_search_time`*,
 `engine_kill_face_time`*, `engine_kill_afterburner_time`*, `engine_kill_max_target_distance`*
 
-### `[ExclusionBand]` ‡
+### `[ExclusionBand]`
 
 3 sections.
 
-`zone`, `render_parts`*, `shape`, `height`*, `offset_dist`*, `fade`*, `texture_aspect`*,
-`color_shift`*, `ambient_intensity`*, `cull_mode`*, `vert_increase`*
+`zone`, `render_parts`, `shape`, `height`, `offset_dist`, `fade`, `texture_aspect`,
+`color_shift`, `ambient_intensity`, `cull_mode`, `vert_increase`, **`offset_percent`⁺**
+
+Matched at `Freelancer.exe` `0x520ee6` and read by the `[Band]` reader, `0x54c630`; `zone` is read
+by the field loader itself (`0x520fa4`), and one that cannot be found logs
+`Exband (exclusion zone band) linked to missing Zone`.
 
 ### `[MineBlock]` ‡
 
@@ -2750,6 +2918,9 @@ Archetype chain: `Scanner`.
 
 `fovx`
 
+Not a camera `cameras.ini`'s loader accepts: it logs `Unknown camera type? (%s)` (`Freelancer.exe`
+`0x5499b8`) and skips the section.
+
 ### `[CommConsts]`
 
 1 section.
@@ -2784,11 +2955,13 @@ Archetype chain: `Scanner`.
 ~~`concave`~~, `intro`*, `gate_tunnels`, `groups`, `HUD`*, `jump_effect`, `stars`*, `IGraph`*,
 `bases`, `NewCharDB`, `WeaponModDB`, `RtcSlider`
 
-### `[DeathCamera]` ‡
+### `[DeathCamera]`
 
 1 section.
 
-`fovx`
+`fovx`, **`fovy`⁺**, **`zfar`⁺**, **`znear`⁺**
+
+A `cameras.ini` camera — see [`[CockpitCamera]`](#cockpitcamera).
 
 ### `[Diff2Money]`
 
@@ -2996,7 +3169,9 @@ Archetype chain: `Scanner`.
 
 1 section.
 
-`view_position`
+`view_position`, **`fovx`⁺**, **`fovy`⁺**, **`zfar`⁺**, **`znear`⁺**
+
+The four engine-only keys are `cameras.ini`'s — see [`[CockpitCamera]`](#cockpitcamera).
 
 ### `[Receiver]` ‡
 
@@ -3207,11 +3382,13 @@ Archetype chain: `Root`.
 
 1 section. No properties.
 
-### `[WinCamera]` ‡
+### `[WinCamera]`
 
 1 section.
 
-`fovx`
+`fovx`, **`fovy`⁺**, **`zfar`⁺**, **`znear`⁺**
+
+A `cameras.ini` camera — see [`[CockpitCamera]`](#cockpitcamera).
 
 ### `[AvailableShip]`
 
@@ -3274,6 +3451,12 @@ Archetype chain: `Root`.
 
 **Not in retail data, obsolete.** `*** WARNING: [Lighting] is obsolete`, `RoomData.cpp:2123`.
 
+### `[Lightning]`
+
+**Not in retail data.** A nebula INI's bolt object (`Freelancer.exe` `0x552570`).
+
+**`color`⁺**, **`duration`⁺**, **`gap`⁺**, **`size`⁺**
+
 ### `[MarkObj]`
 
 **Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
@@ -3317,6 +3500,11 @@ Archetype chain: `Root`.
 ### `[MsnWingSave]`
 
 **Not in retail data — read positionally.** `content.dll`: 50 indexed `get_value_*` calls, no `is_value`.
+
+### `[ObjectFog]`
+
+**Not in retail data.** The nebula INI's reader accepts the header and skips its body
+(`Freelancer.exe` `0x5054b4`).
 
 ### `[PerfCount]`
 
@@ -3367,6 +3555,12 @@ Archetype chain: `RepairDroid`.
 ### `[ShipPlacement]`
 
 **Not in retail data, obsolete.** `*** WARNING: [ShipPlacement] is obsolete`, `RoomData.cpp`.
+
+### `[ThirdPersonCamera]`
+
+**Not in retail data.** A `cameras.ini` camera — see [`[CockpitCamera]`](#cockpitcamera).
+
+**`fovx`⁺**, **`fovy`⁺**, **`zfar`⁺**, **`znear`⁺**
 
 ### `[ThrusterEquipConsts]`
 

@@ -30,7 +30,7 @@ Single-part model (.3db)
 Sphere model (.sph)
   <root> (UTF directory)
     └─ Sphere
-         ├─ M0..M5 ── material name per cube face
+         ├─ M0..M5 ── material name per cube face, repeating modulo Sides
          ├─ M6     ── atmosphere material name (optional)
          ├─ Radius (float32)
          └─ Sides  (int32, number of M entries)
@@ -88,8 +88,9 @@ hardpoints. Its place in the model comes from the constraint attaching it.
 
 ### Procedural spheres
 
-Planets and stars ship as `.sph` files carrying no geometry. The game tessellates a sphere at load
-time and skins it with one material per cube face.
+Planets and stars ship as `.sph` files carrying no geometry. The game tessellates a sphere itself —
+rebuilding it on the CPU whenever its on-screen size calls for another level — and skins it with one
+material per cube face.
 
 ```ts
 interface Sphere {
@@ -100,15 +101,40 @@ interface Sphere {
 }
 ```
 
-| Entry      | Type    | Notes                                                          |
-| ---------- | ------- | -------------------------------------------------------------- |
-| `M0`..`M3` | ASCIIZ  | The four equatorial faces                                      |
-| `M4`, `M5` | ASCIIZ  | The polar caps                                                 |
-| `M6`       | ASCIIZ  | Atmosphere shell, drawn around the body; absent on some models |
-| `Radius`   | float32 |                                                                |
-| `Sides`    | int32   | Number of `M` entries; 1 to 7                                  |
+| Entry      | Type    | Notes                                                                  |
+| ---------- | ------- | ---------------------------------------------------------------------- |
+| `M0`..`M3` | ASCIIZ  | The four equatorial faces                                              |
+| `M4`, `M5` | ASCIIZ  | The polar caps                                                         |
+| `M6`       | ASCIIZ  | Atmosphere shell, drawn around the body; the only side that can be one |
+| `Radius`   | float32 |                                                                        |
+| `Sides`    | int32   | Number of `M` entries; 1 to 7                                          |
 
 `Sides` is the authority on how many materials to read; `writeSphere` derives it from `sides.length`.
+The game reads `M0` to `M(Sides−1)` and nothing else (`rendcomp.dll` `0x6c2aca0`).
+
+**How the game builds it** (`rendcomp.dll`, disassembled). One patch, a uniform grid on the cube's
+`+Z` face projected radially — each vertex is `normalize(x, y, 1)` for `x`, `y` stepping evenly over
+[−1, 1], times `Radius`, with the normal equal to the direction and the UV `((x+1)/2, (y+1)/2)`
+(`0x6c2c690`). It is not the "spherified cube" some ports use, which pulls texels toward the face
+centres. The same patch is drawn once per face under a per-face rotation, which fixes each face's
+UV axes in terms of its own cube coordinates `X, Y, Z` in [−1, 1] (`0x6c2bcfc`, table `0x6c2c1fc`):
+
+| Side | Face | Rotation   | `u`       | `v`       |
+| ---- | ---- | ---------- | --------- | --------- |
+| `M0` | `+Z` | identity   | `(X+1)/2` | `(Y+1)/2` |
+| `M1` | `+X` | `Ry(+90°)` | `(1−Z)/2` | `(Y+1)/2` |
+| `M2` | `−Z` | `Ry(180°)` | `(1−X)/2` | `(Y+1)/2` |
+| `M3` | `−X` | `Ry(−90°)` | `(Z+1)/2` | `(Y+1)/2` |
+| `M4` | `+Y` | `Rx(−90°)` | `(X+1)/2` | `(1−Z)/2` |
+| `M5` | `−Y` | `Rx(+90°)` | `(X+1)/2` | `(Z+1)/2` |
+
+Face `k` takes side `k` modulo `Sides`: the material list wraps when it runs out
+(`0x6c2bf06`–`0x6c2bf22`), so a 1-side file uses `M0` on all six faces and an *n*-side file cycles
+through its materials. A side whose name resolves to no material is not drawn (`0x6c2beb5`) — which
+is how `sun.sph`'s `none` draws nothing. **Only `M6` can be the atmosphere**: the shell is drawn
+when `Sides > 6`, from the seventh material, and materials beyond the seventh are ignored. Its
+`Scale` — the shell's size and the sphere's bounds — is read only when `M6`'s material type is
+`AtmosphereMaterial`, and is 1.0 otherwise (`0x6c2ae2a`–`0x6c2ae8a`).
 
 `Hardpoints` is a sibling of `Sphere`, not a child, exactly where `readRigid` looks for a `.3db`
 part's. So `readSphere` and `writeSphere` both work on the part directory rather than on `Sphere`;
