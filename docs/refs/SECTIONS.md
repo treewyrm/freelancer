@@ -1822,11 +1822,11 @@ defaults to `color` (`0x40abc6`), and `flare_cone` is two angles.
 `flash_radius`, `flash_size`*, `spin`
 
 **Two sections under one name.** In a nebula INI (`Freelancer.exe` `0x504fb0`–`0x5053ea`) it reads
-`shape` (at most 8), `shape_weights`, `fill_shape`, `plane_slices`, `bit_radius`,
-`bit_radius_random_variation`, `min_bits`, `max_bits`, `move_bit_percent`, `equator_bias`, `opacity`
-and `color`. In a planet-ring INI (`PlanetRing.cpp`, `0x50a3a6`–`0x50a6eb`) it reads `shape`,
-`color`, `opacity`, `thickness_edge`, `inner_edge`, `outer_edge`, `num_segments`, `detail_shape`,
-`detail_tile` and `transition_dist`. **`flash_radius`, `flash_size` and `spin` are not `[Exterior]`
+`shape` (at most 8), `shape_weights`, `fill_shape`, `plane_slices`, `bit_radius`, then
+the variation key `bit_radius_random_variation`, and also `min_bits`, `max_bits`, `move_bit_percent`,
+`equator_bias`, `opacity` and `color`. In a planet-ring INI (`PlanetRing.cpp`, `0x50a3a6`–`0x50a6eb`)
+it reads `shape`, `color`, `opacity`, `thickness_edge`, `inner_edge`, `outer_edge`, `num_segments`,
+then `detail_shape`, `detail_tile` and `transition_dist`. **`flash_radius`, `flash_size` and `spin` are not `[Exterior]`
 keys**: their strings belong to the gun, munition and `[Cursor]` readers (`0x40a4e5`, `0x42e73d`,
 `0x41e31b`), and the `SOLAR/BLACKHOLE` INIs that set them here are referenced by no system.
 
