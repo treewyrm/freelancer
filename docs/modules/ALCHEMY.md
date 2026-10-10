@@ -356,7 +356,12 @@ bits are written as zero and never read, so they are not kept.
 ## Evaluation
 
 Every animated property is a function of two axes: **`p`** (sparam), an external control value the
-engine supplies to blend between animation states, and **`t`**, the inner key. The outer animation is
+engine supplies to blend between animation states, and **`t`**, the inner key. Nothing in the file
+supplies `p`: an effect starts at **0** (`0x623fb82`, stored at `0x623fbfc`) and keeps it until its
+host sets one. The game sets it for engine flames and trails, for an attached effect with
+`use_throttle`, for a thruster ([SECTIONS.md](../refs/SECTIONS.md#engine)), to the rock's fade for a
+dynamic asteroid's `particle_effect`, and to a particle budget for space dust; a cutscene sets it
+through `psysprops`. An effect nothing feeds runs at 0, and nothing feeds it from speed. The outer animation is
 keyed on `p`, the inner on `t`. What `t` *is* — particle age over lifespan, effect time, a normalized
 distance — is decided by the code sampling each property, not here.
 

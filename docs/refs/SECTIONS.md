@@ -1170,6 +1170,12 @@ whole costume instead and writes the same slot, so whichever comes last wins (`C
 
 `equip`, `cargo`, `nickname`, `archetype`
 
+**`equip` is a nickname and an optional hardpoint, and any number of rows may name one hardpoint**:
+the game seats every one of them, and retail stacks rows on 18 hardpoints in 9 loadouts. A row with no
+hardpoint is internal equipment. In retail the kind alone decides which: every engine, power plant,
+scanner, armor, tractor and internal effect row is internal, every other kind mounted. `cargo` is a
+nickname, a count and, on a solar, a cargo pod's hardpoint.
+
 ### `[effect]`
 
 705 sections.
@@ -1212,6 +1218,12 @@ Archetype chain: `Gun`.
 **`dispersion_angle`⁺**, **`explosion_arch`⁺**, **`gun_azimuth`⁺**, **`gun_elevation`⁺**,
 **`inherit`⁺**, **`mission_property`⁺**, **`phantom_physics`⁺**, **`rotation_inertia`⁺**,
 **`tractored_explosion`⁺**, **`type`⁺**, **`units_per_container`⁺**, **`use_count`⁺**
+
+**The barrels are `HpFire01` onward, consecutive, at most eight** (`CELauncher::Connect`
+`0x6299790`), and every barrel fires every shot. A projectile leaves each barrel toward the aim point;
+the first barrel's −Z only gates the aim cone. `flash_particle_name` plays attached at `HpFire01`
+alone, while `flash_radius` and `light_anim` make a point light shown in the player's cockpit view
+instead (`Freelancer.exe` `0x52cfd0`). `use_animation` plays on every shot.
 
 ### `[Munition]`
 
@@ -1339,6 +1351,13 @@ Archetype chain: `Solar`.
 `distance_render`, `animated_textures`, `nomad`, **`attachment_archetype`⁺**,
 **`explosion_resistance`⁺**, **`inherit`⁺**, **`mission_property`⁺**, **`rotation_inertia`⁺**,
 **`toughness`⁺**
+
+**The fourth value of `docking_sphere` is that port's door script** (`0x62f1806`), played forward once
+and held while the port is open and backward from wherever it stands when it closes
+(`CEqObj::update_docking_animations` `0x62aaea0`). **`open_anim` belongs to gates**: it is opened only
+for a solar with a jump target (`0x62b7a08`), and a jump gate, jump hole or airlock gate plays it
+forward over 10 s on activation and backward 5 s after deactivation (`0x62b7ea0`), never its docking
+spheres' scripts.
 
 ### `[pilot]`
 
@@ -1598,6 +1617,12 @@ Archetype chain: `ShieldGenerator`.
 **`mission_property`⁺**, **`phantom_physics`⁺**, **`rotation_inertia`⁺**,
 **`tractored_explosion`⁺**, **`type`⁺**, **`units_per_container`⁺**, **`use_count`⁺**
 
+**Each `shield_hit_effects` line is a damage and its effects.** A hit plays one of the effects of the
+last line whose damage is at most the hit's, at random (`Freelancer.exe` `0x409f10`); a munition's
+damage is `hull_damage` times the hull damage factor plus `energy_damage`. The effect is attached to
+the ship at the hit point with its +Y along the surface normal (`0x539f90`), at most three alive per
+object. `shield_collapse_particle` plays where the bubble is when the shield fails.
+
 ### `[PhantomLoot]`
 
 124 sections.
@@ -1630,6 +1655,22 @@ Archetype chain: `Ship`.
 `shield_battery_limit`, `nomad`, `docking_sphere`, `docking_camera`, `distance_render`,
 `camera_angular_slerp_multiplier`*, **`attachment_archetype`⁺**, **`explosion_resistance`⁺**,
 **`inherit`⁺**, **`phantom_physics`⁺**
+
+**`num_exhaust_nozzles` counts the engine's nozzles.** The `CEEngine` constructor (`common.dll`
+`0x6295f40`) looks up `HpEngine01` through `HpEngine0N` by the format `HpEngine0%d` and keeps those the
+model has, skipping a missing one silently; unset, N is 9 (`0x62f2013`), and it is never clamped. A
+hardpoint past N carries no flame, and no binary names `HpEngineGlow`. An engine that finds no nozzle
+gives no thrust unless it is `indestructible` (`0x62961e0`).
+
+**`bay_door_anim` is the cargo bay, opened only by a jettison** (`CShip::open_bay` `0x62b2e40`,
+`close_bay` `0x62b2fb0`): played forward once, held for what remains of it plus
+`JETTISON_CLEARANCE_TIME`, then backward, with every shield off while it is open. Jettisoned cargo
+leaves from `HP_bay_surface` toward `HP_bay_external`, or from the centre along −Y when either is
+missing (`server.dll` `0x6df1300`).
+
+**`shield_link` names a `[Shield]`, the hardpoint its model mates to, and then generator
+hardpoints** (`0x62f192f`). A bubble is made only when a shield generator is mounted on one of those
+(`0x62abf30`), and it is mated by the shield model's `SpConnect`.
 
 ### `[accessory]`
 
@@ -1881,6 +1922,15 @@ Archetype chain: `Engine`.
 **`lootable`⁺**, **`mission_property`⁺**, **`phantom_physics`⁺**, **`rotation_inertia`⁺**,
 **`tractored_explosion`⁺**, **`type`⁺**, **`units_per_container`⁺**, **`use_count`⁺**
 
+**Throttle feeds the flames** (`Freelancer.exe` `0x528020`). A smoothed value moves toward a target
+— 0 with the engine off, 1 in cruise, the throttle otherwise — at `MAX_DELTA_FX_THROTTLE` per second,
+snapping once within it. Every nozzle's `flame_effect` and trail are sent 0.9 times it, plus a tenth
+of the cruise charge over `cruise_charge_time` while cruise charges, clamped to 0…1; 0.9 is the
+default of `max_engine_fx_throttle`. The player's ship takes `trail_effect_player` and every other
+ship `trail_effect`. A disruption spawns `cruise_disrupt_effect` once at each nozzle and sets the
+charge to −`CRUISE_DISRUPT_TIME`. Every retail engine row is internal: the effects go on the hull's
+nozzles (see `num_exhaust_nozzles` under `[ship]`), each with its hardpoint's whole transform.
+
 ### `[Fog]`
 
 61 sections.
@@ -2021,6 +2071,9 @@ Archetype chain: `Root`.
 **`ids_name`⁺**, **`mass`⁺**, **`mission_property`⁺**, **`phantom_physics`⁺**,
 **`rotation_inertia`⁺**, **`type`⁺**
 
+**`use_throttle` sends the effect the raw throttle** every frame, clamped to 0…1 (`Freelancer.exe`
+`0x532490`). Without it nothing sets the effect's `sparam`, and it stays at 0.
+
 ### `[BeamSpear]` ‡
 
 51 sections.
@@ -2118,6 +2171,10 @@ Archetype chain: `InternalFXEquip`.
 **`phantom_physics`⁺**, **`rotation_inertia`⁺**, **`tractored_explosion`⁺**, **`type`⁺**,
 **`units_per_container`⁺**, **`use_count`⁺**, **`volume`⁺**
 
+**`use_animation` plays from creation and loops** (`CEInternalFX` `0x629ffd0`, loop flag 2) until
+the equipment is gone; activation does not touch it. `use_sound` is a 3D sound at the object, started
+at creation (`Freelancer.exe` `0x532530`).
+
 ### `[Shield]`
 
 36 sections.
@@ -2131,6 +2188,9 @@ Archetype chain: `AttachedEquipment`.
 **`rotation_inertia`⁺**, **`separation_explosion`⁺**, **`toughness`⁺**,
 **`tractored_explosion`⁺**, **`type`⁺**, **`units_per_container`⁺**, **`use_count`⁺**,
 **`volume`⁺**
+
+**The bubble is never drawn.** Every retail `[Shield]` model holds nothing but an `SpConnect`
+hardpoint, and the `.sur` beside it is the surface hits land on.
 
 ### `[CockpitCamera]`
 
@@ -2199,6 +2259,10 @@ Archetype chain: `Root`.
 **`attachment_archetype`⁺**, **`explosion_resistance`⁺**, **`hit_pts`⁺**, **`ids_info`⁺**,
 **`ids_name`⁺**, **`inherit`⁺**, **`mass`⁺**, **`mission_property`⁺**, **`phantom_physics`⁺**,
 **`rotation_inertia`⁺**, **`type`⁺**
+
+**`particle_effect` is fed the rock's fade.** It is made afresh at the rock's origin with each life
+(`Freelancer.exe` `0x5260ee`), and every frame the rock is drawn its `sparam` is set to the rock's
+alpha (`0x5265d4`–`0x5265de`), 1 well inside the field's sphere and falling to 0 across the fade.
 
 ### `[LightAnim]`
 
@@ -2418,6 +2482,16 @@ Archetype chain: `CloakingDevice`.
 **`separation_explosion`⁺**, **`toughness`⁺**, **`tractored_explosion`⁺**, **`type`⁺**,
 **`units_per_container`⁺**, **`use_count`⁺**
 
+**Out means out of sight.** Cloaking ramps linearly over `cloakout_time` and decloaking over
+`cloakin_time` (`CECloakingDevice::Update` `0x6294910`). The hull's alpha is multiplied by one minus
+the ramp through the cloak material (`flmaterials.dll` `0x66f4010`), or by one minus its smoothstep on
+a `nomad` hull's own material (`0x66f8c50`). At the end of the ramp nothing of the ship draws,
+attached particle effects included; until then they draw at full strength (`Freelancer.exe`
+`0x533710`, `0x4f86c0`). Cloaking spawns `cloakout_fx` on the device's root part; decloaking spawns
+`cloakin_fx` detached at the ship's origin, with its velocity (`0x532010`). Reversing mid-ramp snaps
+the device back and freezes the fade where it was (`0x6294a20`), and a new device starts cloaked
+(`0x6294710`).
+
 ### `[MissionCreatedSolar]`
 
 9 sections.
@@ -2553,6 +2627,10 @@ Archetype chain: `Thruster`.
 **`inherit`⁺**, **`mission_property`⁺**, **`phantom_physics`⁺**, **`rotation_inertia`⁺**,
 **`toughness`⁺**, **`tractored_explosion`⁺**, **`type`⁺**, **`units_per_container`⁺**,
 **`use_count`⁺**
+
+**`particles` is spawned once, at `hp_particles` on the thruster's own model**, and runs as long as
+the thruster exists. Activation sends it `sparam` 1 and deactivation 0 (`Freelancer.exe` `0x52eeef`,
+`0x52ef12`), so the particles alive when it stops finish their lives.
 
 ### `[DamageReactionBlock]` ‡
 
@@ -2984,6 +3062,11 @@ A `cameras.ini` camera — see [`[CockpitCamera]`](#cockpitcamera).
 `DELTA_THROTTLE_ATTEN_MOD_STEADY`, `CRUISE_STEADY_TIME`, `DELTA_CRUISE_ATTEN_MOD_STEADY`,
 `CRUISE_ATTEN_MOD_RANGE`, **`cruise_accel_time`⁺**, **`cruise_drag`⁺**, **`cruising_speed`⁺**,
 **`max_engine_fx_throttle`⁺**
+
+**`MAX_DELTA_FX_THROTTLE` is a rate limit, in units per second**, on the value the flames are fed.
+The steady times and the attenuation keys shape the engine sounds (`Freelancer.exe` `0x528240`) and
+no effect. Unset, the lower-case keys default to a cruising speed of 300, an acceleration time of 5,
+a drag of 3 and a flame throttle of 0.9 (`common.dll` `0x63ea5cc`–`0x63ea5dc`).
 
 ### `[Error]`
 
