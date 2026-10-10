@@ -3,8 +3,9 @@
 Voice banks — `.utf` containers under `DATA/AUDIO`, one per speaker, holding one compressed waveform
 per line of dialogue. The only `.utf` files in retail `DATA` that are not models.
 
-No module. A bank has no schema past the UTF tree: no header file, no index, no nesting. `Directory`
-reads and writes it as-is.
+No module of its own. A bank has no schema past the UTF tree: no header file, no index, no nesting.
+`Directory` reads and writes it as-is, and each entry is a RIFF/WAVE file that `./wave` reads — see
+[WAVE.md](../modules/WAVE.md).
 
 ## Layout
 
@@ -52,12 +53,9 @@ Ascending by unsigned id. A sort, not authoring residue — see [Corpus](#entry-
 Every entry is a complete RIFF file whose `RIFF` size field agrees with the entry's byte length, so
 an entry can be dropped on disk as a `.wav` unchanged.
 
-The `fmt ` chunk is 30 bytes: `WAVEFORMATEX` with format tag `0x0055` (`WAVE_FORMAT_MPEGLAYER3`)
-and `cbSize` 12, followed by `MPEGLAYER3WAVEFORMAT`. The payload is MPEG Layer-3 in a WAV wrapper,
-not PCM.
-
-Chunk layout is `fmt ` + `fact` + `trim` + `data`. `fact` is the standard uncompressed sample count.
-`trim` is non-standard, four bytes, and tracks the sample rate.
+Every one is mono MPEG Layer-3 in a WAV wrapper, laid out `fmt ` + `fact` + `trim` + `data`. The
+game plays the decoded line less `trim` frames from the front, cut to `fact` frames — see
+[WAVE § What the game plays](../modules/WAVE.md#what-the-game-plays).
 
 ## Reading a bank
 
@@ -90,7 +88,7 @@ import { toHex, parseHex } from '@treewyrm/freelancer/utility'
 const bank = new Directory()
 
 const setLine = (msg: string, wave: Uint8Array) =>
-  bank.append(new File(toHex(getObjectId(msg)), wave))
+  bank.set(new File(toHex(getObjectId(msg)), wave))
 
 setLine('DX_M01_0330_LPU_BETA_LEADER', await readFile('0330.wav'))
 setLine('DX_M01_0340_LPU_BETA_LEADER', await readFile('0340.wav'))
@@ -101,20 +99,22 @@ bank.children.sort((a, b) => parseHex(a.name) - parseHex(b.name))
 await writeFile('betaleader.utf', bank.write())
 ```
 
-`append` replaces an entry whose name hashes the same rather than adding a second one.
+`set` replaces an entry whose name hashes the same rather than adding a second one.
 
 Waveforms are stored byte for byte and must already be MP3-in-WAV — writing PCM produces a
 well-formed UTF the game will not play. Re-encoding is out of scope;
 `ffmpeg -i line.wav -c:a libmp3lame -ar 11025 -ac 1 -b:a 20k -f wav out.wav` gets close but emits
-neither the `trim` chunk nor Freelancer's `nCodecDelay`.
+neither the `trim` chunk nor Freelancer's `nCodecDelay`. Without `trim` the game drops nothing, so
+the line starts with the encoder's delay in front of it; `writeWaveform` can add one.
 
 ## What is not here
 
 - **Resolving a bank to its speaker.** The mapping is in `voices_*.ini`, read by `./ini`; joining
   the two is the consumer's, like every other cross-reference.
 - **`AUDIO/MUSIC`, `AUDIO/SOUNDS`, `AUDIO/DIALOGUE`, `AUDIO/MIXES`.** Loose `.wav` files reached by
-  `file=` path — see [The loose waveforms](#the-loose-waveforms). `DIALOGUE` shares some speakers'
-  names with the banks but its file names hash to nothing in any of them. None need a UTF reader.
+  `file=` path, the same format as a bank entry and read by `./wave` — see
+  [WAVE § Corpus](../modules/WAVE.md#corpus). `DIALOGUE` shares some speakers' names with the banks
+  but its file names hash to nothing in any of them. None need a UTF reader.
 - **`[Voice]` and `[Sound]` properties past the mapping** — `attenuation`, `duration`, `priority`,
   `script`, and the `[mVoiceProp]` tables. They describe playback and lip-sync and do not reach into
   the bank.
@@ -125,7 +125,7 @@ neither the `trim` chunk nor Freelancer's `nCodecDelay`.
 
 One entry contradicts the otherwise uniform header (`pilot_c_ill_m02a.utf/0x99E5DF04`, see
 [Waveform uniformity](#waveform-uniformity)), so rebuild nothing from what the fields should be.
-`Directory` does this for free.
+`Directory` does this for free, and `readWave` → `writeWave` is byte-exact on every entry.
 
 ## Corpus
 
@@ -166,14 +166,18 @@ The `RIFF` size field agrees with the entry's byte length in all 23,995, and the
 | ----------------- | ----------------------------------------- |
 | `nChannels`       | 1 — every line is mono                    |
 | `nSamplesPerSec`  | 11,025 (18,369 entries) or 22,050 (5,626) |
-| `nAvgBytesPerSec` | 2,500 or 4,000 — 20 kbps and 32 kbps      |
+| `nAvgBytesPerSec` | 2,500 or 4,000 — 20 kbps and 32 kbps¹     |
 | `wBitsPerSample`  | 0, as the format requires for a codec     |
 | `wID`             | 1 (`MPEGLAYER3_ID_MPEG`)                  |
 | `fdwFlags`        | 2 (`MPEGLAYER3_FLAG_PADDING_OFF`)         |
 | `nCodecDelay`     | 1,393                                     |
 
+¹ 20 kbps is no MPEG-2.5 bitrate: the frames alternate between 16 and 24, and this is their average.
+
 `trim` is 1,235 at 11,025 Hz and 1,209 at 22,050 Hz, with one exception:
 `pilot_c_ill_m02a.utf/0x99E5DF04` is 22,050 Hz carrying the 11,025 Hz trim value.
+[WAVE § Corpus](../modules/WAVE.md#corpus) has these beside the loose files, and the suite that
+pins them.
 
 ### The loose waveforms
 
@@ -196,7 +200,8 @@ streamer = true
 | `AUDIO/MIXES`    | 21    | 15 MiB | MP3 stereo 22,050 Hz, 80 kbps                                                                    |
 | `AUDIO/` root    | 4     | 26 KiB | PCM — `null.wav`, `tone.wav`, `2pop01/02.wav`                                                    |
 
-The banks sit at the bottom of the range: mono 20 kbps. The 76 PCM files under `SOUNDS` are the
+The banks sit at the bottom of the range: mono 20 kbps. Counted chunk by chunk, with the ID3 tags
+five tracks carry, in [WAVE § Corpus](../modules/WAVE.md#corpus). The 76 PCM files under `SOUNDS` are the
 only uncompressed audio of consequence; the four at the root are test tones and silence.
 
 Two differences from the banks, both in `MUSIC`:

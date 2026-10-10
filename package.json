@@ -108,6 +108,10 @@
     "./resource": {
       "types": "./dist/resource/index.d.ts",
       "import": "./dist/resource/index.js"
+    },
+    "./wave": {
+      "types": "./dist/wave/index.d.ts",
+      "import": "./dist/wave/index.js"
     }
   },
   "main": "./dist/index.js",

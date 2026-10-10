@@ -473,6 +473,10 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **Voice bank** — a UTF file under `DATA/AUDIO`, one per speaker, holding one waveform per line of
   dialogue. Entries are named by the object id of the line's `msg`.
   → [AUDIO](AUDIO.md), [AUDIO § Layout](AUDIO.md#layout)
+- **Waveform** — a RIFF/WAVE file: a voice bank entry, or a loose `.wav` under `DATA/AUDIO`. MPEG
+  Layer-3 in a WAV wrapper, or PCM. → [WAVE](../modules/WAVE.md)
+- **`trim`** — Freelancer's own RIFF chunk: sample frames the game drops from the front of a decoded
+  MP3 before `fact` cuts it to length. → [WAVE § What the game plays](../modules/WAVE.md#what-the-game-plays)
 
 ## Scene scripts
 
@@ -516,6 +520,9 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **`shading.dll`**, **`flmaterials.dll`** — the material DLLs: texture loading, material property
   tables, material animation. → [MATERIAL § Defaults](../modules/MATERIAL.md#defaults),
   [TEXTURE § What the game reorders](../modules/TEXTURE.md#what-the-game-reorders)
+- **`soundmanager.dll`**, **`soundstreamer.dll`** — the audio DLLs: a sound decoded whole through
+  ACM, and a streamed one (`streamer = true`). Both read `fact` and `trim`.
+  → [WAVE § What the game plays](../modules/WAVE.md#what-the-game-plays)
 - **`thorn.dll`** — the scene-script library. → [THORN](THORN.md)
 - **`Freelancer.exe`** — the game itself, wrapped in SecuROM copy protection.
   → [ENGINE § The executable is SecuROM-wrapped](ENGINE.md#the-executable-is-securom-wrapped)

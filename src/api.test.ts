@@ -44,6 +44,7 @@ const ENTRY_POINTS: Record<string, string> = {
   './thn/bytecode': 'src/thn/bytecode/index.ts',
   './thn/scene': 'src/thn/scene/index.ts',
   './resource': 'src/resource/index.ts',
+  './wave': 'src/wave/index.ts',
 }
 
 /** Subpath → the module doc whose `## API` section documents it. Several subpaths share a doc. */
@@ -70,6 +71,7 @@ const DOC_OF: Record<string, string> = {
   './thn/bytecode': 'docs/modules/THN.md',
   './thn/scene': 'docs/modules/THN.md',
   './resource': 'docs/modules/RESOURCE.md',
+  './wave': 'docs/modules/WAVE.md',
 }
 
 /**
@@ -331,6 +333,8 @@ describe('API conventions', () => {
     ['./thn', './thn/text'],
     ['./thn', './thn/bytecode'],
     ['./thn', './thn/scene'],
+    // './wave' relates to the foundations alone: a [Sound] names its file by path, and a voice
+    // bank holds waveforms as plain UTF files, so no other module's data names or contains one.
   ]
 
   const related = (a: string, b: string): boolean =>

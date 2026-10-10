@@ -101,6 +101,7 @@ The asset side, each figure the module document's:
 | Deformable models / bones      | 204 / 9,456   | [DEFORMABLE.md](../modules/DEFORMABLE.md) |
 | `.ale` files / effects         | 596 / 1,213   | [ALCHEMY.md](../modules/ALCHEMY.md)       |
 | Voice banks / waveforms        | 109 / 23,995  | [AUDIO.md](AUDIO.md)                      |
+| RIFF/WAVE files, banks included | 25,695       | [WAVE.md](../modules/WAVE.md)             |
 
 ## Round-trip fidelity
 
@@ -120,6 +121,7 @@ The UTF asset modules:
 | Compound   | —                                                                                        | every constraint record leaves stack residue past the terminator of its two 64-byte name fields — all 9,096 deformable and all 5,316 rigid records. `writeConstraints` zero-fills |
 | Surface    | 574 of 781 files                                                                         | this writer emits ledges in tree order where IVP emits terminal ones first; a type-5 hull's `id` is a derived offset and is reassigned                                            |
 | Audio      | every one of the 23,995 payloads                                                         | the container: `Directory` repacks it smaller and regenerates timestamps, so no bank matches retail byte for byte                                                                 |
+| Wave       | all 25,695 waveforms, the six pad bytes past the RIFF size included                      | nothing                                                                                                                                                                           |
 
 The text formats and the resource DLLs:
 
@@ -186,6 +188,8 @@ Each decided a design position. The position is in the linked document; the numb
 | `Freelancer.exe` `.text` entropy / standard prologues              | 7.98 / **0**, against 6.46 in the DLLs                    | Retail's executable is SecuROM-wrapped; only `.rdata` is statically readable — [ENGINE.md](ENGINE.md#method-2--disassemble-the-call-sites)                                                                                                  |
 | Alchemy instance references resolved, case-sensitive vs folded     | 5,505 / 2,814                                             | Alchemy is the one module that hashes case-sensitively — [ALCHEMY.md](../modules/ALCHEMY.md#hashing)                                                                                                                                        |
 | Voice bank entries matching `getObjectId`, folded                  | 23,995 of 23,995; 0 unfolded, 0 by `getResourceId`        | The bank hashes an INI nickname, not a UTF resource name — [AUDIO.md](AUDIO.md#the-hash-1)                                                                                                                                                  |
+| Odd final `data` chunks with no pad byte                           | 13,086 of 13,092; the other 6 pad past the RIFF size      | The writer pads between chunks only, and the bytes outside the RIFF size are kept — [WAVE.md](../modules/WAVE.md#layout)                                                                                                                  |
+| MP3 waveforms whose `trim` + `fact` fits the decoded frame count   | 25,570 of 25,615                                          | The game's slice is read from the DLLs, and the data agrees with it — [WAVE.md](../modules/WAVE.md#what-the-game-plays)                                                                                                                   |
 | `vertexEnd` inclusive in mesh groups                               | 22,416 of 22,416                                          | Treating it as exclusive drops the last vertex of every group — [VMESH.md](../modules/VMESH.md#mesh-group)                                                                                                                                  |
 | Wireframe indices read as relative rather than absolute            | 718 of 718 groups disjoint; 717 collide the other way     | `vertexStart` is a base offset, not the smallest index — [VMESH.md](../modules/VMESH.md#wireframe-indices-are-relative)                                                                                                                     |
 | Deformable `Index` matching directory position                     | 9,456 of 9,456                                            | The bone table is ordered, so `Index` is derived on write — [DEFORMABLE.md](../modules/DEFORMABLE.md#bones-are-a-table-not-just-a-tree)                                                                                                     |
@@ -353,6 +357,6 @@ content after `POP` is drawn, because `PUSH` and `POP` only move a defaults stac
 [ANIMATION.md](../modules/ANIMATION.md) · [SURFACE.md](../modules/SURFACE.md) · [ALCHEMY.md](../modules/ALCHEMY.md) ·
 [TEXTURE.md](../modules/TEXTURE.md) · [MATERIAL.md](../modules/MATERIAL.md) · [DEFORMABLE.md](../modules/DEFORMABLE.md) ·
 [INI.md](../modules/INI.md) · [THN.md](../modules/THN.md) · [THORN.md](THORN.md) · [RESOURCE.md](../modules/RESOURCE.md) ·
-[RDL.md](RDL.md) · [AUDIO.md](AUDIO.md) · [ENGINE.md](ENGINE.md) · [SECTIONS.md](SECTIONS.md) ·
+[RDL.md](RDL.md) · [AUDIO.md](AUDIO.md) · [WAVE.md](../modules/WAVE.md) · [ENGINE.md](ENGINE.md) · [SECTIONS.md](SECTIONS.md) ·
 [COSTUME.md](COSTUME.md) · [RENDERER.md](RENDERER.md) · [MATH.md](../modules/MATH.md) ·
 [ARCHITECTURE.md](ARCHITECTURE.md) · [VOCABULARY.md](VOCABULARY.md)

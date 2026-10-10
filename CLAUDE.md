@@ -3,8 +3,8 @@
 **Isomorphic infrastructure library providing typed access to Freelancer's data** (Digital Anvil,
 2003). The product is the type surface and the knowledge in `docs/` — what the bytes mean, not an
 output format. Published as an ES module with many subpath exports, covering the binary **UTF**
-containers, **INI** (text and compiled **BINI**), **THN** Lua 3.2 scene scripts, and the
-**resource DLLs** every `ids_name`/`ids_info` resolves into.
+containers, **INI** (text and compiled **BINI**), **THN** Lua 3.2 scene scripts, the **resource
+DLLs** every `ids_name`/`ids_info` resolves into, and the **RIFF/WAVE** files every sound is.
 
 **Status: format layer only.** Every module below reads and writes, and nothing above that: no
 entry point interprets what a section *means* (`[Solar]`, `[Ship]`, `[Nebula]` are section names and
@@ -18,7 +18,7 @@ rules all live there rather than here.
 
 ## Entry points
 
-**525 exports across 22 entry points.** Each doc's `## API` section is resolved from `src/` with
+**541 exports across 23 entry points.** Each doc's `## API` section is resolved from `src/` with
 the TypeScript checker and checked by `src/api.test.ts` — a drifted table fails the suite, not just
 a reader.
 
@@ -46,6 +46,7 @@ a reader.
 | `./thn/bytecode`  | 4       | [THN.md](docs/modules/THN.md)                |
 | `./thn/scene`     | 67      | [THN.md](docs/modules/THN.md)                |
 | `./resource`      | 35      | [RESOURCE.md](docs/modules/RESOURCE.md)      |
+| `./wave`          | 16      | [WAVE.md](docs/modules/WAVE.md)              |
 
 `./thn/scene` is deliberately not re-exported from `./thn`, so a consumer that wants the interim
 model does not pull the vocabulary in with it. This table is the whole surface — a new entry point
