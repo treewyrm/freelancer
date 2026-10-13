@@ -205,6 +205,41 @@ describe('what it refuses', () => {
   })
 })
 
+/**
+ * The script's triples are not the math types' fields in order: `orient` writes the rotation's
+ * columns where a `Matrix3` holds its rows, and a quaternion writes `w` first. A symmetric matrix or
+ * an identity quaternion would hide either mistake, so neither is one.
+ */
+describe('the math types', () => {
+  const globals = withEntity({
+    entity_name: 'X',
+    type: value.identifier('MARKER'),
+    spatialprops: value.table({
+      pos: value.list(1, 2, 3),
+      orient: value.list(value.list(1, 2, 3), value.list(4, 5, 6), value.list(7, 8, 9)),
+      q_orient: value.list(0.5, 0.1, 0.2, 0.3),
+    }),
+  })
+
+  it('reads orient transposed and q_orient with w first', () => {
+    const entity = read(globals).entities[0]
+
+    assert.deepEqual(entity?.type === 'MARKER' && entity.spatialprops, {
+      pos: { x: 1, y: 2, z: 3 },
+      orient: {
+        x: { x: 1, y: 4, z: 7 },
+        y: { x: 2, y: 5, z: 8 },
+        z: { x: 3, y: 6, z: 9 },
+      },
+      q_orient: { x: 0.1, y: 0.2, z: 0.3, w: 0.5 },
+    })
+  })
+
+  it('writes them back as the script wrote them', () => {
+    assert.deepEqual(write(read(globals)), globals)
+  })
+})
+
 describe('what it keeps', () => {
   it('keeps a key the vocabulary does not name, and writes it back', () => {
     const globals = withEntity({
@@ -344,8 +379,11 @@ describe('pathprops', () => {
         path_type: 'CV_CROrientationSplinePath',
         flag: 'OPEN',
         points: [
-          { position: [0, -0, 0], orientation: [1, 0, 0, 0] },
-          { position: [0, 0.099999, 0.000224], orientation: [1, 0, -0, 0] },
+          { position: { x: 0, y: -0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } },
+          {
+            position: { x: 0, y: 0.099999, z: 0.000224 },
+            orientation: { x: 0, y: -0, z: 0, w: 1 },
+          },
         ],
       },
     })
@@ -374,8 +412,8 @@ describe('pathprops', () => {
       path_type: 'CV_CRSplinePath',
       flag: 'CLOSED',
       points: [
-        [1, 2, 3],
-        [4, 5, 6],
+        { x: 1, y: 2, z: 3 },
+        { x: 4, y: 5, z: 6 },
       ],
     })
 
@@ -458,19 +496,24 @@ describe('round-trip', () => {
           usr_flg: 0,
           flags: ['HIDDEN'],
           spatialprops: {
-            pos: [0, 0, 0],
-            orient: [
-              [1, 0, 0],
-              [0, 1, 0],
-              [0, 0, 1],
-            ],
+            pos: { x: 0, y: 0, z: 0 },
+            orient: {
+              x: { x: 1, y: 0, z: 0 },
+              y: { x: 0, y: 1, z: 0 },
+              z: { x: 0, y: 0, z: 1 },
+            },
           },
           cameraprops: { fovh: 41, hvaspect: 1.777777, nearplane: 1, farplane: 5000 },
         },
         {
           entity_name: 'Light',
           type: 'LIGHT',
-          lightprops: { on: 'Y', type: 'L_DIRECT', diffuse: [0.25, 0.45, 0.55], theta: 4000 },
+          lightprops: {
+            on: 'Y',
+            type: 'L_DIRECT',
+            diffuse: { x: 0.25, y: 0.45, z: 0.55 },
+            theta: 4000,
+          },
           userprops: { nofog: 'Y' },
         },
       ],
@@ -481,7 +524,7 @@ describe('round-trip', () => {
           action: 'ATTACH_ENTITY',
           targets: ['Camera', 'Camera_Marker'],
           duration: 8000,
-          offset: [-50, 25, 0],
+          offset: { x: -50, y: 25, z: 0 },
           up: 'Y_AXIS',
           front: 'NEG_Z_AXIS',
           target_part: '',

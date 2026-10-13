@@ -22,19 +22,20 @@ const isPart = (directory: Directory): boolean => /^(root|part_)/i.test(director
  * mesh, and the geometry hangs off the file root instead.
  *
  * A character is assembled from three of these — a body, a head and a pair of hands — each with
- * its own bones, mesh and materials, joined through the hardpoints of the bones its
- * {@link skeleton} names. Neither the material library nor the texture library is read here: they
+ * its own bones, mesh and materials, joined by the hardpoint names their bones share — see
+ * [COSTUME.md](../../docs/refs/COSTUME.md). Neither the material library nor the texture library is read here: they
  * are ordinary siblings in the same container, and {@link readMaterialLibrary} and
  * {@link readTextureLibrary} take the same file root this does.
  */
 export interface DeformableModel {
   /**
-   * `Skeleton/Name` — the `.cmp` whose `Animation` library drives this model.
+   * `Skeleton/Name` — a `.cmp` name the file records, and nothing the game reads.
    *
    * Retail names four: `Head02.cmp` for every head, `AutoHeaderNode.cmp` for every body,
-   * `L Palm.cmp` and `R Palm.cmp` for the hands, plus `torture_root.cmp` on one test asset. The
-   * scripts live in that file, not in this one, which is how one set of animations drives every
-   * head in the game.
+   * `L Palm.cmp` and `R Palm.cmp` for the hands, plus `torture_root.cmp` on one test asset. Neither
+   * `deformable2.dll` nor `engbase.dll` contains the string `Skeleton`, and no file outside the
+   * `.dfm`s names those `.cmp`s: a character's scripts are found by name through `[Animations]`
+   * ([ANIMATION.md](../../docs/modules/ANIMATION.md)).
    */
   skeleton: string
 

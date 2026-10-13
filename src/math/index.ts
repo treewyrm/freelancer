@@ -6,6 +6,14 @@ export { default as Matrix4 } from './matrix4.js'
 export { default as Transform } from './transform.js'
 export { default as BoundingBox } from './boundingbox.js'
 export { default as BoundingSphere } from './boundingsphere.js'
+export {
+  default as Shape,
+  type BoxShape,
+  type CylinderShape,
+  type EllipsoidShape,
+  type RingShape,
+  type SphereShape,
+} from './shape.js'
 export { type ConvexHull, type ConvexHullOptions, generateConvexHull } from './convexhull.js'
 export * from './scalar.js'
 export * from './animation.js'

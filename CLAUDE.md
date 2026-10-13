@@ -18,7 +18,7 @@ rules all live there rather than here.
 
 ## Entry points
 
-**541 exports across 23 entry points.** Each doc's `## API` section is resolved from `src/` with
+**544 exports across 23 entry points.** Each doc's `## API` section is resolved from `src/` with
 the TypeScript checker and checked by `src/api.test.ts` — a drifted table fails the suite, not just
 a reader.
 
@@ -26,7 +26,7 @@ a reader.
 | ----------------- | ------- | --------------------------------------------- |
 | `.`               | 12      | [UTF.md](docs/modules/UTF.md#hashing)        |
 | `./utility`       | 30      | [UTF.md](docs/modules/UTF.md#utilities)      |
-| `./math`          | 33      | [MATH.md](docs/modules/MATH.md)              |
+| `./math`          | 39      | [MATH.md](docs/modules/MATH.md)              |
 | `./utf`           | 3       | [UTF.md](docs/modules/UTF.md)                |
 | `./alchemy`       | 55      | [ALCHEMY.md](docs/modules/ALCHEMY.md)        |
 | `./animation`     | 47      | [ANIMATION.md](docs/modules/ANIMATION.md)    |
@@ -44,7 +44,7 @@ a reader.
 | `./thn`           | 16      | [THN.md](docs/modules/THN.md)                |
 | `./thn/text`      | 3       | [THN.md](docs/modules/THN.md)                |
 | `./thn/bytecode`  | 4       | [THN.md](docs/modules/THN.md)                |
-| `./thn/scene`     | 67      | [THN.md](docs/modules/THN.md)                |
+| `./thn/scene`     | 64      | [THN.md](docs/modules/THN.md)                |
 | `./resource`      | 35      | [RESOURCE.md](docs/modules/RESOURCE.md)      |
 | `./wave`          | 16      | [WAVE.md](docs/modules/WAVE.md)              |
 

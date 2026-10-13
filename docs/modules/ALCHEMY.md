@@ -865,7 +865,7 @@ Retail `alchemy.dll` has since settled what each *does*, though not what any is 
 | `0x1C65B7B9` | Switches the beam to wireframe with no texture — Librelancer's `BeamApp_LineAppearance` |
 | `0x03503B61` | Accepted and discarded; reads back `false`                                    |
 | `0x0ABE0402` | Accepted and discarded; reads back `false`                                    |
-| `0x0BA0B3BB` | Stored and never read                                                         |
+| `0x0BA0B3BB` | Stored; a second compare at `0x620db4b` is not yet read                       |
 | `0xE63AA248` | Absent — nothing compares against it, so the game ignores it                   |
 
 `BeamApp_LineAppearance` still does not hash to `0x1C65B7B9`, so if that is its name the published

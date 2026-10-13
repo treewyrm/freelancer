@@ -1,3 +1,6 @@
+import type Matrix3 from '#/math/matrix3.js'
+import type Quat from '#/math/quat.js'
+import type Vector3 from '#/math/vector3.js'
 import type { Globals, TableValue, Value } from '#/thn/types.js'
 import * as value from '#/thn/value.js'
 import type {
@@ -9,37 +12,46 @@ import type {
   Event,
   FogProps,
   LightProps,
-  Matrix3Rows,
   OrientationSplinePath,
   ParamCurve,
   PathProps,
   SplinePath,
   PsysProps,
-  QuaternionTuple,
   Script,
   SpatialProps,
   UnknownKeys,
   UserProps,
-  Vector3Tuple,
 } from './types.js'
 
 /** A field that is absent stays absent — {@link value.table} drops it. */
 type Fields = Record<string, Value | number | string | undefined>
 
-const vector = (v: Vector3Tuple | QuaternionTuple): TableValue => value.list(...v)
+/** The numbers in the order the file writes them. */
+const triple = ({ x, y, z }: Vector3): number[] => [x, y, z]
 
-const matrix = (m: Matrix3Rows): TableValue => value.list(...m.map(vector))
+/** `{w, x, y, z}`, `w` first. */
+const quadruple = ({ x, y, z, w }: Quat): number[] => [w, x, y, z]
+
+const vector = (v: Vector3): TableValue => value.list(...triple(v))
+
+const quaternion = (q: Quat): TableValue => value.list(...quadruple(q))
+
+/** The rotation's columns, one triple each — the transpose of the {@link Matrix3}'s rows. */
+const matrix = ({ x, y, z }: Matrix3): TableValue =>
+  value.list(value.list(x.x, y.x, z.x), value.list(x.y, y.y, z.y), value.list(x.z, y.z, z.z))
 
 /**
  * A flag set, written the symbolic way.
  *
  * **Always symbolic, even for a script that was read from the numeric form** — that is the
  * normalisation this layer performs, and the reason `interim → typed → interim` is a fixed point
- * rather than an identity. An empty set is dropped, because bare `flags =` is not Lua and no retail
- * script has one.
+ * rather than an identity. An empty set is written as `0`, since bare `flags =` is not Lua and the key
+ * itself carries meaning: a `flags` key replaces the word `thorn.dll`'s parser sets for a missing
+ * `duration` (`0x6f257c9`), so an event with `flags = 0` and no duration ends at its start while one
+ * with neither key never ends. No retail script has an empty set.
  */
 const flags = (names: string[] | undefined): Value | undefined =>
-  names?.length ? value.identifier(...names) : undefined
+  names === undefined ? undefined : names.length ? value.identifier(...names) : value.number(0)
 
 const enumeration = (name: string | undefined): Value | undefined =>
   name === undefined ? undefined : value.identifier(name)
@@ -56,7 +68,7 @@ const unknown = (source: UnknownKeys | undefined): Fields => source ?? {}
 const spatialProps = (source: SpatialProps): Fields => ({
   pos: source.pos && vector(source.pos),
   orient: source.orient && matrix(source.orient),
-  q_orient: source.q_orient && vector(source.q_orient),
+  q_orient: source.q_orient && quaternion(source.q_orient),
   axisrot:
     source.axisrot &&
     value.list(value.number(source.axisrot[0]), value.identifier(source.axisrot[1])),
@@ -117,9 +129,9 @@ const point = (numbers: readonly number[]): string => `{${numbers.map(decimal).j
 
 const pathData = (source: OrientationSplinePath | SplinePath): string =>
   source.path_type === 'CV_CRSplinePath'
-    ? `${source.flag}, ${source.points.map(point).join('')}`
+    ? `${source.flag}, ${source.points.map((position) => point(triple(position))).join('')}`
     : `${source.flag}, ${source.points
-        .map(({ position, orientation }) => point(position) + point(orientation))
+        .map(({ position, orientation }) => point(triple(position)) + point(quadruple(orientation)))
         .join('')}`
 
 const pathProps = (source: PathProps): Fields =>
@@ -139,7 +151,7 @@ const fogProps = (source: FogProps): Fields => ({
 
 const paramCurve = (source: ParamCurve): Fields => ({
   CLSID: source.CLSID,
-  points: source.points && value.list(...source.points.map(vector)),
+  points: source.points && value.list(...source.points.map((row) => value.list(...row))),
 })
 
 const writeEntity = (entity: Entity): TableValue => {

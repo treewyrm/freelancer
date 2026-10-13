@@ -6,7 +6,8 @@ the operations —
 [Invariant 5](../refs/ARCHITECTURE.md#invariants): math is opt-in, never built into the type design.
 `generateConvexHull` is the one piece of geometry construction that lives here rather than in
 [SURFACE.md](SURFACE.md#convex-hull), because a convex hull is a fact about a point set, not a
-policy; `createHullGeometry` in that module is the bridge back.
+policy; `createHullGeometry` in that module is the bridge back. `Shape.contains` is here for the
+same reason: whether one solid lies inside another is a fact about the two solids.
 
 The two bounding volumes are shared rather than declared per format: `VMeshRef`'s box and sphere,
 a surface part's extent and an Alchemy effect's sphere are the same two shapes, `{ min, max }` and
@@ -23,9 +24,12 @@ a surface part's extent and an Alchemy effect's sphere are the same two shapes, 
 | `AxisAngle`          | interface | `{ axis: Vector3, angle: number }`                                         |
 | `BoundingBox`        | interface | Axis-aligned box `{ min, max }`, and the namespace of operations on it.    |
 | `BoundingSphere`     | interface | Sphere `{ center, radius }`, and the namespace of operations on it.        |
+| `BoxShape`           | interface | Solid box by full edge lengths along its local axes.                       |
 | `clamp`              | function  | `(a, min?, max?): number`                                                  |
 | `ConvexHull`         | interface | A convex hull, holding only the points that are on it.                     |
 | `ConvexHullOptions`  | interface | What a caller decides about a hull: a point budget and a tolerance.        |
+| `CylinderShape`      | interface | Solid cylinder about its local y axis.                                     |
+| `EllipsoidShape`     | interface | Solid ellipsoid by its semi-axes along its local axes.                     |
 | `equal`              | function  | `(a, b, epsilon?): boolean`                                                |
 | `fract`              | function  | `(a): number`                                                              |
 | `generateConvexHull` | function  | Convex hull of a point set, wound counter-clockwise seen from outside.     |
@@ -43,10 +47,13 @@ a surface part's extent and an Alchemy effect's sphere are the same two shapes, 
 | `remap`              | function  | `(a, aMin, aMax, bMin, bMax): number`                                      |
 | `remapExp`           | function  | `(a, aMin?, aMax?, bMin?, bMax?): number`                                  |
 | `remapLog`           | function  | `(a, aMin?, aMax?, bMin?, bMax?): number`                                  |
+| `RingShape`          | interface | The solid between two coaxial cylinders about its local y axis.            |
 | `saw`                | function  | `(v, a?, p?): number`                                                      |
+| `Shape`              | type      | Union of the five solids, and the namespace of operations on them.         |
 | `smooth`             | function  | `(t): number`                                                              |
 | `smoother`           | function  | `(t): number`                                                              |
 | `square`             | function  | `(v, a?, p?, duty?): number`                                               |
+| `SphereShape`        | interface | Solid sphere, which has no orientation.                                    |
 | `Transform`          | interface | Transformation stack element: `position` and `orientation`.                |
 | `triangle`           | function  | `(v, a?, p?): number`                                                      |
 | `Vector3`            | interface | 3D vector, and the namespace of operations on it.                          |
@@ -64,6 +71,7 @@ The eight namespaces carry the work, and none of it is reachable from the type n
 | `Transform` | `identity`, `copy`, `transform`, `revert`, `multiply`, `interpolate`, `push`                                                                                                                                                                                                                         |
 | `BoundingBox` | `copy`, `fromPoints`                                                                                                                                                                                                                                                                               |
 | `BoundingSphere` | `copy`                                                                                                                                                                                                                                                                                          |
+| `Shape`     | `contains`                                                                                                                                                                                                                                                                                           |
 
 **`Vector4` mirrors `Vector3` except where four dimensions have no counterpart:**
 
@@ -93,3 +101,30 @@ against the file applies `a` first, and `Matrix4.push(stack, child)` compose `pa
 `Matrix3.push` reads the other way. Nothing on disk is a 4x4 — joints, hardpoints and parts all
 carry a `Matrix3` and a `Vector3` — so `Matrix4` has no `read`/`write` pair, only
 `toArray`/`fromArray`.
+
+**A `Shape` is a solid in world space**: a `center`, an `orientation` (a unit `Quat`, absent on a
+sphere) and its dimensions, all non-negative. Cylinder and ring stand on their local y axis, and
+`height` is the full length, as a box's `size` is full edge lengths. Nothing here knows a `[Zone]`:
+which axis a file's `size` names, how `rotate` becomes a `Quat` and what part of a zone counts as
+inside are the consumer's, who builds the shape.
+
+**`Shape.contains(outer, inner)` is exact**, surfaces touching counting as inside, for every pair
+but one. A convex outer contains a solid exactly when it contains its hull, and every hull here is
+the hull of a few *affine balls* — points for a box's corners, discs for a cylinder's ends, the solid
+itself for a sphere or ellipsoid — so each test is one of three questions asked of those balls:
+
+- **Box:** how far each reaches along the six face normals, in closed form.
+- **Sphere and ellipsoid:** scaled to the unit sphere, the farthest point of each from the origin.
+  That is a trust-region problem whose dual is a convex function of one variable; its minimum is
+  bracketed and bisected, and every value on the way is an upper bound, so an inexact answer can only
+  err towards "does not fit".
+- **Cylinder:** the slab along the axis, as for a box, then the farthest point from the axis — the
+  sphere question with the axis component dropped.
+
+A **ring** is its outer cylinder minus a hole, and nothing touching the hole fits. For a convex
+inner that is a distance between the hole's axis and the inner's projection onto the ring's plane,
+found by GJK on the support mapping. A ring inside a ring may clear the hole through its own, and
+does exactly when the outer's hole lies within the inner's — **decided only for parallel axes**. A
+tilted ring whose hull reaches into the outer's hole answers `false` even where its own hole would
+make room. An outer with a zero dimension contains nothing.
+

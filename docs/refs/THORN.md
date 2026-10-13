@@ -155,7 +155,7 @@ composition, `P` the parent frame and `rel` the child's frame relative to it at 
 
 | Name                   | Bit | What it does on an `ATTACH_ENTITY`                                                                                   |
 | ---------------------- | --- | -------------------------------------------------------------------------------------------------------------------- |
-| `USE_SCRIPT_DURATION`  | 1   | the event **never ends**. Set by the parser itself when `duration` is nil, unless a `flags` key replaces it           |
+| `USE_SCRIPT_DURATION`  | 1   | the event **never ends**. Set by the parser when the event has neither `flags` nor `duration`; a `flags` key replaces the word |
 | `POSITION`             | 2   | writes the child's position every update: `P.t + offset`                                                             |
 | `PATH_POSITION`        | 2   | *unused in retail*; the same bit                                                                                     |
 | `ORIENTATION`          | 4   | writes the child's orientation every update: `P.R`                                                                   |
@@ -214,9 +214,10 @@ to `START_MOTION` otherwise, and anything left outside 1–19 — `STOP`, `STOP_
 without an event. No script exercises any of the three. Whether `STOP` and `STOP_IK` mean something
 outside the `action` slot is still open — see [TODO](#todo).
 
-The same pass rewrites one retail action: a `START_PATH_ANIMATION` whose second target is not a
-`MOTION_PATH` — an entity of type 1 to 8 — is parsed as an `ATTACH_ENTITY`. Every retail path
-animation targets a `MOTION_PATH`, so the rewrite never fires on retail data.
+The same pass rewrites one retail action: a `START_PATH_ANIMATION` whose second target is an entity
+of type 1 to 8 — `COMPOUND` through `MARKER`, not a `SCENE`, `MOTION_PATH` or `PSYS` — is parsed as an
+`ATTACH_ENTITY`, its keys read by the attach case. Every retail path animation targets a
+`MOTION_PATH`, so the rewrite never fires on retail data.
 
 ## Properties
 
@@ -227,7 +228,7 @@ animation targets a `MOTION_PATH`, so the rewrite never fires on retail data.
 | Key             | Type    | Provenance         | Notes                                                     |
 | --------------- | ------- | ------------------ | --------------------------------------------------------- |
 | `entity_name`   | string  | dll, corpus, guide | must be unique within the script                          |
-| `template_name` | string  | dll, corpus, guide | archetype nickname, resolved through `userprops.category` |
+| `template_name` | string  | dll, corpus, guide | what the game loads: an archetype by `userprops.category` on a `COMPOUND`, a `costumes.ini` costume on a `DEFORMABLE`, a `[VisEffect]` on a `PSYS`, a `[Sound]` on a `SOUND` — each ignoring case |
 | `type`          | enum    | dll, corpus, guide | see above                                                 |
 | `flags`         | flags   | dll, corpus, guide |                                                           |
 | `lt_grp`        | integer | dll, corpus, guide | lighting group                                            |
@@ -244,12 +245,25 @@ not appear in `thorn.dll`, `common.dll` or `Freelancer.exe`. Nothing reads it.
 | Key           | Type          | Provenance         | Notes                                                                        |
 | ------------- | ------------- | ------------------ | ---------------------------------------------------------------------------- |
 | `pos`         | float[3]      | dll, corpus, guide |                                                                              |
-| `orient`      | float[3][3]   | dll, corpus, guide | rotation matrix; the placement form                                          |
+| `orient`      | float[3][3]   | dll, corpus, guide | rotation matrix; the placement form. **Its triples are the columns** — see below |
 | `q_orient`    | float[4]      | dll, corpus, guide | quaternion; **only ever in a `START_SPATIAL_PROP_ANIM`**, never on an entity |
 | `axisrot`     | {float, axis} | dll, corpus, guide | likewise animation-only                                                      |
 | `orientation` | —             | dll                |                                                                              |
 
 Entities carry `pos` and `orient` and nothing else; animations carry `pos`, `q_orient` or `axisrot`.
+
+**`orient`'s three triples are the columns of the rotation** (code): the parser stores `orient[k]`
+down column `k` of the row-major matrix (`0x6f29cff`–`0x6f2a00d`) and hands it to the entity
+unchanged, and every product THORN takes is `R·v`. So each triple is one of the entity's local axes —
+X, Y, Z — in scene space. That is the transpose of a joint's or a hardpoint's nine floats, which are
+the rows ([RENDERER.md](RENDERER.md)): read the way a hardpoint is read, every entity turns backwards.
+Corpus agrees — of the retail cameras that start a `LOOK_AT` attach at 0 on a parent nothing moves,
+14 carry an `orient` matching, within 0.02, the rotation the attach computes when the triples are
+columns, and none when they are rows.
+
+**`./thn/scene` reads `orient` into a `Matrix3` transposed**, so it holds the rows as every other
+`Matrix3` in the library does and goes into `Matrix4.fromRotationTranslation` unchanged; the writer
+transposes it back.
 
 ### The typed blocks
 
@@ -269,6 +283,12 @@ Entities carry `pos` and `orient` and nothing else; animations carry `pos`, `q_o
 - The animating camera block is a different block. An entity says `hvaspect`, `nearplane`,
   `farplane`; a `START_CAMERA_PROP_ANIM` says `aspect`, `near`, `far`. Both spellings are in
   `thorn.dll`; only `fovh` is shared.
+- **The animating block's keys are positional, and three of them are mislabelled** (code). The
+  entity's four values are stored as `{fovh, nearplane, farplane, hvaspect}` (`0x6f41510`); the
+  animation reads its keys by index from the table `fovh, aspect, near, far` (`0x6f5e148`) into the
+  same four slots. So **`aspect` animates the near plane, `near` the far plane, and `far` the
+  aspect**. Corpus agrees: the animations that set `aspect` use 0.1–10, and the four that set all
+  four keys have `near = 1000` and `far = 1.85`.
 - `SCENE` carries the fog keys inline, not in a `fogprops` block. The block form is the event's.
 
 ### `pathprops`
@@ -291,12 +311,25 @@ separator that looks stray. `%f` is six decimals.
 
 | `path_type`                  | After the flag                                                                        |
 | ---------------------------- | ------------------------------------------------------------------------------------- |
-| `CV_CROrientationSplinePath` | `{x,y,z}` and `{x,y,z,w}` alternating — one position and one orientation per keyframe |
+| `CV_CROrientationSplinePath` | `{x,y,z}` and `{w,x,y,z}` alternating — one position and one orientation per keyframe |
 | `CV_CRSplinePath`            | `{x,y,z}` per keyframe, no orientations — **dll** only                                |
 | `NULL`                       | no `path_data` at all                                                                 |
 
 The flag is `OPEN` or `CLOSED`: whether the Catmull-Rom spline runs end to end or closes into a loop.
-Both are in `thorn.dll`.
+Both are in `thorn.dll`, and only `CLOSED` is tested (`strncmp`, `0x6f35798`) — anything else is open.
+
+**The quaternion is `{w, x, y, z}`** (code): the loader's identity default is written `{1,0,0,0}`
+(`0x6f359a0`) and the path animation converts the tuple with `x86math.dll`'s quaternion-to-matrix
+(`0x6f723c0`), whose first component is `w`. `q_orient` in a `START_SPATIAL_PROP_ANIM` is the same
+order (`0x6f24050`). Corpus agrees: the largest-magnitude component is the first in 2,333 of 3,151
+path keys, and identities are written `{1,0,0,0}`. `./thn/scene` reads both into a `Quat`'s named
+fields and writes `w` first again.
+
+**How the path is evaluated** (code, and run under emulation): uniform Catmull-Rom with tension ½,
+16 samples per segment; the parameter is **normalised chord length over the whole path**, so travel
+is at constant speed along the 16-sample polyline; an open path duplicates its end points rather
+than reflecting them; orientations are a squad built on normalised lerp, not slerp. A path with
+fewer than two keys fails to load and its animations do nothing.
 
 `NULL` is not a class the binary names anywhere. It is what the exporter writes for a `MOTION_PATH`
 with no path on it, and those entities carry nothing else.
@@ -313,7 +346,26 @@ Eleven curve types are registered; retail uses two. The other nine are dll only:
 `BumpOutPCurve`, `RampDownPCurve`, `RampUpPCurve`, `StepPCurve`, `SmoothPCurve`, `ThornLPCurve`,
 `LinearPCurve`, `ThornParamCurve`.
 
-`pcurve_period` is milliseconds, and negative means "match the event duration".
+**A `points` row is `(t, v, inSlope, outSlope)`** (code, `0x6f2f560`): `t` in `[0, 1]` — anything
+outside is rejected — `v` the value, and the two slopes in value per unit `t`, read only by
+`FreeFormPCurve`. Every curve starts with the end keys `(0, 0, 0, 0)` and `(1, 1, 0, 0)`, which a row
+at exactly `t = 0` or `t = 1` replaces. `FreeFormPCurve` is a cubic Hermite through the keys, clamped
+to the end values outside them — so retail's commonest curve, `[[0,0,0,0],[1,1,0,0]]` (2,522 uses),
+is a **smoothstep**, not a straight line. `CatmullRomPCurve` is uniform Catmull-Rom on the values,
+ignores the slopes, and returns **0** outside its first and last keys. The other Hermite types share
+`FreeFormPCurve`'s evaluator and differ only in how they preset the slopes. `LinearPCurve` is
+registered twice, as two different classes (`0x6f30780`, `0x6f309a2`).
+
+**`pcurve_period` is integer milliseconds** — `_ftol` of the script value, with no ×1000
+(`0x6f25885`); default −1. **Any value ≤ 0** (`-1000`, `-1`, `0`) means the same thing: the curve is
+read at elapsed / `duration`. **A positive value loops** it: the curve is read at
+`(elapsed mod period) / period`, a sawtooth that never reaches `t = 1`. Some exported periods are
+float bit patterns written as integers (`1065353250`), which leave the event near `curve(0)` for its
+whole duration.
+
+**The value an animation applies** (code, `0x6f48b50` and its per-class copies): 1 when `duration` is
+0, otherwise elapsed / `duration` or the curve as above — **not clamped**. Each property animation
+then writes `from + (to − from) · u`, `from` being the value the property had when the event started.
 
 ### Event properties
 
@@ -337,7 +389,32 @@ Eleven curve types are registered; retail uses two. The other nine are dll only:
 
 `time` and `duration` are seconds in the script and **integer milliseconds** in the engine: the parser
 multiplies by 1000 and truncates (code, `0x6f25400`). A missing `duration` sets flag bit 1,
-`USE_SCRIPT_DURATION`, which on an attach, a connect or a prop anim means the event never ends.
+`USE_SCRIPT_DURATION` (`0x6f25760`), and a `flags` key then overwrites the whole word (`0x6f257c9`):
+the bit stays set when the event has **neither `flags` nor `duration`**, or when `flags` names it. On
+an attach, a connect or a prop anim the bit means the event never ends; otherwise it ends at
+`time + duration`, a missing `duration` counting 0 — so `flags` without `duration` ends at its start,
+after one update. `START_PSYS` does not test the bit and always ends at `time + duration`.
+
+**`start_time` has two units** (code): on `START_MOTION` it is a float in **seconds** into the
+animation (`0x6f25c9a`); on `START_SOUND` it is `_ftol` of the value with no ×1000 — **integer
+milliseconds** into the wave (`0x6f26085`). Retail agrees: every sound `start_time` is an integer from
+9 to 30,000.
+
+**`start_percent` and `stop_percent` are fractions**, not percentages: the path parameter is
+`start + (stop − start) · u`, every retail value lies in `[0, 1]`, and 302 retail animations run
+`1 → 0`, backwards along the path.
+
+**`event_flags`** (code — `thorn.dll` passes it untouched, `engbase.dll` reads it, `0x66126e0`):
+
+| Bit | On `START_MOTION` |
+| --- | ----------------- |
+| 1   | play **backwards** (`time_scale` negated) |
+| 2   | **loop** every channel at its own length |
+| 4   | bounce — no retail use |
+| 128 | keep the animations already on a joint alive under this one once its blend-in completes, so they resume when it ends; without it a completed blend stops them |
+
+On `START_IK`, 128 is the same keep-beneath bit, and also turns off the joint limits of a
+single-joint aim.
 
 ## What `ATTACH_ENTITY` does
 
@@ -404,21 +481,28 @@ The rule was fitted to the routine run under emulation, exactly, for all 24 `fro
 **Timing.**
 
 - Before its `time` an attach does nothing.
-- From `time` to `time + duration` it rewrites the child at every update. Updates happen at every
-  event's start and end instant as well as at the end of each engine step, so a large step misses
-  none of them.
+- From `time` to its end it rewrites the child at every update. Updates happen at every event's
+  start and end instant as well as at the end of each engine step, so a large step misses none of
+  them. The end is `time + duration`, or never under `USE_SCRIPT_DURATION` — see `duration` above. An
+  attach with `flags` and no `duration` therefore writes once, at `time`, and is done.
 - At the end it writes once more, at exactly `time + duration`, and stops. **Nothing is undone**:
   the child keeps its last transform, and does not snap back or detach.
 - Within one instant the engine orders its active events so that every event acting on an entity
   runs after the events of that entity's parent, however long the chain. On a single entity they run
-  by action number, then start order. Chains therefore resolve with no frame of lag. When two attaches
-  on one child are active together, the later-started one's writes win.
+  by action number, then start order — the second only while at most 16 events act on that entity:
+  the sort is `std::sort`, an insertion sort up to 16 (`0x6f40290`, stable) and a median-of-three
+  quicksort above (`0x6f3ff50`), which can reorder equal action numbers. Retail passes 16 at two
+  instants of one script, on motions and IK with no attach among them. Chains therefore resolve with
+  no frame of lag. When two attaches on one child are active together, the later-started one's
+  writes win.
 
 **The clock** advances by a millisecond delta; there is no evaluate-at-time. A forward step visits
 every start and end inside it in order, so one step from 0 to *T* reaches the same state as any
-sequence of smaller steps. A backward step drops every running event and replays from 0 without
-restoring any entity, so a scrubbing evaluator reproduces THORN by replaying from 0 to *T* with those
-breakpoints.
+sequence of smaller steps, and a scrubbing evaluator reproduces THORN's **first play** by replaying
+from 0 to *T*, from the entities' `spatialprops`, with those breakpoints. A backward step is not that:
+it finishes every running event and replays from 0 **without restoring any entity** (`0x6f3984b`),
+so a `rel`, a `LOOK_AT` or an entity no event drives starts from whatever the last play left. Past
+the script's end a scene that does not loop finishes every running event (`0x6f39a63`) and stops.
 
 ### The neighbours
 
@@ -434,9 +518,13 @@ breakpoints.
   particles do not live out, so `duration` is the effect's visible life.
 - **A `PSYS` entity is placed like any other**: an attach's writes go to the host as a world
   position, then a world orientation. The host caches both and hands the effect `[R | p]` at its
-  next advance, as the placement override on its `CONTROL_ROOT_ID` root (`0x45403c`), so an effect
-  trails its attach by one engine step. It never reads `psysprops.sparam` and starts every effect at
-  its default `sparam`, so a `sparam` set before `START_PSYS` is lost.
+  next advance, as the placement override on its `CONTROL_ROOT_ID` root (`0x45403c`). Advances
+  inside a step come before that instant's events, but every step ends by advancing each entity
+  again by 0 ms (`0x6f39a27`–`0x6f39a31`), so the effect is handed the frame its attach wrote in the
+  same step — only what it emitted during the step was placed from the previous one. Whether the
+  effect's `dt = 0` transform pass re-places every node is not traced. The host never reads
+  `psysprops.sparam` and starts every effect at its default `sparam`, so a `sparam` set before
+  `START_PSYS` is lost.
 - **`START_PSYS_PROP_ANIM`** takes the last `sparam` set on the entity as its start value and moves
   it to `psysprops.sparam` over `duration`, as `from + (to − from)·u`, `u` being elapsed over
   duration — linear and unclamped — or the event's `param_curve`. A zero duration is an instant set.
@@ -451,20 +539,28 @@ THORN-only reading of a script cannot interpret it.
 | Key                        | Values                                                                                                | Read by                        |
 | -------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------ |
 | `category`                 | `Audio`, `Character`, `Prop`, `Equipment`, `Spaceship`, `Asteroid`, `Room`, `Equipment Cart`, `Solar` | `common.dll`, `Freelancer.exe` |
-| `actor` / `Actor`          | costume nickname                                                                                      | `common.dll`, `Freelancer.exe` |
+| `actor` / `Actor`          | a cast name: `player`, a room role (`bartender`, …) or a story character — the costume is `template_name` | `common.dll`, `Freelancer.exe` |
 | `speaker` / `Speaker`      | `Offer_Character_A`, `Player_Character_P`                                                             | `Freelancer.exe`               |
 | `nofog` / `NoFog`          | `Y`, `y` — as *strings*                                                                               | `common.dll`, `Freelancer.exe` |
 | `running_lights`           | `true`, `True` — as strings                                                                           | `common.dll`, `Freelancer.exe` |
 | `main_object`              | the literal string `main_object`                                                                      | `Freelancer.exe`               |
 | `loadout` / `Loadout`      | loadout nickname                                                                                      | `common.dll`, `Freelancer.exe` |
 | `TextStart` / `TextString` | numbers **as strings**, IDS resource ids                                                              | `Freelancer.exe`               |
-| `Priority`                 | `Steps_4`, `Room_Prop_1`, `Equip_1`, … 27 distinct                                                    | **nothing**                    |
+| `Priority`                 | `Steps_4`, `Room_Prop_1`, `Equip_1`, … 27 distinct — `rtcslider.ini` settings                         | `Freelancer.exe`, `common.dll` |
 | `No_Fog`                   | `Y`                                                                                                   | **nothing**                    |
 
-`Priority` appears in no game binary in any casing — authoring metadata that ships in the data and
-does nothing. `No_Fog` is the same in miniature: `nofog` is read, `No_Fog` is not. The names as the
-binaries hold them are lowercase while scripts author them in mixed case, so the lookup is presumably
-case-folding; `No_Fog` matches nothing under either casing.
+**The keys are matched ignoring case** (code): `thorn.dll` keeps each entity's `userprops` in a map
+whose comparator is `_memicmp` (`0x6f3c3b0`), and the game reads them through it. So `Actor` and
+`actor`, `NoFog` and `nofog`, `Priority` and `priority` are one key each. `No_Fog` is a different key
+and still matches nothing. `nofog` and `running_lights` are **tested for presence only** — any value
+switches them on (`Freelancer.exe` `0x44ee06`, `0x44ee35`).
+
+**`Priority` is read**, as `priority`: it names a setting in `DATA/SCRIPTS/rtcslider.ini`, and an
+entity whose setting is off for the player's cutscene-detail slider is **never created**
+(`0x44ee52`–`0x44ee72`). A `set = name, t` line is on when the slider is at least `t`, a
+`set_less = name, t` line when it is below `t`, and a name the file does not list is on
+(`common.dll` `0x627a920`). Retail uses it to give each story scene exactly one of a moving and a
+static camera monitor, and to thin sounds, props and effects at low detail.
 
 `TextStart` and `TextString` hold IDS ids as decimal strings (`259608.00000`). Text on screen is a
 `userprops` entry read by the game, not a THORN event.
@@ -596,7 +692,8 @@ Exactly one script has no `SCENE` entity —
 which also carry a negative `srt_grp`.
 
 `event_flags` takes five values across 5,533 uses — `128` × 4,071, `2` × 1,424, `130` × 22, `1` × 12,
-`3` × 4 — so it is a bitfield with bits 1, 2 and 128 in use.
+`3` × 4 — so it is a bitfield with bits 1, 2 and 128 in use; what each does is under
+[Event properties](#event-properties).
 
 ### `pathprops`
 
@@ -620,7 +717,7 @@ registered types: `FreeFormPCurve` (4,802) and `CatmullRomPCurve` (43).
 | Key                        | Uses                         |
 | -------------------------- | ---------------------------- |
 | `category`                 | 10,496                       |
-| `Priority`                 | 3,426 — **read by nothing**  |
+| `Priority`                 | 3,426                        |
 | `actor` / `Actor`          | 1,840                        |
 | `speaker` / `Speaker`      | 633                          |
 | `nofog` / `NoFog`          | 313                          |
@@ -634,11 +731,6 @@ registered types: `FreeFormPCurve` (4,802) and `CatmullRomPCurve` (43).
 
 Pending observation in the running game.
 
-- **What `event_flags` means.** Bits 1, 2 and 128, with 128 dominant on both `START_MOTION` and
-  `START_IK`. The corpus never varies anything else while varying this. The attach, connect and
-  `PSYS` events never read it (code: none of their routines touches the event's `+0x34`). *Experiment*: flip a bit on a
-  `START_MOTION` in a scene that plays and watch the animation. Not the same question as the flag
-  *values*, which the registration routine settles — this is what the engine does with them.
 - **What `STOP` = 21 and `STOP_IK` = 22 are for, outside the `action` slot.** As actions they are
   settled — dropped by the parser, and `START` = 23 is an alias for `START_SOUND` or `START_MOTION`
   (code; see [The registry is closed](#the-registry-is-closed)). Their names are referenced only by
@@ -646,6 +738,10 @@ Pending observation in the running game.
   host that reads the globals could use them.
 - **Whether `PROPERTY_ANIM`, `ADD_PATH` and `LOOKAT_ENTITY` do anything.** Same shape, same
   experiment.
+- **Whether an attached effect is drawn on its attach's frame of the same step.** The 0 ms advance
+  that closes every step hands the effect the new frame and runs its transform pass at `dt = 0`;
+  whether that pass re-places every node is not traced in `alchemy.dll`. *Experiment*: attach an
+  effect to a moving ship's hardpoint and compare the flame with the hull frame by frame.
 
 ---
 

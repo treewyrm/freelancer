@@ -29,7 +29,7 @@ are that binary's. The animation side is `engbase.dll`'s — [ANIMATION.md](ANIM
   ├─ Material library ────── see MATERIAL.md
   ├─ Texture library ─────── see TEXTURE.md
   ├─ Skeleton
-  │    └─ Name ───────────── the .cmp whose Animation library drives this model
+  │    └─ Name ───────────── the .cmp the rig was authored against; unread by the game
   ├─ Cmpnd
   │    ├─ Scale ──────────── float, always 1
   │    ├─ Root ───────────── Object name, File name, Index
@@ -107,12 +107,17 @@ Positions and texture coordinates are indexed separately. A drawn vertex is the 
 position, and the skinning weights, which hang off the position, are shared across the split. A face
 group's own indices address that element list, not the points.
 
-Skinning weights are a shared pool sliced per point:
+Skinning weights are a shared pool sliced per point, in point order, each point taking the next
+`boneCount[p]` entries:
 
 ```
-for (let i = boneFirst[p], end = i + boneCount[p]; i < end; i++)
-  // boneIds[i] weighted by boneWeights[i]
+for (let p = 0, i = 0; p < points; p++)
+  for (const end = i + boneCount[p]; i < end; i++)
+    // boneIds[i] weighted by boneWeights[i]
 ```
+
+`Point_bone_first` states where each slice starts, and the game never reads it — see
+[Skinning](#skinning). In retail it always equals the running sum this loop keeps.
 
 `UV1_indices` and `UV1` come as a pair or not at all. `deformable2.dll` reads neither — it builds its
 vertex buffer from `UV0` alone — so a character draws with one coordinate set whatever the file holds.
@@ -144,8 +149,9 @@ retail binary contains the name. A file whose first-indices skip or overlap draw
 from what they say. Retail's never do, and its weights need none of the corrections above
 ([Corpus](#corpus)).
 
-A level the caller marks unskinned (the create parameters' skinned-level count, `0x65f2793`) draws
-every bone with the identity — rigidly, at bind.
+A level the caller marks unskinned — one at or past the create parameters' skinned-level count,
+an unsigned compare (`0x65f3b3a`), flagged at `0x65f2793` — draws every bone with the identity
+(`0x65f6cc6`): rigidly, at bind.
 
 ### The UV bone
 
@@ -217,8 +223,11 @@ them shrinks two files. See [TODO](#todo).
   as any other file's. Every face group's `Material_name` happens to be defined in its own container —
   measured, all 4,184 — but nothing scopes the lookup there, and 75 of the 386 distinct names are
   defined in more than one of the 204 models.
-- **The `.anm` side.** A deformable model names its skeleton; the animation scripts live in that
-  file. See [ANIMATION.md](ANIMATION.md).
+- **The `.anm` side.** Nothing in a `.dfm` says which scripts drive it. The game opens every `.anm`
+  that `bodyparts.ini`'s `[Animations]` lists and finds a script by name, binding it to the whole
+  character — see [ANIMATION.md](ANIMATION.md#a-character-script-binds-to-the-whole-character).
+  `Skeleton/Name` is not that link: `deformable2.dll`, which reads the rest of the file, holds no
+  `Skeleton` string.
 
 ## Notes
 
@@ -335,7 +344,8 @@ on 976. 2,237 bones with every bit set appear in no `Bone_id_chain`.
 `br_female_guard_body.dfm` — on 36 face groups. Librelancer's face group parser does not read them.
 
 **Skeleton names**: `Head02.cmp` for every head, `AutoHeaderNode.cmp` for every body, `L Palm.cmp`
-and `R Palm.cmp` for the hands, plus `torture_root.cmp` on one test asset.
+and `R Palm.cmp` for the hands, plus `torture_root.cmp` on one test asset — exporter scene names
+that no other file in the install mentions.
 
 ### Round-trip
 

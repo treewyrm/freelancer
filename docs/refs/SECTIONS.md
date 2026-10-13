@@ -361,6 +361,10 @@ from `RoomData.cpp` and one from `GoodList.cpp`:
 `[AvailableShip]`, `[Billboard]`, `[Cloud]`, `[GoodsCartPlacement]`, `[GoodsPilePlacement]`,
 `[GoodType]`, `[Lighting]`, `[MonitorPlacement]`, `[RepairRobotPlacement]`, `[ShipPlacement]`
 
+A room file's reader (`RoomData::read_from_ini`, `common.dll` `0x6277400`) also warns and skips
+`[Fog]`, `[Effect]` and `[Light]` — names retail uses elsewhere, so they are not among the 35 — and
+accepts `[Room]` for `[Room_Info]` and `[Sound]` for `[Room_Sound]`.
+
 **Fifteen are read positionally, so they have no property names at all.** Their handler calls the
 indexed `INI_Reader::get_value_int(i)` / `get_value_string(i)` accessors and never `is_value` — the
 engine walks the values by position and never compares a key. Eleven of the fifteen share **one
@@ -383,10 +387,11 @@ a name would not be matched if one were written.
 **One is a fuse action.** `[damage_hp_attachment]` is dispatched in `server.dll` alongside eleven
 other action blocks — `ignite_fuse`, `destroy_root`, `damage_root`, `destroy_group`, `damage_group`,
 `destroy_hp_attachment`, `impulse`, `tumble`, `make_invincible`, `dump_cargo`, `fuse` — and is the
-only one of the twelve retail never writes. Its properties are not recoverable, and neither are its
-siblings': **`at_t` is the only fuse-action property any binary matches by name**, read for every
-action by `FuseAction::ReadFuseActionValue`. `fate`, `hardpoint`, `group_name`, `hitpoints`,
-`damage_type` and `fuse_t` occur in retail and are matched by nothing.
+only one of the twelve retail never writes. Each action's reader (`ServerFuse::Read`, `0x6dec1d0`,
+calls them through a vtable) tries `FuseAction::ReadFuseActionValue` for `at_t` and then matches its
+own keys by name, so the sweep saw none of them; the sections below give the addresses. Of the keys
+retail writes in these blocks, only `[destroy_group]`'s `dmg_hp` and `dmg_obj` are matched by
+nothing, and `server.dll` has neither string.
 
 ## Read, section undetermined
 
@@ -1056,12 +1061,23 @@ reader treats `visit` as an int.
 and `music` each also set a bit of the `property_flags` word — see
 [ENGINE.md](ENGINE.md#zone-property-flags).
 
+`content.dll`'s zone reader (`0x7097530`) reads `mission_type`, `vignette_type`, `mission_eligible`,
+`usage`, `path_label`, `density` and `repop_time` (`0x7097899`, `0x7097924`, `0x709780f`,
+`0x709778e`, `0x7097622`, `0x7097845`, `0x7097864`). **`difficulty` is read by nothing in this
+section**: no zone reader in any binary takes it. A zone is a random-mission location when it has
+`mission_type`, or has none and its nickname contains lower-case `vignette` (a case-sensitive
+`strstr`, `0x709760c`); `vignette_type` only says open, field or exclusion.
+
 ### `[Hotspot]`
 
 3,581 sections.
 
 `name`, `behavior`, `room_switch`, `virtual_room`, `state_read`, `state_send`,
 `set_virtual_room`, **`state_transition`⁺**, **`zoom_in`⁺**, **`zoom_out`⁺**
+
+Read by `common.dll` `RoomData::read_Hotspot_block` (`0x6276d30`). `behavior` is one of twelve names
+(table `0x63e9bc8`). `state_send` is stored and read by nothing in any binary; `state_transition`
+works. `zoom_in` and `zoom_out` are matched only to log "ERROR: zoom_in/zoom_out is obsolete".
 
 ### `[Object]`
 
@@ -1118,16 +1134,24 @@ whole costume instead and writes the same slot, so whichever comes last wins (`C
 
 1,642 sections.
 
-`rumor`, `rumor_type2`*, `bribe`*, `nickname`, `individual_name`*, `affiliation`*, `voice`,
-`body`, `head`*, `lefthand`*, `righthand`*, `room`*, `misn`*, ~~`rumorknowdb`~~, `know`*,
-~~`knowdb`~~, `accessory`, `base_appr`*
+`rumor`, `rumor_type2`, `bribe`, `nickname`, `individual_name`, `affiliation`, `voice`,
+`body`, `head`, `lefthand`, `righthand`, `room`, `misn`, ~~`rumorknowdb`~~, `know`,
+~~`knowdb`~~, `accessory`, `base_appr`
 
-### `[start_effect]` ‡
+Read by `content.dll` `0x6f97ea0`, which first hands each line to the NPC reader it shares with
+`specific_npc.ini` `[NPC]` (`0x7022540`). `rumor` and `rumor_type2` are one parser into one list
+(`0x6fc47a0`).
+
+### `[start_effect]`
 
 1,353 sections.
 
 `hardpoint`, `effect`, `at_t`, `pos_offset`, `attached`, `ori_offset`, `particles`, ~~`ONLY`~~,
 ~~`age_fire`~~
+
+Read by `Freelancer.exe` `0x52b5f0`, from the client fuse loader at `0x529f29`; `server.dll` skips
+the block. `hardpoint` repeats, and each `pos_offset` and `ori_offset` replaces the offset of the
+last `hardpoint` before it. **`particles` is not read in this section.**
 
 ### `[VisEffect]` ‡
 
@@ -1164,6 +1188,9 @@ whole costume instead and writes the same slot, so whichever comes last wins (`C
 `hardpoint`, `icolor`, `scale`, `blink`, `endpause`, `gap`, `numlights`, ~~`:gap`~~,
 **`color`⁺**, **`setpoint`⁺**
 
+Read by `common.dll` `0x6276f60`. **`numlights` is not read in this section**; only
+`[FlashlightLine]` reads it (`0x627731e`).
+
 ### `[loadout]`
 
 803 sections.
@@ -1180,8 +1207,12 @@ nickname, a count and, on a solar, a cargo pod's hardpoint.
 
 705 sections.
 
-`nickname`, `effect_type`*, `vis_effect`*, `vis_generic`*, `snd_effect`*, `vis_beam`*,
-`lgt_effect`*, `lgt_range_scale`*, `lgt_radius`*, `:`*
+`nickname`, `effect_type`, `vis_effect`, `vis_generic`, `snd_effect`, `vis_beam`, `lgt_effect`,
+`lgt_range_scale`, `lgt_radius`, `:`*, **`lgt_color`⁺**, **`lgt_time_scale`⁺**
+
+Read by `Freelancer.exe` `0x40e300`, from the `[Data] effects` dispatcher at `0x40ebc9`. An
+`effect_type` that names no `EFT_*` is an error, but the out-of-range index is stored anyway.
+`:` is not one of its keys.
 
 ### `[ObjList]`
 
@@ -1197,11 +1228,15 @@ nickname, a count and, on a solar, a cargo pod's hardpoint.
 
 `nickname`, `loadout`, `ship_archetype`, `state_graph`, `pilot`, `npc_class`, `level`
 
-### `[BaseFaction]` ‡
+### `[BaseFaction]`
 
 609 sections.
 
-`NPC`*, `faction`, `weight`, ~~`offers_missions`~~, `mission_type`*
+`NPC`, `faction`, `weight`, ~~`offers_missions`~~, `mission_type`
+
+Read by `content.dll` `0x6f9b350`, whose `is_header` goes through a register (`0x6f9b406`).
+`mission_type`'s first value is not read: the literal `DestroyMission` is stored instead
+(`0x6f9b4b0`).
 
 ### `[Gun]`
 
@@ -1272,11 +1307,20 @@ Archetype chain: `AttachedEquipment`.
 **`goodscart_script_fighter`⁺**, **`goodscart_script_freighter`⁺**, **`is_outside`⁺**,
 **`mesh`⁺**, **`mission_vendor_type`⁺**, **`news_material`⁺**
 
+Read by `common.dll` `0x62757f0`; `[Room]` is an alias of this header in a room file. Of the
+engine-only keys, `animation_oneshot` plays once, and `cutoff_shadow_z` and
+`extra_shadow_height_offset` are stored with no consumer found. **The other nine are matched only to
+log "obsolete"** (`0x6275834`–`0x6275b49`): both `background_script` keys, all three
+`goodscart_script_*` variants, and `is_outside`, `mesh`, `mission_vendor_type` and `news_material`.
+
 ### `[Camera]`
 
 443 sections.
 
 `name`, **`far_plane`⁺**, **`index`⁺**, **`near_plane`⁺**
+
+In a room file (`common.dll` `0x6275e00`) `far_plane`, `index` and `near_plane` are matched only to
+log "obsolete … use a camera name".
 
 ### `[NPC]`
 
@@ -1307,13 +1351,18 @@ Archetype chain: `AttachedEquipment`.
 
 412 sections.
 
-`fixture`*, `nickname`, `character_density`*
+`fixture`, `nickname`, `character_density`
+
+Read by `content.dll` `0x6f9ab2c` (`character_density` `0x6f9ab9c`, `fixture` `0x6f9abba`).
 
 ### `[NewsItem]`
 
 403 sections.
 
-`base`, `rank`, `icon`*, `logo`*, `category`, `headline`*, `text`*, `audio`*, `autoselect`*
+`base`, `rank`, `icon`, `logo`, `category`, `headline`, `text`, `audio`, `autoselect`,
+**`breaking`⁺**
+
+Read by `content.dll` `0x6fa47b0`. `rank` is the story stage, not the player's level.
 
 ### `[NNObjective]`
 
@@ -1372,13 +1421,18 @@ spheres' scripts.
 
 291 sections.
 
-`at_t`, `group_name`*, `fate`*, `separable`, `dmg_hp`, `dmg_obj`
+`at_t`, `group_name`, `fate`, `separable`, `dmg_hp`, `dmg_obj`
+
+Read by `server.dll` `0x6deddd0`. `fate` is matched exactly, case and all: `debris` or `disappear`.
+**`separable`, `dmg_hp` and `dmg_obj` are not read in this section.**
 
 ### `[CharacterPlacement]`
 
 265 sections.
 
 `name`, `start_script`, **`zoom_in`⁺**, **`zoom_out`⁺**
+
+`zoom_in` and `zoom_out` are matched only to log "ERROR: … is obsolete" (`common.dll` `0x62768a0`).
 
 ### `[TexturePanels]`
 
@@ -1415,6 +1469,9 @@ Archetype chain: `Root`.
 
 `name`, `lifetime`, `death_fuse`, `LODranges`*
 
+Read by `common.dll` `Fuse::ReadFuseValues` (`0x62be010`), for both the client (`Freelancer.exe`
+`0x529e10`) and `server.dll` (`0x6dec1d0`). **`LODranges` is not read in this section.**
+
 ### `[PlayerShipPlacement]`
 
 208 sections.
@@ -1431,7 +1488,10 @@ Archetype chain: `Root`.
 
 200 sections.
 
-`nickname`, `start_room`
+`nickname`, `start_room`, **`price_variance`⁺**, **`ship_repair_cost`⁺**
+
+Read by `common.dll` `BaseData::read_Base_block` (`0x6264d40`), which a base file also reaches with
+the header `[Base]`. `nickname` is matched and discarded. `ship_repair_cost` defaults to 0.33.
 
 ### `[voice]`
 
@@ -1449,6 +1509,11 @@ Archetype chain: `Root`.
 **`ship_mdm_01`⁺**, **`ship_mdm_02`⁺**, **`ship_mdm_03`⁺**, **`ship_repair_cost`⁺**,
 **`ship_sml_01`⁺**, **`ship_sml_02`⁺**, **`ship_sml_03`⁺**, **`start_room`⁺**
 
+**`price_variance`, `ship_repair_cost` and `start_room` are not read by the `universe.ini` reader**
+(`common.dll` `0x6338637`–`0x6338c4d`): they are `[BaseInfo]`'s, read under this header only in a
+base file, where `[Base]` is an alias. `ship_*` fill the THN prop templates `$ship_*`
+(`Freelancer.exe` `0x446280`).
+
 ### `[MBase]`
 
 194 sections.
@@ -1459,7 +1524,9 @@ Archetype chain: `Root`.
 
 194 sections.
 
-`num_offers`*
+`num_offers`
+
+Read by `content.dll` `0x6f9a983`.
 
 ### `[MsnFormation]`
 
@@ -1494,7 +1561,9 @@ Archetype chain: `Power`.
 
 163 sections.
 
-`at_t`, `hardpoint`, `fate`*
+`at_t`, `hardpoint`, `fate`
+
+Read by `server.dll` `0x6dee3d0`. `fate` is matched exactly: `debris`, `disappear` or `loot`.
 
 ### `[explosion]`
 
@@ -1769,7 +1838,10 @@ Archetype chain: `Asteroid`.
 
 84 sections.
 
-`actor`*, `NPC`*, `fidget`*, `spot`
+`actor`, `NPC`, `fidget`, `spot`
+
+Read by `content.dll` `CharacterEncounter::load` (`0x6fc4c30`), keys through a register: `actor`
+`0x6fc5230`, `npc` `0x6fc530d`, `fidget` `0x6fc5379`.
 
 ### `[shape]`
 
@@ -1833,7 +1905,10 @@ alternative to `offset_dist`: the same field, flagged as a fraction rather than 
 
 74 sections.
 
-`at_t`, `fuse`, `fuse_t`*
+`at_t`, `fuse`, `fuse_t`
+
+Read by `server.dll` `0x6deea30`, and by `Freelancer.exe` `0x52c340`, which reads `fuse` and not
+`fuse_t`.
 
 ### `[Light]`
 
@@ -1877,6 +1952,9 @@ keys**: their strings belong to the gun, munition and `[Cursor]` readers (`0x40a
 
 `Location`, `autoplay`, `relocate_player`, `action`, `mission_text_id`, `offer`, `accept`,
 `decision`, `decline`, `start_room`, `nooffer_text_id`, `reject`, **`greet`⁺**, **`walkup`⁺**
+
+`decline` and `reject` are the same script type (`0x6fc50d3`). `greet` and `walkup` are read and
+never used; no reader of `nooffer_text_id`'s stored value was found.
 
 ### `[Clouds]`
 
@@ -2049,6 +2127,9 @@ Read by the system loader (`Freelancer.exe` `0x553cf5`), which takes **only `spa
 
 `ShipDealer`*, ~~`CommodityDealer`~~, ~~`EquipmentDealer`~~
 
+**Read by nothing.** The room reader (`common.dll` `0x6277400`) skips it without a message, and no
+binary contains `Spiels`. The `ShipDealer` literal is a room nickname the executable compares.
+
 ### `[SystemInfo]`
 
 54 sections.
@@ -2074,13 +2155,23 @@ Archetype chain: `Root`.
 **`use_throttle` sends the effect the raw throttle** every frame, clamped to 0…1 (`Freelancer.exe`
 `0x532490`). Without it nothing sets the effect's `sparam`, and it stays at 0.
 
-### `[BeamSpear]` ‡
+### `[BeamSpear]`
 
 51 sections.
 
-`nickname`, `tip_length`*, `tail_length`*, `head_width`*, `core_width`*, `tip_color`*,
-`core_color`*, `outter_color`*, `tail_color`*, `head_brightness`*, `trail_brightness`*,
-`head_texture`*, `trail_texture`*, `flash_size`*
+`nickname`, `tip_length`, `tail_length`, `head_width`, `core_width`, `tip_color`, `core_color`,
+`outter_color`, `tail_color`, `head_brightness`, `trail_brightness`, `head_texture`, `trail_texture`,
+`flash_size`, **`core_length`⁺**, **`sec_core_color`⁺**, **`sec_core_width`⁺**,
+**`sec_outter_color`⁺**
+
+Read by `Freelancer.exe` `0x42e850` (keys `0x42e4a0`), from the `[Data] effects` loader at
+`0x40ece6`, so any effects file may hold one. `[BeamSpear]` and `[BeamBolt]` fill **one record** and
+differ only in its kind, so every key of either is read under both. `head_texture` (`star`, `ball`)
+and `trail_texture` (`wide`, `thin`) are compared **case-sensitively**, anything else reading as the
+first. A key before `nickname` is dropped, and a repeated nickname merges into the first record. At
+the section's end `tip_length`, `tail_length` and `head_width` are raised to `core_width` (a bolt's
+`tail_length` to `sec_core_width` instead) and both brightnesses clamped to 0.01–1 (`0x42e920`).
+`[Effect] vis_beam` must come after the beam it names.
 
 ### `[Texture]`
 
@@ -2121,12 +2212,20 @@ system file without `[Background]` keeps the previous system's sky. **`file` is 
 
 Read by `Freelancer.exe` `0x50c950`. `alpha` is read and never used by the draw.
 
-### `[EffectType]` ‡
+### `[EffectType]`
 
 45 sections.
 
 `nickname`, `Priority`, `generic_priority`, `lod_type`, `radius`, `visibility`, `update`,
-`run_time`, `pbubble`
+`run_time`, `pbubble`, **`fps`⁺**
+
+Read by `Freelancer.exe` `0x4fd5a0`, from the `[Data] effects` dispatcher at `0x40ecc4`, into a
+table of 47 records compiled into the executable (`0x612a68`). `nickname` picks the record by exact,
+case-sensitive match on its `EFT_*` name, so a mod cannot add a type. `lod_type` is matched only
+against the bands `EFT_LOD_TRAIL` to `EFT_LOD_SMALL_DISTANT`. `EFT_LOD_NONE`, and retail's one
+`EFT_LOD_MED`, leave the compiled band in place. `visibility` and `update` test only for
+`EXIST_OFFSCREEN` and `UPDATE_OFFSCREEN`; any other value is the other setting. **`fps` is read
+(default 5) and never used.**
 
 ### `[Creation]` ‡
 
@@ -2158,6 +2257,8 @@ zone-occlusion fades keep their 2 s defaults, which no file can change.
 37 sections.
 
 `at_t`
+
+Read by `server.dll` `0x6dedaa0`.
 
 ### `[InternalFX]`
 
@@ -2360,7 +2461,9 @@ A system file's preload lists, read by the system loader (`Freelancer.exe` `0x55
 
 16 sections.
 
-`at_t`, `hardpoint`, `radius`, `force`*, `pos_offset`, `damage`
+`at_t`, `hardpoint`, `radius`, `force`, `pos_offset`, `damage`
+
+Read by `server.dll` `0x6deebd0`, and by `Freelancer.exe` `0x52bf90`, which does not read `damage`.
 
 ### `[spines]`
 
@@ -2396,11 +2499,14 @@ Archetype chain: `AttachedEquipment`.
 
 `npc_ship_file`, `mission_title`, `mission_offer`, `reward`
 
-### `[start_cam_particles]` ‡
+### `[start_cam_particles]`
 
 13 sections.
 
 `effect`, `at_t`, `pos_offset`, `ori_offset`
+
+Read by `Freelancer.exe` `0x52b2e0`, from the client fuse loader at `0x529ed1`. **`pos_offset` and
+`ori_offset` are not read in this section.**
 
 ### `[IGraph]`
 
@@ -2519,7 +2625,9 @@ the device back and freezes the fade where it was (`0x6294a20`), and a new devic
 
 7 sections.
 
-`at_t`, `damage_type`*, `hitpoints`*
+`at_t`, `damage_type`, `hitpoints`
+
+Read by `server.dll` `0x6dedb50`. `hitpoints` is an integer.
 
 ### `[DetailSwitchTable]`
 
@@ -2582,11 +2690,16 @@ log that it is obsolete.
 
 `nickname`, `countermeasure_active_time`*, `countermeasure_unactive_time`*
 
-### `[EffectLOD]` ‡
+### `[EffectLOD]`
 
 6 sections.
 
-`type`, `max_lod_screen_size`*, `min_lod_screen_size`*, `min_screen_size`*
+`type`, `max_lod_screen_size`, `min_lod_screen_size`, `min_screen_size`
+
+Read by `Freelancer.exe` `0x42dae0`, from the `[Data] effects` dispatcher at `0x40eca9`. **`type` must
+be the first key**, or the section is skipped without an error. Its value is matched, folding case,
+against `lod_type_trail` to `lod_type_small_distant`; an unknown value is an error, and that section
+is dropped.
 
 ### `[lefthand]` ‡
 
@@ -2682,14 +2795,16 @@ and `max_LOD` to 5.
 
 `nickname`, `strafe_run_away_distance`*, `strafe_attack_throttle`*, `strafe_turn_throttle`*
 
-### `[BeamBolt]` ‡
+### `[BeamBolt]`
 
 4 sections.
 
-`nickname`, `tip_length`*, `tail_length`*, `core_length`*, `head_width`*, `core_width`*,
-`sec_core_width`*, `tip_color`*, `core_color`*, `outter_color`*, `sec_core_color`*,
-`sec_outter_color`*, `tail_color`*, `head_brightness`*, `trail_brightness`*, `head_texture`*,
-`trail_texture`*, `flash_size`*
+`nickname`, `tip_length`, `tail_length`, `core_length`, `head_width`, `core_width`,
+`sec_core_width`, `tip_color`, `core_color`, `outter_color`, `sec_core_color`, `sec_outter_color`,
+`tail_color`, `head_brightness`, `trail_brightness`, `head_texture`, `trail_texture`, `flash_size`
+
+Read by the same code as `[BeamSpear]`; see its note. `sec_core_width` is read, and used only by the
+end-of-section clamp.
 
 ### `[gate_tunnel]` ‡
 
@@ -2786,7 +2901,9 @@ Archetype chain: `CounterMeasureDropper`.
 
 3 sections.
 
-`group_name`*, `at_t`, `damage_type`*, `hitpoints`*
+`group_name`, `at_t`, `damage_type`, `hitpoints`
+
+Read by `server.dll` `0x6dee120`. `hitpoints` is an integer.
 
 ### `[EngineKillBlock]` ‡
 
@@ -3053,6 +3170,8 @@ A `cameras.ini` camera — see [`[CockpitCamera]`](#cockpitcamera).
 
 `at_t`, `origin_hardpoint`
 
+Read by `server.dll` `0x6def500`.
+
 ### `[EngineEquipConsts]`
 
 1 section.
@@ -3166,7 +3285,9 @@ a drag of 3 and a flame throttle of 0.9 (`common.dll` `0x63ea5cc`–`0x63ea5dc`)
 
 1 section.
 
-`turn_on`
+`turn_on`, **`at_t`⁺**
+
+Read by `server.dll` `0x6def3d0`.
 
 ### `[Maneuvers]` ‡
 
@@ -3397,11 +3518,14 @@ Archetype chain: `Equipment`.
 
 `radius`, `range`, `color`, `size`
 
-### `[StoryInfo]` ‡
+### `[StoryInfo]`
 
 1 section.
 
-`Mission`*, `MissionNum`*, `delta_worth`*
+`Mission`, `MissionNum`, `delta_worth`, **`debug`⁺**, **`ship_bought`⁺**
+
+The save game's story state, read by `content.dll` `0x6f968d0` with names through pointers
+(`0x70bd2e0`–`0x70bd2f4`); `MissionNum` is the story stage.
 
 ### `[Target]` ‡
 
@@ -3452,8 +3576,10 @@ Archetype chain: `Root`.
 
 1 section.
 
-`at_t`, `ang_drag_scale`*, `turn_throttle_z`*, `turn_throttle_x`*, `turn_throttle_y`*,
-`throttle`*
+`at_t`, `ang_drag_scale`, `turn_throttle_z`, `turn_throttle_x`, `turn_throttle_y`, `throttle`,
+**`engine_kill`⁺**
+
+Read by `server.dll` `0x6def000`.
 
 ### `[video]`
 
@@ -3494,7 +3620,9 @@ A `cameras.ini` camera — see [`[CockpitCamera]`](#cockpitcamera).
 ### `[damage_hp_attachment]`
 
 **Not in retail data.** The [fuse action](#sections-the-engine-matches-that-retail-never-contains)
-`server.dll` never writes; constructs a 52-byte `FuseAction`. Only `at_t` is matched by name.
+retail never writes. `server.dll` `0x6dee770` reads it.
+
+**`at_t`⁺**, **`damage_type`⁺**, **`hardpoint`⁺**, **`hitpoints`⁺**
 
 ### `[Decloaked]`
 
@@ -3638,6 +3766,13 @@ Archetype chain: `RepairDroid`.
 ### `[ShipPlacement]`
 
 **Not in retail data, obsolete.** `*** WARNING: [ShipPlacement] is obsolete`, `RoomData.cpp`.
+
+### `[start_explosion]`
+
+**Not in retail data.** A client fuse action: `Freelancer.exe`'s fuse loader (`0x529e67`) matches the
+header through a register, and `0x52b020` reads the block.
+
+**`at_t`⁺**, **`explosion`⁺**, **`hardpoint`⁺**, **`pos_offset`⁺**
 
 ### `[ThirdPersonCamera]`
 

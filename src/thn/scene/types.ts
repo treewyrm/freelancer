@@ -20,6 +20,9 @@
  *   literals, because a number here is a `number` and not the text it was written as.
  */
 
+import type Matrix3 from '#/math/matrix3.js'
+import type Quat from '#/math/quat.js'
+import type Vector3 from '#/math/vector3.js'
 import type { Value } from '#/thn/types.js'
 import type {
   AxisName,
@@ -53,15 +56,6 @@ export interface Script {
   events: Event[]
 }
 
-/** Three numbers as a Lua array. A position, a colour or an axis, depending on the key. */
-export type Vector3Tuple = [number, number, number]
-
-/** A rotation matrix, as three rows. */
-export type Matrix3Rows = [Vector3Tuple, Vector3Tuple, Vector3Tuple]
-
-/** Four numbers as a Lua array. The animation form of an orientation; `orient` places instead. */
-export type QuaternionTuple = [number, number, number, number]
-
 /** Degrees about an axis. The animation form, and never on an entity. */
 export type AxisRotation = [number, AxisName]
 
@@ -78,11 +72,21 @@ export type UnknownKeys = Record<string, Value>
  */
 export type UserProps = Record<string, string>
 
-/** Position and orientation. `orient` places, `q_orient` and `axisrot` animate. */
+/**
+ * Position and orientation. `orient` places, `q_orient` and `axisrot` animate.
+ *
+ * **`orient` is transposed on the way in.** The script writes three triples and `thorn.dll` reads
+ * each as a *column* of the rotation (`0x6f29cff`–`0x6f2a00d`) — the entity's local X, Y and Z axes
+ * in scene space. A {@link Matrix3} holds the rotation's *rows*, as a hardpoint or a joint does, so
+ * the reader transposes and the writer transposes back: `Matrix4.fromRotationTranslation` takes it as
+ * it takes every other `Matrix3`.
+ *
+ * **`q_orient` is reordered.** The script writes `{w, x, y, z}`; see {@link OrientedPoint}.
+ */
 export interface SpatialProps {
-  pos?: Vector3Tuple
-  orient?: Matrix3Rows
-  q_orient?: QuaternionTuple
+  pos?: Vector3
+  orient?: Matrix3
+  q_orient?: Quat
   axisrot?: AxisRotation
 }
 
@@ -99,7 +103,9 @@ export interface CameraProps {
  *
  * Only `fovh` is shared. The animation form says `aspect`, `near` and `far` where the entity says
  * `hvaspect`, `nearplane` and `farplane`, and both spellings are in `thorn.dll`, so this is the
- * engine's inconsistency rather than an authoring one.
+ * engine's inconsistency rather than an authoring one. **The keys are read by position**
+ * (`0x6f5e148`) into the entity's `{fovh, nearplane, farplane, hvaspect}`, so `aspect` animates the
+ * near plane, `near` the far plane and `far` the aspect.
  */
 export interface CameraAnimProps {
   fovh?: number
@@ -108,19 +114,24 @@ export interface CameraAnimProps {
   far?: number
 }
 
-/** `lightprops` on a `LIGHT` entity, and on a `START_LIGHT_PROP_ANIM` — the same keys either way. */
+/**
+ * `lightprops` on a `LIGHT` entity, and on a `START_LIGHT_PROP_ANIM` — the same keys either way.
+ *
+ * A colour's red, green and blue are `x`, `y` and `z`, as a material's are; `atten` is its three
+ * numbers in the order the file writes them.
+ */
 export interface LightProps {
   on?: TruthName
-  color?: Vector3Tuple
-  diffuse?: Vector3Tuple
-  specular?: Vector3Tuple
-  ambient?: Vector3Tuple
-  direction?: Vector3Tuple
+  color?: Vector3
+  diffuse?: Vector3
+  specular?: Vector3
+  ambient?: Vector3
+  direction?: Vector3
   range?: number
   cutoff?: number
   type?: LightTypeName
   theta?: number
-  atten?: Vector3Tuple
+  atten?: Vector3
 }
 
 /** `audioprops` on a `SOUND` entity, and on a `START_AUDIO_PROP_ANIM`. Attenuation and 3D falloff. */
@@ -143,10 +154,16 @@ export interface PsysProps {
   sparam?: number
 }
 
-/** One keyframe of an oriented path: where the object is, and which way it faces. */
+/**
+ * One keyframe of an oriented path: where the object is, and which way it faces.
+ *
+ * The file writes the quaternion **`{w, x, y, z}`** — `thorn.dll` writes the identity `{1,0,0,0}` and
+ * converts with a quaternion routine whose first component is `w` (`0x6f359a0`, `x86math.dll`
+ * `0x6f723c0`). The reader and the writer put `w` back where it is written.
+ */
 export interface OrientedPoint {
-  position: Vector3Tuple
-  orientation: QuaternionTuple
+  position: Vector3
+  orientation: Quat
 }
 
 /**
@@ -172,7 +189,7 @@ export interface OrientationSplinePath {
 export interface SplinePath {
   path_type: 'CV_CRSplinePath'
   flag: PathFlagName
-  points: Vector3Tuple[]
+  points: Vector3[]
 }
 
 /**
@@ -201,7 +218,7 @@ export interface CompoundProps {
 export interface FogProps {
   fogon?: TruthName
   fogmode?: FogModeName
-  fogcolor?: Vector3Tuple
+  fogcolor?: Vector3
   fogstart?: number
   fogend?: number
   fogdensity?: number
@@ -240,7 +257,7 @@ export interface Scene extends Placed {
   type: 'SCENE'
   up?: AxisName
   front?: AxisName
-  ambient?: Vector3Tuple
+  ambient?: Vector3
 
   /** Written flat on the entity, not as a block. See {@link FogProps}. */
   fog?: FogProps
@@ -338,7 +355,7 @@ export interface Targeted {
 
 /** Where the action orients something. */
 export interface Oriented {
-  offset?: Vector3Tuple
+  offset?: Vector3
   up?: AxisName
   front?: AxisName
 }
@@ -367,7 +384,7 @@ export interface StartCameraPropAnim extends EventCommon {
   cameraprops?: CameraAnimProps
 }
 
-/** Moves an entity along a `MOTION_PATH`, between two points on it given as percentages. */
+/** Moves an entity along a `MOTION_PATH`, between two points on it given as fractions of its length, 0 to 1. */
 export interface StartPathAnimation extends EventCommon, Oriented {
   action: 'START_PATH_ANIMATION'
   start_percent?: number

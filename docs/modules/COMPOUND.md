@@ -154,6 +154,10 @@ hardpoint written back gains no file it did not have. One retail hardpoint of 12
 way, in a stale fragment no part names ([Corpus](#corpus)). The orientation and axis defaults stay:
 no retail hardpoint omits either.
 
+A revolute hardpoint's `min` and `max` are radians, and they bound how far the equipment mounted on
+it turns about `axis` — a turret's traverse. The pair `-2π`…`2π` means no bound at all: observed in
+game, a turret on such a mount turns through any number of revolutions.
+
 ## Notes
 
 ### Position and offset
@@ -166,7 +170,9 @@ zero in all 3,699 records that have one, so this bears on authored assets only. 
 `translational` and `loose` record no second point.
 
 The engine applies `offset` on every type that carries one, prismatic included (`0x6625730`:
-`t = position + d·axis − R·offset`), which closes the question RENDERER.md had left open.
+`t = position + d·axis − R·offset`), which closes the question RENDERER.md had left open. An
+in-game test with an authored `child_point` on a `Pris` joint appeared to show no displacement;
+the disassembly is the deciding source, so the reading stands and the test is taken as flawed.
 
 ### Translational joints
 

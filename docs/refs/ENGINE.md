@@ -500,13 +500,15 @@ pipeline emitted that the shipped engine never looks at.
 
 A `[zone]` carries both `faction_weight` (a weighted faction list) and `faction` (per-encounter
 weights). Only the second is read. Likewise the engine matches `difficulty` and not
-`difficulty_level`.
+`difficulty_level` — though not in a `[zone]`: no zone reader in any binary takes `difficulty`, so its
+300 zone uses are unread as well (`content.dll`'s zone reader is `0x7097530`).
 
-Nine of the 105 are shipped typos, each one edit away from a key that is read:
+Eight of the 105 are shipped typos, each one edit away from a key that is read:
 `spacedust _maxparticles` (embedded space, ×5), `spacedust_masparticles` (×2),
 `spacedusr_maxparticles`, `spacedust_maxdust`, `pacedust` (×3), `info_ids` for `ids_info`,
-`info_card` for `ids_info_card`, `fade_distance` for `near_fade_distance`, and
-`commoditydealer`/`equipmentdealer` where the hotspot names are `CommodityDealer`-cased constants.
+`info_card` for `ids_info_card`, and `fade_distance` for `near_fade_distance`.
+`CommodityDealer` and `EquipmentDealer` are not typos: they are `[Spiels]` keys, and no binary reads
+`[Spiels]` at all — the `ShipDealer` literal its third key matches is a room nickname.
 Two entries are not names at all — `260800`, and a run of 42 dashes.
 
 ### The 180 keys retail never sets
