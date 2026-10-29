@@ -49,15 +49,23 @@ None of the five is read by `soundmanager.dll` or `soundstreamer.dll`, which han
 ACM. Whether the Fraunhofer codec behind ACM reads `nCodecDelay` is not settled here. If it dropped
 1,393 frames ahead of `trim`, only 498 of the 25,615 MP3s would still hold all of `fact`.
 
+What the two DLLs require of the chunk is less than the format allows. `soundmanager.dll` checks
+`RIFF` and `WAVE` (`0x6ee8a2b`); both refuse a file with no `fmt ` or no `data`, and a `fmt ` under
+18 bytes unless it is PCM, where `soundmanager.dll` takes 14 bytes and `soundstreamer.dll` 16
+(`0x6ee8ab4`–`0x6ee8adc`, `0x6ef1705`–`0x6ef175d`). On PCM `soundmanager.dll` reads only
+`nChannels`, `wBitsPerSample` and the low 16 bits of `nSamplesPerSec`, and works the block alignment
+out itself (`0x6ee8b2b`–`0x6ee8b58`); a 14-byte PCM `fmt ` leaves `wBitsPerSample` outside the chunk,
+so it is read from whatever follows.
+
 ## `fact` and `trim`
 
 `fact` is the standard chunk: the uncompressed length in sample frames. `trim` is Freelancer's own.
 
 The two DLLs walk the chunk list differently. `soundmanager.dll` walks all of it and keeps the last
-chunk of each id. `soundstreamer.dll` stops as soon as it holds `fmt `, `fact` and `data`, so a
-`trim` after those three is never seen — retail always puts it before `data`. **Neither walker
-skips a pad byte** (`0x6ee8a99`, `0x6ef16e0`): an odd chunk with another after it throws both off,
-which is why retail pads nothing between chunks. Both accept the two counts the same way:
+chunk of each id. `soundstreamer.dll` (`0x6ef1690`) stops as soon as it holds `fmt `, `fact` and
+`data`, so a `trim` after those three is never seen — retail always puts it before `data`. **Neither
+walker skips a pad byte** (`0x6ee8a99`, `0x6ef16e0`): an odd chunk with another after it throws both
+off, which is why retail pads nothing between chunks. Both accept the two counts the same way:
 
 | Chunk  | Counts when   | Missing means |
 | ------ | ------------- | ------------- |
@@ -250,3 +258,14 @@ and the sound plays to its last frame:
 The 17 music tracks are the ones whose `fact` counts both channels, between 1.98 and 2 times the
 decoded length. The other 28 overrun by 6 to 21 frames in 18 files, by exactly their `trim` of
 1,209 in five — a `fact` equal to the whole decoded length — and by 519 to 12,900 in the last five.
+
+## TODO
+
+### Where a scene's `start_time` lands against `trim`
+
+`START_SOUND` can start a wave part-way in: `start_time` is integer milliseconds (`thorn.dll`
+`0x6f26085`), and the game adds the time since the event fired before handing it on
+(`Freelancer.exe` `0x4574d0`). How the sound manager turns that into a buffer position is not read,
+so neither is whether it counts from the first decoded frame or from the first frame past `trim`.
+*Experiment*: start one bank line at `start_time` 0 and at its `trim` in milliseconds and compare
+the onsets.

@@ -5,7 +5,7 @@ import File from '#/utf/file.js'
 import BufferView from '#/utility/bufferview.js'
 import { getMaterial, readMaterialLibrary, writeMaterialLibrary } from './library.js'
 import { readMaterial, writeMaterial } from './material.js'
-import { TextureFlags, type Material } from './types.js'
+import { type Material } from './types.js'
 
 /** Builds a material directory from `name -> file contents` in the given order. */
 const entry = (name: string, files: Record<string, File>) =>
@@ -34,7 +34,7 @@ describe('readMaterial', () => {
       entry('hull', {
         Type: string('DcDt'),
         Dt_name: string('hull.tga'),
-        Dt_flags: integer(TextureFlags.Unknown1),
+        Dt_flags: integer(0x40),
       }),
     )
 
@@ -92,7 +92,7 @@ describe('readMaterial', () => {
         ...Object.fromEntries(
           slots.flatMap((slot) => [
             [`${slot}_name`, string(`${slot}.tga`)],
-            [`${slot}_flags`, integer(TextureFlags.ClampU | TextureFlags.ClampV)],
+            [`${slot}_flags`, integer(0x0a)],
           ]),
         ),
       }),
@@ -139,7 +139,7 @@ describe('readMaterial', () => {
       entry('orphan', { Type: string('DcDt'), Dt_name: string('a.tga') }),
     )
 
-    deepStrictEqual(material.diffuseTexture, { name: 'a.tga', flags: TextureFlags.None })
+    deepStrictEqual(material.diffuseTexture, { name: 'a.tga', flags: 0 })
   })
 
   it('reads an empty type as an empty string', () => {
@@ -188,13 +188,13 @@ describe('writeMaterial', () => {
       specular: { x: 0, y: 0, z: 0.5 },
       power: 32,
       opacity: 0.5,
-      diffuseTexture: { name: 'dt.tga', flags: TextureFlags.Unknown1 },
-      emissionTexture: { name: 'et.tga', flags: TextureFlags.Unknown1 | TextureFlags.Unknown0 },
-      detailTexture: { name: 'bt.tga', flags: TextureFlags.Unknown1 | TextureFlags.ClampU },
-      nomadTexture: { name: 'nt.tga', flags: TextureFlags.MirrorU | TextureFlags.MirrorV },
-      maskTexture: { name: 'dm', flags: TextureFlags.Unknown1 },
-      maskTexture0: { name: 'dm0', flags: TextureFlags.Unknown1 },
-      maskTexture1: { name: 'dm1', flags: TextureFlags.Unknown1 },
+      diffuseTexture: { name: 'dt.tga', flags: 0x40 },
+      emissionTexture: { name: 'et.tga', flags: 0x50 },
+      detailTexture: { name: 'bt.tga', flags: 0x42 },
+      nomadTexture: { name: 'nt.tga', flags: 0x05 },
+      maskTexture: { name: 'dm', flags: 0x40 },
+      maskTexture0: { name: 'dm0', flags: 0x40 },
+      maskTexture1: { name: 'dm1', flags: 0x40 },
       tileRate: 4,
       tileRate0: 10,
       tileRate1: 30,

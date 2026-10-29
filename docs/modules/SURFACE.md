@@ -415,7 +415,9 @@ There is no `bounds: 'hull'` — see [Why an inner node is not a hull](#why-an-i
 
 `bounds: 'none'` leaves inner nodes bare. IVP emits that too — `build_ledgetree` writes
 `offset_compact_ledge = 0` whenever no bounding ledge was built — and this reader descends through a
-hull-less node either way. It has not been observed in game.
+hull-less node either way. It has not been observed in game; a ray query never tests a `Skip` hull
+([What the game builds from a part](#what-the-game-builds-from-a-part)), so the difference cannot
+show there.
 
 ### What the caller still owns
 
@@ -520,8 +522,9 @@ something.
 The fold does not move a hull, it copies it. `SurfaceLibrary.Parse` runs `GetPartSurfaces` for every
 part, and the descent into fixed children is transitive, so a hull on a fixed-jointed child is
 written into that child's own part **and** into each of its fixed ancestors' — the same geometry,
-re-expressed once per frame it lands in. The game wants that: a parent answers for its whole fixed
-subtree without descending into it.
+re-expressed once per frame it lands in. The game relies on it: an object's physics takes only its
+root part's surface and each `!fxd` part's own, so a fixed child collides through the copy in its
+ancestor — see [What the game builds from a part](#what-the-game-builds-from-a-part).
 
 It reaches hardpoint hulls as well as part hulls, and the ancestor's `hpid` chunk grows to list the
 descendants' hardpoints accordingly, which is why a root's `hpid` is routinely a superset of the
@@ -532,6 +535,22 @@ A reader that wants each hull once drops those whose id names a part reached thr
 chain of fixed joints that holds them itself — MAXLancer's import default, its "Keep Duplicates"
 checkbox being the opt-out — and a reader that wants the file as the game sees it keeps them. This
 library does neither: `readSurfaceLibrary` reports what the bytes say.
+
+### What the game builds from a part
+
+Read out of `common.dll`, which links IVP statically. `PhyArch::LoadSurfaces` (`0x62800a0`) hands the
+`surf` chunk to IVP verbatim, as the compact surface it is. `BuildIVP_Real` (`0x6288dd0`) gives an
+object its **root part's** surface — which carries every fixed child's hulls, each tagged with that
+child's part id — and makes each `!fxd` part a physics object of its own, with its own surface.
+
+A ray query (`PhySys::FindRayCollisions`, `0x628a080` → `0x628d5e0`) uses the ledgetree's spheres to
+cull and nothing else. Each **terminal** hull is tested exactly, as a segment against a convex
+polytope entered through a face the segment crosses from outside (`0x6349d70`), and `Skip` hulls are
+never tested. A segment starting inside a hull meets nothing of it, and a flat two-face hull is one
+double-sided triangle. A hull counts only where its id names an entry of the owning object's part
+list (`0x62863a0`) — the root, its fixed children, and equipment once connected — so a hull tagged
+with a hardpoint's id, or with a part the model lacks, is passed over. Whether contact and projectile
+collision mask hulls the same way is not read.
 
 ### The `surfaceDeviation` byte
 

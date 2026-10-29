@@ -146,7 +146,12 @@ interface Base<T> {
 // RevoluteHardpoint adds: axis: Vector3 (defaults to Y), min: number, max: number
 ```
 
-Read from and written to the `Hardpoints/Fixed` and `Hardpoints/Revolute` groups.
+Read from and written to the `Hardpoints/Fixed` and `Hardpoints/Revolute` groups. The engine knows
+a third: `engbase.dll`'s hardpoint loader names the group's joint type by a case-sensitive compare
+(`0x6626d00`), `Fixed` 0, `Prismatic` 1 and `Revolute` 2, and logs any other name as an unknown joint
+type and loads it as fixed. A prismatic hardpoint reads `Axis`, `Min` and `Max` as a revolute one does
+(`0x66260b8`–`0x66261d1`). No retail model carries a `Prismatic` group, so "no prismatic form" is
+true of the data, not of the engine.
 `getCompoundHardpoint` searches a whole compound and returns the hardpoint with the node owning it.
 
 `position` is left off rather than set to the origin when the file has no `Position`, so a
@@ -155,8 +160,27 @@ way, in a stale fragment no part names ([Corpus](#corpus)). The orientation and 
 no retail hardpoint omits either.
 
 A revolute hardpoint's `min` and `max` are radians, and they bound how far the equipment mounted on
-it turns about `axis` — a turret's traverse. The pair `-2π`…`2π` means no bound at all: observed in
-game, a turret on such a mount turns through any number of revolutions.
+it turns about `axis` — a turret's traverse. A gun aims through two joints (`common.dll`
+`CEGun::Connect` `0x62978a0`, `LocateJoints` `0x62983c0`): yaw is its root's own joint where that is
+revolute, pitch the last revolute direct child of its root, and deeper joints are never aimed. Each
+steps toward its aim by at most `turn_rate · dt` (`JointChannel::Update`, `0x6299420`), the shortest
+way round on a joint spanning a whole turn, and is then clamped to its limits by the setter a `Rev`
+constraint goes through (`engbase.dll` `0x66226e0`). That the yaw joint is built from the ship's
+revolute hardpoint is inferred from the record layout the two share. The pair `-2π`…`2π` means no
+bound at all: observed in game, a turret on such a mount turns through any number of revolutions.
+
+A hardpoint faces down its local −Z. A gun's barrel points along its `HpFire` hardpoint's −Z
+(`common.dll` `0x6299e60`), and across retail ships `hpheadlight` sits in the −Z half of the hull 65
+times against 1 and `hpengine` in the +Z half 151 against 24; of the 72 models carrying an
+`HpFire01`, 66 put it at the −Z end of their bounding box. The engine finds a hardpoint by name over
+every part with `_stricmp` (`HardpointSummary::find_name`, `common.dll` `0x63347e0`), and where two
+share a name the last one found wins (`0x63346d2`).
+
+Two hardpoints are mated by the engine's hardpoint link (`engbase.dll` `0x6626690`), the one THN's
+`CONNECT_HARDPOINTS` and a costume's seams go through. For a fixed child hardpoint the child part is
+placed at `parent · H_parent · H_child⁻¹` (`0x6626837`–`0x6626942`), so the two coincide, and a child
+that already has a parent is refused (`0x6622008`). What the link does with a revolute or prismatic
+child hardpoint (`0x6626745`) is not read.
 
 ## Notes
 

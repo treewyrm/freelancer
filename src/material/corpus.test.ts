@@ -8,7 +8,14 @@ import { readTextureLibrary } from '#/texture/library.js'
 import BufferView from '#/utility/bufferview.js'
 import { readMaterialLibrary, writeMaterialLibrary } from './library.js'
 import { readMaterial, writeMaterial } from './material.js'
-import { TextureFlags, DEFAULT_NOMAD_TEXTURE_NAME, MATERIAL_TYPES, type Material } from './types.js'
+import { DEFAULT_NOMAD_TEXTURE_NAME, MATERIAL_TYPES, type Material } from './types.js'
+import {
+  TextureAddress,
+  MAP_INDEX_MASK,
+  MAP_INDEX_SHIFT,
+  getAddress,
+  getMapIndex,
+} from './flags.js'
 
 /** Texture slots, as the `<slot>_name`/`<slot>_flags` prefix and the property they read into. */
 const slots = [
@@ -316,13 +323,13 @@ describe('material corpus', { skip }, () => {
   })
 
   /**
-   * The observed flag words. Bit 6 is set on all of them, and bit 4 only ever on a `Bt` or `Et`
-   * slot; neither mirror bit is ever used. See {@link TextureFlags}.
+   * The observed flag words. Each axis is only ever wrapped or clamped, the UV map field is always
+   * 4 or 5, and only a `Bt` or `Et` slot asks for UV1. See {@link TextureReference.flags}.
    */
   it('uses only six distinct texture flag words', () => {
     const words = new Map<number, number>()
-    const mirrored: string[] = []
-    const unmarked: string[] = []
+    const addressed: string[] = []
+    const unbased: string[] = []
     const secondSet = new Set<string>()
 
     for (const { where, material } of entries())
@@ -333,13 +340,16 @@ describe('material corpus', { skip }, () => {
         const { flags } = reference
 
         words.set(flags, (words.get(flags) ?? 0) + 1)
-        if (flags & (TextureFlags.MirrorU | TextureFlags.MirrorV)) mirrored.push(`${where} ${slot}`)
-        if (!(flags & TextureFlags.Unknown1)) unmarked.push(`${where} ${slot}`)
-        if (flags & TextureFlags.Unknown0) secondSet.add(slot)
+        for (const axis of ['u', 'v'] as const)
+          if (![TextureAddress.Wrap, TextureAddress.Clamp].includes(getAddress(flags, axis)))
+            addressed.push(`${where} ${slot} ${axis}`)
+        if (![4, 5].includes((flags & MAP_INDEX_MASK) >>> MAP_INDEX_SHIFT))
+          unbased.push(`${where} ${slot}`)
+        if (getMapIndex(flags) === 1) secondSet.add(slot)
       }
 
-    deepStrictEqual(mirrored.sort(), [])
-    deepStrictEqual(unmarked.sort(), [])
+    deepStrictEqual(addressed.sort(), [])
+    deepStrictEqual(unbased.sort(), [])
     deepStrictEqual([...secondSet].sort(), ['Bt', 'Et'])
     deepStrictEqual(
       [...words].sort((a, b) => b[1] - a[1]),

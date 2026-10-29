@@ -18,7 +18,8 @@ export interface AnimationScript {
 
   /**
    * Root object elevation off the floor. Deformable models only. `engbase.dll` loads it beside the
-   * maps and hands it back to the game, but applies it to nothing itself.
+   * maps and hands it back to the game, but applies it to nothing itself; `deformable2.dll` stands
+   * the character's root at this height above the caller's floor.
    */
   height?: number
 

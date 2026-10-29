@@ -101,8 +101,9 @@ await writeFile('betaleader.utf', bank.write())
 
 `set` replaces an entry whose name hashes the same rather than adding a second one.
 
-Waveforms are stored byte for byte and must already be MP3-in-WAV — writing PCM produces a
-well-formed UTF the game will not play. Re-encoding is out of scope;
+Waveforms are stored byte for byte and nothing here encodes; every retail line is MP3-in-WAV.
+`soundmanager.dll`'s decode takes PCM as well and plays it whole (`0x6ee8b22`), but whether a bank
+line written as PCM reaches it has not been read. Re-encoding is out of scope;
 `ffmpeg -i line.wav -c:a libmp3lame -ar 11025 -ac 1 -b:a 20k -f wav out.wav` gets close but emits
 neither the `trim` chunk nor Freelancer's `nCodecDelay`. Without `trim` the game drops nothing, so
 the line starts with the encoder's delay in front of it; `writeWaveform` can add one.
@@ -115,9 +116,9 @@ the line starts with the encoder's delay in front of it; `writeWaveform` can add
   `file=` path, the same format as a bank entry and read by `./wave` — see
   [WAVE § Corpus](../modules/WAVE.md#corpus). `DIALOGUE` shares some speakers' names with the banks
   but its file names hash to nothing in any of them. None need a UTF reader.
-- **`[Voice]` and `[Sound]` properties past the mapping** — `attenuation`, `duration`, `priority`,
-  `script`, and the `[mVoiceProp]` tables. They describe playback and lip-sync and do not reach into
-  the bank.
+- **`[Voice]` and `[Sound]` properties past the mapping** — `attenuation`, `duration`, `priority`
+  and `script`, which describe playback and lip-sync, and the `[mVoiceProp]` tables, which give a
+  voice its `gender` and roles. None of them reaches into the bank.
 
 ## Notes
 

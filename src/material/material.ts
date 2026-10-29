@@ -2,7 +2,7 @@ import Directory from '#/utf/directory.js'
 import File from '#/utf/file.js'
 import Vector3 from '#/math/vector3.js'
 import BufferView from '#/utility/bufferview.js'
-import { TextureFlags, type Material, type TextureReference } from './types.js'
+import { type Material, type TextureReference } from './types.js'
 
 /** Reads a `float[3]` property, or undefined when the file is absent. */
 function readColor(parent: Directory, name: string): Vector3 | undefined {
@@ -32,7 +32,7 @@ function readTextureReference(parent: Directory, slot: string): TextureReference
   const [name] = parent.getFile(`${slot}_name`)?.readStrings() ?? []
   if (!name) return
 
-  const [flags = TextureFlags.None] = parent.getFile(`${slot}_flags`)?.readIntegers() ?? []
+  const [flags = 0] = parent.getFile(`${slot}_flags`)?.readIntegers() ?? []
   return { name, flags }
 }
 

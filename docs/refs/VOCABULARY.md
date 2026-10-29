@@ -11,8 +11,9 @@ rather than alphabetically. A few words mean two things; they are listed togethe
 
 ## The project
 
-- **Retail** — the game as shipped: the `DATA` tree plus `EXE` and `DLLS`. It is the baseline every
-  claim in `docs/` is measured against, as opposed to modded or hand-made data.
+- **Retail** — the game as shipped, version 1.0 with no patch: the `DATA` tree plus `EXE` and `DLLS`.
+  It is the baseline every claim in `docs/` is measured against, as opposed to modded or hand-made
+  data.
   → [RETAIL § The corpus](RETAIL.md#the-corpus)
 - **Corpus** — the retail install as the test suites find it (`$FREELANCER_DATA`). A **corpus
   suite** (`corpus.test.ts`) asserts every count in `docs/` back against it and skips itself when no
@@ -230,7 +231,9 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **Detached bone** — a bone no `Cmpnd` part claims. It carries one fixed hardpoint naming the host
   hardpoint it sits on, and is the seam between costume pieces.
   → [DEFORMABLE § Detached bones](../modules/DEFORMABLE.md#detached-bones)
-- **Skeleton** (`Skeleton/Name`) — names the `.cmp` whose animation library drives the model.
+- **Skeleton** (`Skeleton/Name`) — names the `.cmp` the rig was authored against, an exporter scene
+  name. The game never reads it, and it says nothing about which `.anm` drives the model: a
+  character's scripts come by name from the files `bodyparts.ini`'s `[Animations]` lists.
   → [DEFORMABLE § Layout](../modules/DEFORMABLE.md#layout)
 - **`Lod Bits`** — one bit per detail level on each bone; no retail binary reads it.
   → [DEFORMABLE § Lod Bits](../modules/DEFORMABLE.md#lod-bits)
@@ -260,7 +263,8 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **Animation library** (`Animation/Script`) — a model's named scripts, embedded in a `.cmp` or kept
   in a standalone `.anm`. → [ANIMATION § Layout](../modules/ANIMATION.md#layout)
 - **`.anm`** — a standalone animation file, used by deformable models. The model does not record
-  which one it uses; `bodyparts.ini` decides. → [ANIMATION](../modules/ANIMATION.md),
+  which one it uses: the game opens every file `bodyparts.ini`'s `[Animations]` lists and finds a
+  script by name. → [ANIMATION](../modules/ANIMATION.md),
   [RENDERER § 5.3](RENDERER.md#53-animation)
 - **Script** — one named animation, such as `Sc_open dock`: a set of maps played together. INI names
   a script, and the game matches it by CRC. → [ANIMATION](../modules/ANIMATION.md)
@@ -285,8 +289,9 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
   → [ANIMATION § The range is enforced](../modules/ANIMATION.md#the-range-is-enforced)
 - **Root motion** — an object map moving its object from where it stood, and on a loop carrying on
   from where the last cycle ended. → [ANIMATION § Object maps are relative](../modules/ANIMATION.md#object-maps-are-relative-and-carry-motion-forward)
-- **`Root height`** — how far above a room's floor a character stands; it lifts the object, not the
-  skeleton. → [ANIMATION § Root height](../modules/ANIMATION.md#root-height-elevates-the-character-not-the-skeleton)
+- **`Root height`** — how far above its floor a body script stands the character's root;
+  `deformable2.dll` applies it when a script starts and whenever the character is placed.
+  → [ANIMATION § Root height](../modules/ANIMATION.md#root-height-elevates-the-character-not-the-skeleton)
 
 ## Textures and materials
 
@@ -318,16 +323,20 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **Material** — one directory of flat property files, referenced by meshes by CRC. Every property
   is optional. → [MATERIAL](../modules/MATERIAL.md)
 - **Material type** (`Type`) — the name of the shader a material draws with: token-composed like
-  `DcDt` or `DcDtOcOtTwo`, or a whole word like `Nebula` or `DetailMapMaterial`. It does not decide
-  which properties are present.
+  `DcDt` or `DcDtOcOtTwo`, or a whole word like `Nebula` or `DetailMapMaterial`, after
+  `[MaterialMap]`. It does not decide which properties are present, and a name no DLL registers
+  draws nothing.
   → [MATERIAL § Types](../modules/MATERIAL.md#types),
   [MATERIAL § `Type` does not determine the property set](../modules/MATERIAL.md#type-does-not-determine-the-property-set)
 - **Type tokens** — `Dc` diffuse colour, `Dt` diffuse texture, `Ec` emission colour, `Et` emission
-  texture, `Bt` detail texture, `Oc`/`Ot` opacity (either turns blending on, and the alpha comes from
-  `Dt`), `Two` two-sided. → [RENDERER § 6](RENDERER.md#6-materials),
+  texture, `Bt` detail texture, `Oc`/`Ot` opacity, `Two` two-sided. They name properties, not
+  behaviour: the type selects a class, a material blends when `Oc < 1` or its `Dt` format carries
+  alpha (`shading.dll` `0x6eb21fb`), and `OcOt` in a name only batches.
+  → [RENDERER § 6](RENDERER.md#6-materials),
   [MATERIAL § Properties](../modules/MATERIAL.md#properties)
 - **Texture slot** (`<slot>_name`, `<slot>_flags`) — a pair of material files: the texture's name,
-  looked up by CRC, and a word of addressing flags that describes the sampler, not the image.
+  looked up by CRC, and a sampler word: U and V address modes in bits 0–3, the texture coordinate
+  set in bits 4–7 (`shading.dll` `0x6eb1512`).
   → [MATERIAL § Texture flags](../modules/MATERIAL.md#texture-flags)
 - **`[MaterialMap]`** — a section of `EXE/dacom.ini` that rewrites a material's type when it loads,
   by type or by name pattern. The library does not apply it.
@@ -335,8 +344,10 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **Nomad texture** (`Nt`) — the slot nomad hulls draw from. No retail material sets it; the
   engine's compiled-in default `NomadRGB1_NomadAlpha1` does.
   → [MATERIAL § Defaults](../modules/MATERIAL.md#defaults)
-- **Draw order** — opaque groups first, then blended ones back to front. Nothing in the format
-  records it. → [MATERIAL § Draw order](../modules/MATERIAL.md#draw-order)
+- **Draw order** (models) — the game sorts each of its object lists far to near by squared centre
+  distance, opaque lists included (`Freelancer.exe` `0x51eda0`); no material class turns depth writes
+  off for an ordinary blended draw. Nothing in the format records it.
+  → [MATERIAL § Draw order](../modules/MATERIAL.md#draw-order)
 
 ## Alchemy (particle effects)
 
@@ -402,6 +413,10 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
   → [ALCHEMY § `AnimatedTransform`](../modules/ALCHEMY.md#animatedtransform)
 - **LOD value** — a value the host sets that scales how many particles an emitter makes and how
   large an appearance draws. → [ALCHEMY § Known names](../modules/ALCHEMY.md#known-names)
+- **Draw order** (Alchemy) — effects by type then newest first; within an effect a pre-order walk of
+  the tree, siblings by class with appearances first; within an appearance oldest first. Nothing
+  sorts by depth.
+  → [RENDERER § 9.4](RENDERER.md#94-blend-modes-and-why-sorting-is-mostly-unnecessary)
 
 ## INI and what the engine reads
 
@@ -434,6 +449,14 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
 - **Zone shape** / **zone property flags** — `[Zone] shape` and `property_flags`.
   → [ENGINE § Zone shapes](ENGINE.md#zone-shapes),
   [ENGINE § Zone property flags](ENGINE.md#zone-property-flags)
+- **Visit flags** (`visit` on `[system]`, `[Object]`, `[zone]`) — what the player knows of a thing,
+  one map of bits shared by every kind, each bit meaning something per kind.
+  → [ENGINE § Visit flags](ENGINE.md#visit-flags)
+- **Effect type** (`EFT_*`) — one of 48 records compiled into the executable that sets an effect's
+  culling, detail threshold and draw order. → [ENGINE § Effect types](ENGINE.md#effect-types)
+- **Fuse** — a timeline of actions on 0 → 1 that an object plays when lit by damage, death or
+  another fuse; the client runs the drawing blocks, the server the rest.
+  → [SECTIONS § `[fuse]`](SECTIONS.md#fuse)
 - **Mission scripting** (`[Trigger]`, `Act_*`, `Cnd_*`) — the actions and conditions of mission
   trigger blocks. → [ENGINE § Mission scripting](ENGINE.md#mission-scripting)
 - **Declared shape** — the types and positions the engine asks a property for, such as `f f f`. It
@@ -524,8 +547,9 @@ Freelancer refers to almost everything by a hash of its name rather than by the 
   ACM, and a streamed one (`streamer = true`). Both read `fact` and `trim`.
   → [WAVE § What the game plays](../modules/WAVE.md#what-the-game-plays)
 - **`thorn.dll`** — the scene-script library. → [THORN](THORN.md)
-- **`Freelancer.exe`** — the game itself, wrapped in SecuROM copy protection.
-  → [ENGINE § The executable is SecuROM-wrapped](ENGINE.md#the-executable-is-securom-wrapped)
+- **`Freelancer.exe`** — the game itself, wrapped in SafeDisc copy protection: its code is encrypted
+  (sections `stxt774` and `stxt371`), so only `.rdata` reads statically.
+  → [ENGINE § The executable is SafeDisc-wrapped](ENGINE.md#the-executable-is-safedisc-wrapped)
 
 ## Lineage and other tools
 

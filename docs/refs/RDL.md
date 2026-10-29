@@ -289,7 +289,7 @@ node list; layout splices that list in where the `StyleNode` stands, and an unkn
 list. `name` is compared and then discarded.
 
 The executable registers the keys — 28 attribute-only styles and one full list at `0x468c20` in the
-unprotected build (see [ENGINE.md](ENGINE.md#the-executable-is-securom-wrapped)), one more list at
+unprotected build (see [ENGINE.md](ENGINE.md#the-executable-is-safedisc-wrapped)), one more list at
 `0x57e924` — under keys like `0xd5ec` and `0x73f7`, with attributes filled in at run time.
 `server.dll` constructs `StyleNode`s too. No infocard names one.
 

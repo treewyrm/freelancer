@@ -141,8 +141,9 @@ nothing: `worm.dfm`, which offers no attachment hardpoint at all, and `br_darcy_
 **Those gaps are what the game draws.** The seam slot is built from the child's own frame, so a head
 on a body of the other family, or on either bent body, opens at the neck at rest. The costume
 declarations are what keep it from showing, and nothing enforces them: `get_costume_gender`
-(`common.dll` `0x62ffae0`) logs *inconsistent gender* for a costume whose parts disagree, and accepts
-it anyway.
+(`common.dll` `0x62ffae0`) compares body, head and hands, skipping a `none` part — so retail's hands,
+all in `none` groups, never count — logs *inconsistent gender* for a costume whose parts disagree,
+and accepts it anyway. `CostumeGenderAdjust` (`0x62feb10`) has no caller.
 
 ## What the seam actually carries
 

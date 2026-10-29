@@ -100,8 +100,13 @@ empty =                              ; '=' and nothing after it — also zero va
 - Whitespace around names and values is insignificant — but retail pads some numbers with U+00A0
   (`0xA0`), not spaces, so a trimmer that only strips ASCII space and tab leaves one stuck to the
   value.
-- `@include` appears once in retail. The reader treats it as a property named `@include` and does not
-  follow it. See [TODO](#todo).
+- `@include` appears three times in retail: at the top of `EXE/dacom.ini` and `EXE/dacomsrv.ini`,
+  both naming `FL_Dev.ini`, and once more in `dacom.ini`, naming `FL_DevOnlyLibs.ini`. Retail ships
+  neither file. The game honours the directive: `dacom.dll`'s reader matches it with `_stricmp`
+  (`0x65b1ecd`), resolves a relative name against the including file's directory
+  (`0x65b1868`–`0x65b18b0`), parses the file in place (`0x65b18da` → `0x65b16f0`), and skips a
+  missing one without a word. The reader here treats it as a property named `@include` and does not
+  follow it — finding the file is the consumer's.
 
 ## BINI form
 
@@ -533,12 +538,6 @@ Two things carry the trip out through text and back:
 - **A whole number too large for `int32` stays a string** rather than becoming a float, because
   `initialworld.ini` writes `locked_gate = 2926089285`, which is `getObjectId('St01_to_St02_hole')`
   read unsigned. As a float32 it would come back 2,926,089,248 and resolve to nothing.
-
-## TODO
-
-| Question                                                                                                                                                          | Reading taken                                                | Experiment                                                                                       |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| Whether the shipped game honours `@include` (`EXE/dacom.ini` opens with `@include FL_Dev.ini`), or whether it was a build-tool directive stripped before shipping | Treat it as a property named `@include` and do not follow it | Add an `@include` to a text INI the game reads and see whether the included content takes effect |
 
 ---
 

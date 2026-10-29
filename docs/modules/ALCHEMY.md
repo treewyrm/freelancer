@@ -118,7 +118,7 @@ Common — every node carries all three:
 | Name             | Type        | Description                                                                                                                                                 |
 | ---------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Node_Name`      | `string`    | The node's identity, unique within its library and what an instance references by CRC                                                                       |
-| `Node_LifeSpan`  | `float`     | Seconds the node *works* for, counted from the start of the effect — not the life of anything it produces. Default 3. `FLT_MAX` and `Infinity` both stand for "never" |
+| `Node_LifeSpan`  | `float`     | Seconds the node *works* for, counted from the start of the effect — not the life of anything it produces. Default 3. The node's clock sets an expired bit at `time ≥ lifespan` (`0x6240150`); the emitter's update never tests it (`0x6245bf0`), so that emission stops there is observed in the game, and what reads the bit is not yet read. `FLT_MAX` and `Infinity` both stand for "never" |
 | `Node_Transform` | `transform` | Position, rotation and scale as nine curves, rotation in **degrees**, composed `T · S · Rz · Rx · Ry` on column vectors — scale after rotation, so a non-uniform scale on a turned node shears. See [`AnimatedTransform`](#animatedtransform) |
 
 Emitters — the `Emitter_` block is identical on all three emitter types, and **an emitter fires along
@@ -126,14 +126,14 @@ its local +Y**:
 
 | Name                       | Type            | Description                                                                                    |
 | -------------------------- | --------------- | -------------------------------------------------------------------------------------------------- |
-| `Emitter_Frequency`        | `animatedCurve` | Particles per second, **truncated every frame** with the fraction dropped, so the rate depends on the frame rate. Default 100 |
+| `Emitter_Frequency`        | `animatedCurve` | Particles per second, as a count: `_ftol((t − last) × Frequency)`, sampled at `t`. `last` moves to `t` only when something is emitted or the rate is 0, so the fraction is dropped at every emission and the rate depends on the frame rate — 100 at 60 Hz emits 60 a second — while a rate under one per frame accumulates until it reaches one (`0x6245bf0`). Default 100 |
 | `Emitter_EmitCount`        | `animatedCurve` | **A list of bursts**, not a rate: each keyframe of the first sparam list whose key falls in this frame adds its value, truncated, to the count. Never evaluated as a curve. Not inert, as it once read |
 | `Emitter_InitialParticles` | `integer`       | Added to the count on the emitter's first update                                               |
 | `Emitter_MaxParticles`     | `animatedCurve` | Cap on the particles the **appearance** holds, not the emitter; births past it are dropped. Default 10,000, and the one optional emitter property |
 | `Emitter_InitLifeSpan`     | `animatedCurve` | The particle's own lifetime, in seconds, handed to it at birth. Default 2                       |
 | `Emitter_Pressure`         | `animatedCurve` | Initial speed along the spawn heading, through the emitter's matrix with its scale. Default 10  |
-| `Emitter_VelocityApproach` | `animatedCurve` | Share of the **emitter's own motion** since its last emission lent to each birth, divided among that frame's births. Default 0. Not the parent object's velocity, as it once read |
-| `Emitter_LODCurve`         | `animatedFloat` | Multiplies the count, keyed on an LOD value the host sets (1 unless it moves it); the fraction carries to the next frame |
+| `Emitter_VelocityApproach` | `animatedCurve` | Share of the **emitter's own world velocity** over the time since its last emission, lent **whole** to every birth: the bias is built from the full displacement (`0x6245eff`–`0x6245f48`), not divided by the frame's birth count. Default 0. Not the parent object's velocity, as it once read |
+| `Emitter_LODCurve`         | `animatedFloat` | Multiplies the count, keyed on the host's LOD value ([Evaluation](#evaluation)); the fraction carries to the next frame (`0x6245dd4`) |
 
 Emitter geometry — the box or shell a particle appears in, and the cone it leaves along:
 
@@ -151,15 +151,25 @@ Emitter geometry — the box or shell a particle appears in, and the cone it lea
 | `ConeEmitter_MinSpread`   | `animatedCurve` | Inner polar angle off +Y, in degrees                                                     |
 | `ConeEmitter_MaxSpread`   | `animatedCurve` | Outer polar angle. Never above 90 across all 804, and a great many sit exactly on it     |
 
+**Births are spread across the frame.** The `N` particles of one update are born already aged,
+`Δ · (1 − i/N)` for the `i`th of them, `Δ` being the time since the last emission, and set back
+`D · (1 − i/N)` along the emitter's world path `D`. Each is placed at `point + v · age + offset`,
+with `v = heading · Pressure` plus the `VelocityApproach` bias, through the emitter's matrix in its
+appearance's frame (`0x6245bf0`). So a moving emitter lays a stream rather than a clump. When
+emitter and appearance share a parent, the offset is zeroed and the bias is not
+(`0x6245fa5`–`0x6245fd4`). Every draw — heading, radius, point — comes off one 16-bit shift
+register shared by every effect, returning one of 256 values, `byte / 255`, 0 and 1 included
+(`0x623f1f0`).
+
 Appearances — the `BasicApp_` set is the textured sprite, carried by five of the seven appearance
 types:
 
 | Name                         | Type            | Description                                                                                         |
 | ---------------------------- | --------------- | ------------------------------------------------------------------------------------------------------- |
-| `Appearance_LODCurve`        | `animatedFloat` | Multiplies every extent, keyed on the host's LOD value; zero draws nothing                          |
+| `Appearance_LODCurve`        | `animatedFloat` | Multiplies every extent, keyed on the host's LOD value, before each routine's own skips; at zero a basic sprite draws nothing (`0x62165ca`) and the others' extent tests trip. `FLDustAppearance` never reads it |
 | `BasicApp_Color`             | `animatedColor` | RGB over the particle's age, 0…1 per channel. Absent, it is 0.8 grey                                |
-| `BasicApp_Alpha`             | `animatedFloat` | Opacity over the particle's age, packed into a byte **without a clamp, so past 1 it wraps**. Default 1 |
-| `BasicApp_Size`              | `animatedFloat` | On a basic quad **the half-extent**, on its triangle the inradius; on a perp the **full** extent. Default 1 |
+| `BasicApp_Alpha`             | `animatedFloat` | Opacity over the particle's age, packed into a byte **without a clamp, so past 1 it wraps**. Default 1. Each routine skips its own faint particles first: basic and dust under 0.01, rect at or under 1e-4, perp at or under 1e-6, oriented at exactly 0 |
+| `BasicApp_Size`              | `animatedFloat` | On a basic quad **the half-extent**, on its triangle the inradius; on a perp and on the dust the **full** extent. Default 1 |
 | `BasicApp_HToVAspect`        | `animatedFloat` | Multiplies the **horizontal** half-extent only, and on the quad only. Default 1                     |
 | `BasicApp_Rotate`            | `animatedFloat` | Roll about the view axis over the particle's age, in **radians**, a positive angle clockwise on screen. Not read under `MotionBlur` |
 | `BasicApp_TexName`           | `string`        | Names an entry in the texture library. 21 nodes name `""`, which draws flat colour rather than being an omission |
@@ -174,14 +184,14 @@ types:
 | `BasicApp_MotionBlur`        | `boolean`       | On a basic quad, **a stretch** from where the particle was a thirtieth of a second ago, as seen, to `Size` past it — no roll. On a rect, a thirtieth of a second of travel added to its length. **Not** a random roll, as it once read |
 | `OrientedApp_Width`          | —               | Half-width in the appearance's own frame, × `RectApp_Scale` — the type is never used in retail      |
 | `OrientedApp_Height`         | —               | Half-height, likewise                                                                               |
-| `ParticleApp_LifeName`       | `string`        | An effect started per particle and carried at it for its life; this appearance draws nothing itself. **No name, or one no library defines, and no particle is born** |
+| `ParticleApp_LifeName`       | `string`        | An effect started per particle and carried at it for its life; this appearance draws nothing itself. **No name, or one no library defines, and no particle is born** (`0x622f6a0`). The effect is placed through the child's control root (`0x621f610`), takes the appearance's sparam and LOD key at birth and every later value (`0x622f8b0`, `0x622f960`); a dead particle stays in the list, counting against `Emitter_MaxParticles`, until its life and death effects finish (`0x6230370`) |
 | `ParticleApp_DeathName`      | `string`        | An effect started where a particle dies, unrotated. 16 of 18 name `""`                              |
 | `ParticleApp_UseDynamicRotation` | `boolean`   | Turns the life effect's +Y onto the particle's velocity. True on 1 of the 17 that carry it          |
 | `ParticleApp_SmoothRotation` | `boolean`       | Under the above, eases toward that turn by `speed × dt` of the way each frame instead of snapping. True on 1 of 17 |
 | `MeshApp_MeshName`           | `string`        | Meant to name `FX\MISC\<name>.3db`: `TLRtube` and three `beryl_asteroid*`. The game's mesh factory never reads it, and **every** `FxMeshAppearance` crashes the game when it spawns |
 | `MeshApp_MeshId`             | `integer`       | Handed to the game beside the name and never read by it. `0` on all four                            |
 | `MeshApp_UseParticleTransform` | `boolean`     | Whether `ParticleTransform` places the mesh. True on all four                                       |
-| `MeshApp_ParticleTransform`  | `transform`     | The mesh's transform about the particle, sampled at its age over its life                           |
+| `MeshApp_ParticleTransform`  | `transform`     | The mesh's transform about the particle, sampled at its age over its life. `FxOrientedAppearance` dispatches it too, per particle, for its axes and offset (`0x622c6dd`) |
 | `RectApp_Scale`              | `animatedFloat` | Multiplies length and width. Default 1                                                              |
 | `RectApp_Length`             | `animatedFloat` | Full extent along the particle's velocity in space. Default 1. A beam never reads it               |
 | `RectApp_Width`              | `animatedFloat` | Full extent across it. Default 1                                                                    |
@@ -189,11 +199,27 @@ types:
 | `RectApp_ViewingAngleFade`   | `boolean`       | Fades as the rect turns end-on, or the perp edge-on: alpha falls between 30° and 10° off that line, and within 10° nothing is drawn |
 | `BeamApp_DisablePlaceHolder` | `boolean`       | With no `FLBeamField` anchoring the beam, a head point is added where a particle of age zero would be, extrapolated from the two newest; this turns that off. True on 39 of the 128 that carry it |
 | `BeamApp_DupeFirstParticle`  | `boolean`       | What the head point carries. Set, it copies the newest particle's width and colour. Clear, positions shift one place against properties and the oldest position is not drawn. True on 1 of 128 |
-| `BeamApp_LineAppearance`     | —               | Set by nothing under its own hash. Librelancer gives the name to `0x1C65B7B9`, which draws the beam as untextured wireframe |
+| `BeamApp_LineAppearance`     | —               | Set by nothing under its own hash. Librelancer gives the name to `0x1C65B7B9`, which sets `D3DRS_FILLMODE` to wireframe and binds no texture (`0x6206850`) |
 
-`FLBeamAppearance` draws no sprite of its own: it chains its emitter's particles, newest first, into
-two sheets crossed on the camera's right and up axes. That is why `RectApp_Width` on it is the
-chain's width, × `Scale` × LOD, half either side of each particle.
+`FLBeamAppearance` draws no sprite of its own: it chains every particle the appearance holds, newest
+first and whichever emitter made it (`0x6205ec7`), into two sheets crossed on the camera's right and
+up axes. That is why `RectApp_Width` on it is the chain's width, × `Scale` × LOD, half either side of
+each particle. The axes are columns 0 and 1 of the camera's frame times the appearance's
+(`0x620592d`), added in the appearance's frame and drawn through it again (`0x6206941`). So they face
+the camera only while that frame is a pure translation; a turned or scaled frame turns and scales
+them twice, and no retail beam sits in one. A point within 0.1 of the last one drawn is skipped, and
+without an `FLBeamField` anchor fewer than two particles draw nothing. The beam reads neither frame
+control: it binds its texture once at load (`0x620553e`) and draws the frame the texture host hands
+back.
+
+**A particle lives in its appearance's frame.** Every spawn goes through the emitter's world
+relative to the appearance's, `inverse(appearance) · emitter` (`0x623ffb0`, used at `0x624004b`),
+and every draw routine takes the appearance's own world. So an emitter's transform reaches a particle
+once, at birth, and an animated appearance carries every particle already alive. The inverse never
+fails: `x86math.dll`'s (`0x6f71380`) scales the adjugate by 1 instead of `1/det` when
+`|det| ≤ 1e-8`, so a zero scale curve sends everything drawn back through it to the frame's origin.
+An appearance runs all its fields over every particle (`0x6218780`) before ageing any: `age += dt`,
+dropped once `age > lifespan`, otherwise `p += v · dt` (`0x62188c0`).
 
 Fields — each acts on the particles of the appearances that link it, before they age. `k` is
 `min(4 × Approach × dt, 1)`, clamped at the top only:
@@ -213,9 +239,10 @@ Fields — each acts on the particles of the appearances that link it, before th
 | `CollideField_Width`        | `animatedCurve` | **Never read** — not even sampled                                          |
 | `CollideField_Height`       | `animatedCurve` | **Never read**                                                             |
 
-`FLDustField` takes `SphereEmitter_MaxRadius` as its radius and **writes each particle's age** from
-where it sits in that sphere, the back rim faded, and kills it outside — so a dust particle's curves
-are keyed on its position, not its time. `FLBeamField` carries nothing and pushes nothing: its
+`FLDustField` takes `SphereEmitter_MaxRadius` as its radius — the `ParticleApp_UseDynamicRotation`
+it also carries is never read — and **writes each particle's age** from where it sits in that
+sphere, the back rim faded, and kills it outside — so a dust particle's curves are keyed on its
+position, not its time. `FLBeamField` carries nothing and pushes nothing: its
 position is the head of any beam linking it.
 
 **`Approach` is not one mechanism.** On the three fields it is the convergence rate above, with a
@@ -360,8 +387,14 @@ engine supplies to blend between animation states, and **`t`**, the inner key. N
 supplies `p`: an effect starts at **0** (`0x623fb82`, stored at `0x623fbfc`) and keeps it until its
 host sets one. The game sets it for engine flames and trails, for an attached effect with
 `use_throttle`, for a thruster ([SECTIONS.md](../refs/SECTIONS.md#engine)), to the rock's fade for a
-dynamic asteroid's `particle_effect`, and to a particle budget for space dust; a cutscene sets it
-through `psysprops`. An effect nothing feeds runs at 0, and nothing feeds it from speed. The outer animation is
+dynamic asteroid's `particle_effect`, and to a particle budget for space dust; a cutscene ramps it
+with `START_PSYS_PROP_ANIM` and never reads the entity's own `psysprops`
+([THORN.md](../refs/THORN.md#the-neighbours)). An effect nothing feeds runs at 0, and nothing feeds it
+from speed. The game's `ParticleEffect` clamps `sparam` to 0…1 before handing it over
+(`Freelancer.exe` `0x4f8c20`); a cutscene's ramp does not clamp. The LOD key, the inner key of
+both `LODCurve`s, starts at 1 (`0x623fb84`), and the game rewrites it every frame from the effect
+type's `[EffectLOD]` band, clamped to 0…1 (`0x4f8a20`, `0x4f8c80`) — 1 close up, towards 0 as the
+type's `radius` shrinks on screen. The outer animation is
 keyed on `p`, the inner on `t`. What `t` *is* — particle age over lifespan, effect time, a normalized
 distance — is decided by the code sampling each property, not here.
 
@@ -378,8 +411,9 @@ Every rule below is ported from retail `alchemy.dll`, which evaluates in three p
 - **`sparamLevel` is that level alone**, and `floatAt`, `colorAt` and `curveAt` are each it plus
   their inner evaluator — so a caller evaluating the inner lists elsewhere, once `p` is fixed for a
   whole effect instance, resolves the level the same way.
-- **The sparam level eases with its own inline code**, not the table, and has `Auto` and
-  `AutoInverse` the other way round. Retail's outer lists use only `Smooth`, `Linear` and `QuadIn`,
+- **The sparam level eases with its own inline code** (`0x6207740`), not the table: `Step` takes the
+  lower list, any byte outside 2–6 blends linearly, and `Auto` and `AutoInverse` are the other way
+  round. Retail's outer lists use only `Smooth`, `Linear` and `QuadIn`,
   so the swap is never exercised.
 - **Colour lists ease in bytes.** `FxRampColor` stores each key packed as `0x00RRGGBB` through
   `_ftol(c × 255)`, unclamped (`0x62098e0`), turns the easing into an integer weight
@@ -512,9 +546,28 @@ a reader that recognizes the container by either field gets retail right. A writ
 on one folder.
 
 Because retail never writes any other flag value, whether the field is a bitfield or an enum is
-untested. The DLL tests it against zero and nothing else.
+untested. The build tests it against zero; effect init tests it against exactly 1, and gives every
+entry that passes — nested containers included, not only the root — the longest `Node_LifeSpan`
+among its descendants, 0 when it has none (`0x621f526`–`0x621f5c5`, the subtree walk `0x621ee50`).
+What reads a container's lifespan afterwards is not yet read.
 
 The constant is written `0xee223b51 | 0` because instance CRCs are read with `readInt32`.
+
+### Siblings sort by class, and the draw walks them
+
+The build does not keep entry order. Each class answers a constant from its instance's `+0x38`:
+**100 for the eight appearances, 200 for the seven fields, 300 for the three emitters, 400 for a
+folder** (`0x6202740`). Every list of siblings is kept ascending by it, ties in entry order — the top
+level as the build inserts it (`0x621f108`–`0x621f136`), every child list as the link inserts it
+(`0x6201e00`).
+
+**That is draw order.** The effect's draw (`0x621f790`) hands each top-level instance to a pre-order
+walk of its subtree (`0x6201910`): the node, its first child, its next sibling, then back up by the
+parent. So an appearance beside the control root draws before everything under it, and among
+siblings an appearance draws before the subtree of any field, emitter or folder beside it, whatever
+the file says. Within one appearance particles draw oldest first: each birth is appended at the tail
+and the draw walks from the head (`0x6216035`–`0x6216067`, `0x6217662`). `FLBeamAppearance` pushes
+births on the front instead. Nothing sorts by depth.
 
 ### The root's name was recovered, not read
 
@@ -768,6 +821,12 @@ The appearance node type and the easing byte are the only differences, and `FLDu
 declares no property `FxBasicAppearance` lacks. Both curves rise then fall, so `AutoInverse` eases the
 fade in out and the fade out in, where `Smooth` on the stock dust eases both ends of each.
 
+**The easing byte does none of the dust's work.** `FLDustAppearance`'s draw (`0x620fcb0`) multiplies
+the alpha curve by a fade from the camera's speed — none at rest, full at 100 units a second, none
+again at 1,200, and none on a frame where the camera's travel jumps by more than 35 — and lays each
+particle as a kite along its motion across the view since the last frame. It reads neither
+`Appearance_LODCurve` nor `TexFrame`. `AutoInverse` is an ordinary curve shape here.
+
 Both curves are a fade in, a hold, and a fade out, with the outer easing set to `Smooth`:
 
 | List                        | Keyframes (`key` → `value`)                    |
@@ -862,7 +921,7 @@ Retail `alchemy.dll` has since settled what each *does*, though not what any is 
 
 | Hash         | In the DLL                                                                    |
 | ------------ | ----------------------------------------------------------------------------- |
-| `0x1C65B7B9` | Switches the beam to wireframe with no texture — Librelancer's `BeamApp_LineAppearance` |
+| `0x1C65B7B9` | Switches the beam to wireframe with no texture (`0x6206850`) — Librelancer's `BeamApp_LineAppearance` |
 | `0x03503B61` | Accepted and discarded; reads back `false`                                    |
 | `0x0ABE0402` | Accepted and discarded; reads back `false`                                    |
 | `0x0BA0B3BB` | Stored; a second compare at `0x620db4b` is not yet read                       |
@@ -871,3 +930,12 @@ Retail `alchemy.dll` has since settled what each *does*, though not what any is 
 `BeamApp_LineAppearance` still does not hash to `0x1C65B7B9`, so if that is its name the published
 spelling differs from the one the exporter hashed. The names are what remains open, and nothing in the
 binary carries them.
+
+### What `alchemy.dll` leaves unread
+
+- What reads a node's expired bit, and so what stops an emitter at `Node_LifeSpan` (`0x6240150`).
+- What reads a container's lifespan once effect init has set it (`0x621f526`).
+- Where an `FxPerpAppearance` particle's roll reference is first written; the draw rewrites it every
+  frame (`0x6233330`).
+- What a field's "finished" means to the appearance that drops it (`0x6218780`).
+- What an effect's stop (`+0x34(1)`) and finished (`+0x2c`) do inside the DLL.

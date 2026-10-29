@@ -82,6 +82,13 @@ the engine will bind, at no storage cost. Retail respects the rule as far as nam
 rotation-only `.anm` channel names a bone that is a sphere joint in at least one skeleton, and no
 channel with a position lands on a bone that is only ever a sphere.
 
+Bound against every `.dfm` regardless of which skeleton a file was authored for, the rule refuses
+61,078 of 12,801,960 map bindings: 54,108 rotation-only maps — 54,000 of them the body scripts', 108
+`special.anm`'s — on the two bodies whose every bone is loose (`br_darcy_body_torture.dfm`,
+`pl_male3_peasant_body_hurt.dfm`), and 6,970 of `special.anm`'s position-carrying maps on the
+sphere-jointed skeletons. `worm.dfm` is loose throughout too, and no script names its bones. No
+`.cmp` map is refused.
+
 ## Channels
 
 ### `Header`
@@ -285,12 +292,22 @@ A field the channel omits contributes nothing and the rest's own value stands �
 A float beside the object maps, on 1,008 of the 1,010 object maps in the tree — every one in an
 `.anm`, neither of the two in a `.cmp`.
 
-It is not an offset applied to the root object map's position; nothing in the skeleton moves by it.
-The engine loads it beside the maps (`0x66114a4`) and hands it back through `IAnimation2`
-(`0x6615240`) without applying it anywhere itself. Librelancer applies it to the world object —
-`Translate.Y = FloorHeight + RootHeight`, with the floor height set by the THN event
-`START_FLR_HEIGHT_ANIM` — so it states how far off the floor of a room the character stands. A
-renderer with no room has nothing to apply it against.
+It is not an offset applied to the root object map's position, and `engbase.dll` does not apply it:
+it loads it beside the maps (`0x66114a4`) and hands it back through `IAnimation2` (`0x6615240`, read
+at `+0x64`). **`deformable2.dll` does.** Starting a script on a character (`IDeformable +0x1c`,
+`0x65f41d0`) rebuilds the base the object player moves the root from (`0x65f4301`–`0x65f43bb`): the
+root keeps its x and z and its heading about +Y, loses any pitch and roll, and stands at `Root height`
+plus a floor offset the caller sets through `IDeformable +0x60`. Placing the character
+(`IDeformable +0x4c`, `0x65f4f00`) solves it again: the caller's x and z are kept and its y is
+**discarded**, and the root stands at `Root height` plus the object map's own sampled y
+(`IAnimation2 +0x54`) plus the floor (`0x65f4f9b`), written as the object player's current position
+(`IAnimation2 +0x48`, `0x65f4ff9`). Setting the floor offset shifts every playing script's base with
+it (`0x65f50b0`); once no script is left, the root keeps the height it last had (`0x65f4de0`).
+
+So it states how far above its floor a character's root stands. The floor is the caller's: 0 until
+set, then a THN scene's `compoundprops.floor_height` (`Freelancer.exe` `0x44f1d2`), then whatever
+`START_FLR_HEIGHT_ANIM` sets. Librelancer's `Translate.Y = FloorHeight + RootHeight` is the same sum.
+With no room, the root stands `Root height` above y = 0.
 
 ### A character script binds to the whole character
 
@@ -306,8 +323,9 @@ the comm window starts a body unfold and a head script on the same handle.
 
 Which file a script comes from is a name lookup, not a property of the model. At start-up the game
 opens every `.anm` that `bodyparts.ini`'s `[Animations]` lists and maps each script name to its file
-(`Freelancer.exe` `0x4354e0` → `0x435100`); a script is loaded by name when first wanted and released
-when nothing plays it. The per-group `[PetalAnimations]` lists are read and never used
+(`Freelancer.exe` `0x4354e0` → `0x435100`), keyed by `CreateID` and so ignoring case (looked up at
+`0x452254`); a script is loaded when first wanted and released when nothing plays it, and a name no
+file holds logs and starts nothing. The per-group `[PetalAnimations]` lists are read and never used
 ([SECTIONS.md](../refs/SECTIONS.md#petalanimations)).
 
 ### A revolute angle is an angle, and one bit cannot say so
@@ -384,6 +402,27 @@ base.
 start pose. A bounce is returned without accumulation — what the engine converges to at small frame
 steps; the engine itself realigns to the object's current pose at each turn, so its result drifts
 with frame length.
+
+### Scripts mix per joint, and `weight` is an amplitude
+
+Starting a script (`0x66126e0`) gives each map a player and pushes it onto a mixer (`0x6616090`,
+evaluated at `0x66152d0`) that keeps one stack per joint and one for the root. Compound scripts run on
+the same players and mixer. What the start record carries acts on it:
+
+- `weight` scales what the script drives rather than mixing it with anything: a float plays as
+  `v · w`, a rotation as `nlerp(I, q, w)`, root motion as `p · w · trans_scale`, the last a
+  compound's only.
+- A transition time `T > 0` fades the new script in over whatever the joint holds — a snapshot of its
+  current value if nothing — as `beneath + (new − beneath) · ½(1 − cos(π · ⌊255 · e/T⌋ / 255))`,
+  rotations by nlerp. When the fade completes everything beneath is stopped, unless flag `0x80` keeps
+  it there to resume.
+- `T = 0` replaces: every script already on the joint is stopped.
+- A non-looping script at its end holds its last value under a fade, blends back to what lies beneath
+  over the joint's last transition time when it is on top of another, and otherwise holds its last
+  frame.
+- A script stopped mid-blend is swapped for a snapshot of its value, so nothing pops.
+
+Flag `0x1` negates the speed, which is the backwards play the per-channel clock already handles.
 
 ### The range is enforced
 

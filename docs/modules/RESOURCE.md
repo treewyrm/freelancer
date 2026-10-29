@@ -344,10 +344,13 @@ absence is only visible to `LoadLibrary`. *Experiment*: replace `resources.dll` 
 and start the game.
 
 **Whether the language must be `0x409`.** All 6,646 content resources are US English, so the corpus
-cannot distinguish "the game asks for `0x409`" from "the game asks for whatever is there".
-`FindResource`'s documented fallback order would accept a neutral resource, but Freelancer may not
-use `FindResource`. Reading taken meanwhile: write `0x409` and make it a parameter rather than a
-constant. *Experiment*: write a library at `LANG_NEUTRAL` and see whether its strings resolve.
+cannot distinguish "the game asks for `0x409`" from "the game asks for whatever is there". The game
+asks for neither: every lookup is `FindResourceExA` with language 0, `LANG_NEUTRAL` — `ids_name` at
+`Freelancer.exe` `0x434765`, `ids_info` at `0x57d9e7`, `0x57da8c` and `0x57dadd` — and the
+executable imports no `LoadString`. Which language answers is therefore the Windows loader's
+fallback for a neutral request, not the game's choice. Reading taken meanwhile: write `0x409` and
+make it a parameter rather than a constant. *Experiment*: write a library at `LANG_NEUTRAL` and see
+whether its strings resolve.
 
 **Whether the code page field is read at all.** Every retail data entry says 1252, and the payloads
 are UTF-16 regardless. Carried through a round trip rather than normalised. *Experiment*: change it

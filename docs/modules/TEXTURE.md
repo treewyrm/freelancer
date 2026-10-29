@@ -169,12 +169,19 @@ follows the retail files it has:
 
 None of that is a rule the format imposes; it is what the two tools that wrote this data did.
 
-## Transparency belongs to the material, not the texture
+## Transparency is decided by the material and the format together
 
-`Texture` carries no `alpha` flag. Whether a texture is drawn blended is decided by the material that
-binds it, through the `Oc` and `Ot` tokens in its `Type` string. A DXT1 texture bound to a plain
-`DcDt` material is opaque whatever its blocks contain, and nothing consults the texture's own format
-to decide.
+`Texture` carries no `alpha` flag, and the container records none. Whether a texture is drawn blended
+is decided when a material binds it. `shading.dll`'s post-load pass (`0x6eb21fb`, and again in the
+setter at `0x6eb24e5`) blends a material when its `Oc` is below 1, **or** when its `Dt` texture's
+device format carries alpha: any DXT2–5, `A8R8G8B8` or `A4R4G4B4` (format table `0x6ed5230`). A `Dt`
+whose format has exactly one alpha bit, DXT1 or `A1R5G5B5`, is not blended. The single-pass classes
+alpha-test it at `ALPHAREF 0x80, GREATER` instead (`0x6ebda80`, `0x6ebdfc0`). The `Oc`/`Ot` tokens in
+a `Type` decide neither.
+
+So the format reaches the decision and the pixels never do. A DXT1 texture bound to a plain `DcDt`
+material is opaque and cut at half alpha, whatever its blocks contain. A DXT5 one blends even where
+every texel is opaque.
 
 ## There is no `dxt1a`
 
@@ -187,7 +194,9 @@ encoded as `color0 === color1` also enters 3-colour mode without ever referencin
 
 Uploading everything as `COMPRESSED_RGBA_S3TC_DXT1_EXT` is correct for both modes: opaque blocks
 yield alpha 1 there anyway, whereas the `RGB` variant renders punch-through texels as opaque black.
-Because 1-bit alpha is a cutout rather than a blend, it needs no back-to-front draw ordering.
+Because 1-bit alpha is a cutout rather than a blend, it needs no back-to-front draw ordering — and
+the game treats it as one: a DXT1 `Dt` selects the half-alpha test, never the blend
+([Transparency](#transparency-is-decided-by-the-material-and-the-format-together)).
 
 ## Entry naming
 
@@ -403,9 +412,9 @@ The seven tiled animations run V down from 1 (`v1: 1 → v2: 0.75` for the first
 and their atlases are precisely seven of the nine Targas that set the top-left origin bit — the files
 the game's loader reverses into memory ([What the game reorders](#what-the-game-reorders)). **Frame V
 is ordinary V over that memory**, zero at the image bottom: `shading.dll` hands a frame out exactly as
-stored (`0x6ec2ee0` copies `u1, v1, u2, v2` into the record beside the atlas's handle), so frame 0 is
-the top-left cell of the sheet as drawn. Alchemy's quad puts the record's first V on its screen-up
-edge, so the sprite draws upright too.
+stored (`0x6ec2ee0` copies `u1, v1, u2, v2` into the record beside the atlas's handle, and takes
+frame −2 as the last), so frame 0 is the top-left cell of the sheet as drawn. Alchemy's quad puts
+the record's first V on its screen-up edge, so the sprite draws upright too.
 
 `FX/standardeffects.txm :: XP_HERM` is an explosion, and it opens on an empty cell and grows only this
 way. Leave the atlas in file order — skip the loader's reversal — and every grid runs its rows
@@ -437,7 +446,8 @@ SOLAR/solar_mat_tink.mat :: x_pnl_a.tga
 SOLAR/solar_mat_tlr.mat :: x_pnl_a.tga
 ```
 
-Of 7,533 materials, 904 carry the `Oc`/`Ot` opacity tokens:
+Of 7,525 materials, 904 name an `OcOt` type — which batches them and decides no blend
+([Transparency](#transparency-is-decided-by-the-material-and-the-format-together)):
 
 ```
 DcDtOcOt 631   DcDtEcOcOt 168   DcDtEcOcOtTwo 55   DcDtOcOtTwo 35   DcDtBtOcOtTwo 12   DcDtBtOcOt 3

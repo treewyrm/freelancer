@@ -132,6 +132,12 @@ the same property: `[Trigger] Act_CallThorn` carries `missions\\m12\\M12_Osiris.
 `missions\m11\M11_Walker1.thn` one line apart. Collapse repeated separators, or a fiftieth of the
 references stop resolving.
 
+Not every route plays its script. A room's `set_script` is **read as data and never run**
+(`common.dll` `0x6274ea0`): its compounds become the room's props, its cameras the room cameras and
+setpoints, its markers setpoints, and no event fires. `[Room_Info] scene` scripts loop. `[Trigger]
+Act_CallThorn` binds only the `MONITOR` and the entity carrying `userprops.main_object`, anchored to a
+live object (`Freelancer.exe` `0x51e4c0`).
+
 ## Two export forms
 
 Some scripts carry the resolved values where the rest carry the symbolic globals, and store arrays

@@ -18,13 +18,14 @@ export interface Mapping {
 }
 
 /**
- * Texture coordinates driven by a bone's translation rather than by the skin.
+ * Texture coordinates offset by a bone's rotation rather than by the skin.
  *
  * Present on `Mesh0` of 104 retail heads and nowhere else, always as the full set of eleven files.
- * One bone is named, its X and Y translation is scaled into a U and V delta, the delta is clamped
- * to the min/max pair, and the result offsets the coordinates {@link vertices} lists. That is how
- * a face blinks and mouths words without moving a vertex: the eye and mouth patches slide across
- * a sprite sheet in the diffuse texture while the head geometry stays put.
+ * `deformable2.dll` applies it only to face groups whose material is its `EyeMaterial` class —
+ * names matching `^eye*` — and only the first UV bone: each frame the bone's Z axis, in its
+ * parent's frame, is scaled into a U and V delta, clamped to the min/max pair, and added to the
+ * whole group's texture coordinates. That is how the eyes look about without moving a vertex. No
+ * mouth is driven this way.
  *
  * The scales are +-0.4 and the clamps +-0.2 in U and +-0.1035 in V across every head that has
  * them, and {@link distance} is always 1.
@@ -33,10 +34,10 @@ export interface UVBone {
   /** `UV_bone_id` — the driving bone, indexing {@link DeformableModel.bones}. */
   bone: number
 
-  /** `Bone_X_to_U_scale` — bone X translation to U delta. */
+  /** `Bone_X_to_U_scale` — the X component of the bone's Z axis to U delta. */
   scaleU: number
 
-  /** `Bone_Y_to_V_scale` — bone Y translation to V delta. */
+  /** `Bone_Y_to_V_scale` — the Y component of the bone's Z axis to V delta. */
   scaleV: number
 
   /** `Min_du` and `Max_du` — clamp on the U delta. */
@@ -51,12 +52,13 @@ export interface UVBone {
   distance: number
 
   /**
-   * `UV_vertex_id` — the coordinates the bone shifts, indexing {@link Geometry.uv0}'s
-   * `coordinates`. `UV_vertex_count` states its length and is derived rather than carried.
+   * `UV_vertex_id` — coordinates indexing {@link Geometry.uv0}'s `coordinates`. No retail binary
+   * reads it: the game offsets the whole eye group. `UV_vertex_count` states its length and is
+   * derived rather than carried.
    */
   vertices: Uint32Array
 
-  /** `UV_default_list` — the unshifted coordinates, two floats per entry of {@link vertices}. */
+  /** `UV_default_list` — two floats per entry of {@link vertices}; read by no retail binary. */
   defaults: Float32Array
 }
 

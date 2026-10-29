@@ -54,6 +54,14 @@ scale is positive, put the eye at −Z, and world +X lands at ndc x +0.241, on t
 The game puts it on the left. Evidence in [The mirror, measured off the
 files](#the-mirror-measured-off-the-files).
 
+The engine builds it that way. A camera looks down its local −Z with +Y up: point projection
+(`Freelancer.exe` `0x40ff50`) takes `Mᵀ·(p − position)` and rejects any point whose view `z` exceeds
+`−near` (`0x40ff7f`), so view space is right-handed. `rp8.dll` then pre-multiplies the view by
+`diag(1, 1, −1)` in `set_view` (`0x6d0bb58`, applied at `0x6d0bc38`), ahead of the D3DX left-handed
+perspective (`set_perspective`, `0x6d0cb25`): one reflection, in z, and none in x. A camera looking
+down world +Z therefore has world −X for its right, which is the mirror. The device culls
+`D3DCULL_CW` (`0x421df9`, set every frame at `0x51c6b3`).
+
 So there is a reflection to place, and where you put it is the choice:
 
 | Import             | Projection                        | Front face | Notes                                                                      |
@@ -102,6 +110,11 @@ For a 4×4 with translation, those nine go in as rows and `position` in column 3
 `Matrix4.fromRotationTranslation` does, and it is the reason `Matrix4` exists: it holds its four
 `Vector4` **columns**, already transposed, so `Matrix4.toArray` is a straight concatenation and
 uploads with `transpose = false`. A hardpoint's `orientation` goes through the same call.
+
+The engine holds them the same way. `x86math.dll` keeps a frame as nine rotation floats row-major
+with the translation at `+0x24`, applied as `R · v + t` (`0x6f71890`), and `deformable2.dll` copies a
+`Bone to root`'s twelve floats into one unchanged (`0x65f1239`–`0x65f128a`): the stored triples are
+the rows of `R`.
 
 Measured on ships whose weapon hardpoints span both the hull, whose part carries no joint, and
 rotated wings: guns fire forward whichever part holds them, so the two must agree in root space.
@@ -315,10 +328,20 @@ A rigid part holds either a bare `VMeshPart` or a `MultiLevel` of them:
 - Four capital ships carry denormal junk in the middle of `Switch2`. The reader hands the breakpoints
   back verbatim; a renderer should tolerate a non-ascending list rather than sort it (sorting changes
   which level shows).
+- Not every draw selects. The part draw (`rendcomp.dll` `0x6c32a80`) chooses by the metric only under
+  flag `0x08`. Without it a part draws level 0, and under `0x80` it draws the level set through `+0x34`
+  (`0x6c33670`), which is how an asteroid field pins its cubes' `LOD`. Every object draws with `0x08`
+  but one, which draws with neither and so always at level 0, or is pinned through `0x80` at a detail
+  scale of 0.75 or less (`Freelancer.exe` `0x5399e4`–`0x539a2f`, `0x402580`) — read as the player's
+  own ship, inferred from `0x54baf0`.
 
-Deformable models do it differently: a `.dfm` carries `Fractions` per level
-(`1, 0.8, 0.6, 0.4, 0.2, 0.1`), a fraction of a detail range supplied by the INI that places the
-character.
+Deformable models do it differently, and per piece: a `.dfm` carries no breakpoints, only `Fractions`
+per level (`1, 0.8, 0.6, 0.4, 0.2, 0.1`). `Freelancer.exe` turns each into a distance through the
+`[DetailSwitchTable]` of the part's `bodyparts.ini` group, `get_switch_distance(fraction × 100)`
+(`0x443dac`), and picks a level for each piece of a character on its own every frame
+(`0x444f90`–`0x445229`). A level at or past the part's skinned-level count draws rigid, at bind
+(`deformable2.dll` `0x65f3b3a`). See
+[DEFORMABLE.md § Level fractions](../modules/DEFORMABLE.md#level-fractions).
 
 ## 5. The joint graph
 
@@ -452,6 +475,8 @@ have a median of 1 and a 95th percentile of 32 — so per-draw uniform uploads a
 
 **Hardpoints** compose the same way: `T(position) · R(orientation)` in their owning part's space,
 then the part's world transform. All 12,053 have determinant +1, so an attached model never mirrors.
+A hardpoint faces its local −Z — a barrel fires down it — see
+[COMPOUND.md](../modules/COMPOUND.md#hardpoints).
 
 A hardpoint's `orientation` takes the same transpose as a joint's (§2); reading the two with
 different conventions cancels along the chain, so a mounted gun can point the right way for the
@@ -464,36 +489,59 @@ material is a shader name plus an open set of properties — the type does not d
 properties are present, so read what is there and default nothing (see
 [MATERIAL.md](../modules/MATERIAL.md)).
 
-The `Type` string is the shader selector, and its tokens name the inputs:
+The `Type` string, after `[MaterialMap]` has rewritten it, selects a class in `shading.dll` or
+`flmaterials.dll`, and nothing else. The classes are Direct3D 8 fixed function: a `D3DMATERIAL8`, up
+to three texture stages and a render-state table. The tokens name properties, not behaviour:
 
-| Token       | Meaning                   | Renderer consequence                           |
-| ----------- | ------------------------- | ---------------------------------------------- |
-| `Dc` / `Dt` | diffuse colour / texture  | base colour; `Dt` alpha is the opacity channel |
-| `Ec` / `Et` | emission colour / texture | additive, unlit                                |
-| `Bt`        | detail texture            | blended over diffuse                           |
-| `Oc` / `Ot` | opacity                   | **alpha blending on**                          |
-| `Two`       | two-sided                 | **`gl.disable(gl.CULL_FACE)`**                 |
+| Token       | What the engine does with it                                                                  |
+| ----------- | --------------------------------------------------------------------------------------------- |
+| `Dc` / `Dt` | `Dc` is the material's diffuse; `Dt` is stage 0, `Dt × lit` in colour and alpha              |
+| `Ec`        | the material's emissive, inside the lit colour: `lit = Ec + Ac·ambient + Dc·Σ lights`         |
+| `Et`        | `DcDtEt` only: stage 1 adds it after the diffuse multiply, `Dt × lit + Et`                    |
+| `Bt`        | `BtDetailMapMaterial` only: stage 1 `MODULATE2X`, `Dt × lit × 2·Bt`                           |
+| `Oc` / `Ot` | `Oc` is the diffuse alpha; the name only batches, and turns no blending on                    |
+| `Two`       | a second pass: every normal negated, cull mode reversed                                       |
 
-Measured: 243 two-sided materials and 904 that want blending out of 7,525. `DcDt` alone is 4,308, so
-the common path is a lit, textured, opaque, back-face-culled triangle.
+**Blending is decided by values** (`0x6eb21fb`). A material blends `SRCALPHA / INVSRCALPHA` when
+`Oc < 1`, or when its `Dt` texture's device format carries alpha: DXT2–5, `A8R8G8B8` or `A4R4G4B4`
+(format table `0x6ed5230`). A `Dt` with exactly one alpha bit, DXT1 or `A1R5G5B5`, is not blended.
+The single-pass draws alpha-test it at `ALPHAREF 0x80, GREATER` (`0x6ebda80`, `0x6ebdfc0`), and every
+other draw runs under `[RenderPipeline]`'s device-wide `ALPHAREF 0, GREATER`. So `DcDt` over DXT5
+blends, and `DcDtOcOt` at `Oc = 1` over DXT1 is opaque and cut at half alpha.
 
-Draw order follows: opaques first sorted by material to minimise state changes, then blended
-materials back-to-front with depth writes off. Nothing in the format records a render order, so this
-is convention, not data.
+**`Two` is two submissions, not culling off** (`0x6ebe23a`, cull table `0x6ed4848`). The front faces
+draw first. Then the vertices go again with every normal negated and the cull mode reversed. On a
+blended material, the back faces land after every front face.
+
+**A type no DLL registers draws nothing.** `DcDtEtTwo` and every `DcDtBt*` spelling are authored and
+registered nowhere. The material library logs *Unable to create material* (`0x6ecc47e`) and has no
+fallback. `[MaterialMap]` name rules rescue 443 of those 445 materials: 430 go to
+`BtDetailMapMaterial` and 13 to the nomad hull.
+
+Measured: 243 two-sided materials out of 7,525. `DcDt` alone is 4,308, so the common path is a lit,
+textured, back-face-culled triangle, opaque unless its `Dt` carries alpha.
+
+Draw order is not in the format. The game sorts each of its object lists back to front by squared
+centre distance, opaque lists included (`Freelancer.exe` `0x51eda0`), and no material class turns
+depth writes off for an ordinary blended draw — see
+[MATERIAL.md](../modules/MATERIAL.md#draw-order). Opaques first sorted by material, then blended
+back to front with depth writes off, is the usual renderer convention; it differs from the game
+where blended surfaces overlap.
 
 **Texture slots** are a `<slot>_name` / `<slot>_flags` pair. The name resolves by CRC against a
 `Texture library` — retail names look like filenames but are not paths, and the extension is often
-stale. The flags word is three settings packed together, of which only the address modes are
-actionable:
+stale. The flags word is three fields, as `shading.dll` splits it (`0x6eb1512`, `0x6eb1630`):
 
-| Bit  | Meaning         | Maps to                          |
-| ---- | --------------- | -------------------------------- |
-| 1    | Clamp U         | `TEXTURE_WRAP_S = CLAMP_TO_EDGE` |
-| 3    | Clamp V         | `TEXTURE_WRAP_T = CLAMP_TO_EDGE` |
-| 0, 2 | Mirror U / V    | never set in retail              |
-| 4, 6 | wrap mode field | purpose unresolved; ignore       |
+| Bits | Field     | Maps to                                                                          |
+| ---- | --------- | -------------------------------------------------------------------------------- |
+| 0–1  | U address | `TEXTURE_WRAP_S`: 0 `REPEAT`, 1 `MIRRORED_REPEAT`, 2 `CLAMP_TO_EDGE`, 3 border   |
+| 2–3  | V address | `TEXTURE_WRAP_T`, the same                                                       |
+| 4–7  | UV set    | `field ≥ 4 ? field − 4 : 0`: `0x40` samples UV0, `0x50` UV1                      |
 
-Only six distinct words occur, and clamping appears only on `Dt`. Everything else is `REPEAT` —
+Mirror and border never occur in retail, and WebGL2 has no border mode. The UV set matters: 425 of
+446 `Bt` slots ask for UV1, and a detail map sampled on UV0 tiles at the wrong rate rather than
+vanishing. Only six distinct words occur. Clamping is on `Dt` and on 55 `Et` slots. Everything else
+is `REPEAT` —
 which matters, because sampled UVs run well outside 0..1 (measured range roughly −34..87 in U and
 −34..810 in V). WebGL2 allows `REPEAT` on any texture, power-of-two or not.
 
@@ -507,6 +555,58 @@ starts from and four zeros before the first. Apply it as `uv · (1 + scale) + of
 scale, the scales stored as displacements from 1 — on UV0, from a clock that starts at load and
 always loops. Feed it as a uniform; it changes per material per frame, not per vertex. See
 [RIGID.md § What the game does with it](../modules/RIGID.md#what-the-game-does-with-it).
+
+**What each class draws.** `lit` is the per-vertex D3D lit colour.
+
+| Class (draw/apply)        | Names                                                 | Blend                                         | Draws                                                        |
+| ------------------------- | ----------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
+| SinglePass `0x6ebd8b0`    | `DcDt` `DcDtEc` `DcDtOcOt` `DcDtEcOcOt`               | by value                                      | `Dt × lit`, alpha `Dt.a × Oc`                                |
+| SinglePassTwo `0x6ebdfc0` | the four `*Two`                                       | by value                                      | the same, twice                                              |
+| `DcDtEt` `0x6eb61e0`      | `DcDtEt`; `DcDtEcEt` through the map                  | never                                         | `Dt × lit + Et`                                              |
+| BtDetailMap `0x6eb5100`   | `BtDetailMapMaterial`, `BtDetailMapTwoMaterial`       | never                                         | `Dt × lit × 2·Bt`                                            |
+| EcEt `0x6eb8a40`          | `EcEt`, `EcEtTwo`                                     | `ONE / ONE`                                   | `Et × lit`; nothing reaches it                               |
+| Nebula `0x6ebc600`        | `Nebula`, `NebulaTwo`                                 | `SRCALPHA / ONE`                              | `Dt × vertex colour`, unlit                                  |
+| LightMap `0x6eba720`      | `LightMap`                                            | `DESTCOLOR / ZERO`                            | `Dt`, unlit; nothing reaches it                              |
+| DetailMap `0x6eb81e0`     | `DetailMapMaterial`                                   | never                                         | `Dt × lit × 2·Dm`                                            |
+| Msk2Pass `0x6eb77b0`      | `DetailMap2Dm1Msk2PassMaterial`                       | pass B over A                                 | ≈ `mix(Dt·lit·2·Dm1, Dt·lit, Dt.a)`                          |
+| Masked2 `0x6ebbe7d`       | `Masked2DetailMapMaterial`                            | pass B over A                                 | ≈ `mix(Dt·lit·2·Dm0, Dt·lit·2·Dm1, Dt.a·Dm1.a)`              |
+| Illum `0x6eba041`         | `IllumDetailMapMaterial`                              | pass B over A                                 | ≈ `mix(Dt·lit·2·Dm0, Dt·2·Dm1, Dt.a·Dm1.a)`, B unlit         |
+| Atmosphere `0x6eb2d40`    | `AtmosphereMaterial`                                  | `SRCALPHA / INVSRCALPHA`, no Z writes         | `Dt × lit` at CPU-written UVs, below                         |
+| Null `0x6ebcf80`          | `NullMaterial`                                        | —                                             | nothing                                                      |
+| Nomad `0x66f8c50`         | `NomadMaterial`, `NomadMaterialNoBendy`               | `SRCALPHA / INVSRCALPHA`, no Z writes or cull | `Dt + Nt(ratio, v)`, unlit, below                            |
+| Glass `0x66f7640`         | `GlassMaterial` `HighGlassMaterial` `GFGlassMaterial` | outside pass                                  | inside `CULLMODE CCW` opaque, outside `CW` at `max(Oc, 0.8)` |
+| HUDIcon `0x66f8030`       | `HUDIconMaterial`                                     | when the engine's alpha is below 1            | SinglePass; ambient and alpha from the engine                |
+| HUDAnim `0x6700070`       | `HUDAnimMaterial`                                     | by value                                      | SinglePass, vertex colour, `MaterialAnim`                    |
+| ExclusionZone `0x66f6b40` | `ExclusionZoneMaterial`                               | `SRCALPHA / INVSRCALPHA`                      | lit under a white device ambient; `Ac`, `Oc` from the engine |
+| PlanetWater `0x66f9ea0`   | `PlanetWaterMaterial`                                 | by value, no Z writes                         | SinglePass plus its own `MaterialAnim`                       |
+
+The planet masks sample UV0 through `diag(TileRate, TileRate)` and apply `MODULATE2X`. The two-pass
+classes cut pass A at alpha `< 254` and test pass B at `> 1`. Illum draws pass A with the test off
+(`0x6eba067`).
+
+The atmosphere writes, per vertex of the unit sphere `P`, with `r` the shell's radius, `R = r / Scale`,
+`d` the camera's distance and `n` the unit vector towards it:
+
+    t  = R · (Scale − 1)                       floored at 1e-7
+    k  = (d − r) / (d − r + t)
+    u  = P·n ≥ r/d  ?  Fade · k³ · (P·n − r/d) / (1 − r/d)  :  0
+    v  = k³ < 0.5   ?  2 · (1 − Alpha) · k³                   :  1 − Alpha
+
+The nomad hull samples `Nt` at `ratio = (dot(view, N) + 1) / 2` and `v = 1 − fmod(time, 5) / 5`.
+`view` is the camera's forward carried into object space, one vector per draw (`0x66f903c`). `time`
+advances every frame unconditionally (`0x66f88c7`). The hull's alpha is `Dt.a × Nt.a`.
+
+**Environment maps are the archetype's, not the model's.** `envmap_material` names a cube texture;
+absent means no envmap (`Freelancer.exe` `0x406dc0`, `0x4068d0`). `GameObject::render` (`0x539980`)
+then wraps every mesh group of every part in `EnvMapMaterial`, provided `[PerfOptions]
+use_environment_maps` is above 0, the object is within `distance_render`, and it is not cloaking. The
+override's apply (`flmaterials.dll` `0x66f5af0`) runs the wrapped class first, looks the cube up among
+textures already loaded (`shading.dll` `0x6ec2810`), taking `envmapglass` instead on the three glass
+types, and binds it to whichever of stages 0 and 1 is still `DISABLE`, as `MODULATE2X(cube, current)`,
+alpha `MODULATE`, indexed by `TCI_CAMERASPACEREFLECTIONVECTOR` with no texture matrix. So `DcDtEt`,
+`BtDetailMapMaterial`, `DetailMapMaterial` and the nomad hull take no envmap, the three two-pass planet
+classes rewrite it, and every `*OcOt` type loses it because its `BatchedMaterial` wrapper re-runs the
+inner apply on draw (`0x6ec958f`). Glass takes the envmap on its outside pass only.
 
 ## 7. Textures
 
@@ -589,6 +689,10 @@ the rigid one, so §5 applies unchanged — `getBoneModel` returns the same `Com
   of their sum. At 86 bones a `mat4` array is 344 vec4s and even a `mat3x4` one is 258 — both past
   the 256-vec4 floor WebGL2 guarantees for vertex uniforms. Use a uniform block (the guaranteed 16 KB
   holds 256 `mat4`, so one part per block range) or a bone texture, not a plain uniform array.
+- **The game's blend is not quite a weighted sum**: a lone influence is applied at full weight
+  whatever it stores, and two to four are blended without normalising (`deformable2.dll`
+  `0x65f6ed9`–`0x65f7031`). Retail's weights sum to one to 1.08e-7, so a plain `Σ w · K · v` draws
+  the same; a mod's may not. See [DEFORMABLE.md](../modules/DEFORMABLE.md#skinning).
 - **A character is joined by shared hardpoint names, and the seam is the child's own frame.** Every
   later bone carrying a name the body carries is parented to the body's bone at that hardpoint —
   the head's root at `hp_head`, its detached neck bone at `hp_neck` — and a detached bone the body
@@ -596,7 +700,8 @@ the rigid one, so §5 applies unchanged — `getBoneModel` returns the same `Com
   [COSTUME.md](COSTUME.md#how-the-game-joins-them-one-rule-shared-names).
 - **Positions and UVs are indexed separately.** A drawn vertex is `Point_indices[i]` paired with
   `UV0_indices[i]`, which lets a UV seam split without splitting the skinning weights. GPUs have one
-  index stream, so weld the pairs into unique vertices at load and rewrite the face group indices.
+  index stream; a face group's indices already address the element list, so one GPU vertex per
+  element is that weld and leaves every index valid (the largest list is 8,667, inside a `uint16`).
 - **All 4,184 face groups are triangle strips** (`Tristrip_indices`). Convert to lists at load: it
   makes group merging possible and sidesteps WebGL2's untoggleable primitive restart. Triangle `i` is
   `(i, i+1, i+2)` for even `i` and `(i+1, i, i+2)` for odd, and degenerates are skipped without
@@ -617,14 +722,24 @@ the rigid one, so §5 applies unchanged — `getBoneModel` returns the same `Com
 - **Which `.anm` a model takes is not in the model.** `Skeleton/Name` names the `.cmp` the model was
   authored against — `Head02.cmp` ×104, `AutoHeaderNode.cmp` ×87, `L Palm.cmp` and `R Palm.cmp` ×6
   each, `torture_root.cmp` ×1 — and never an animation file. The eleven `.anm` files under
-  `CHARACTERS/ANIMATIONS` are bound to models by `bodyparts.ini`'s `[Skeleton]` groups, so the
-  association is the load-order layer's. Each file covers a category and not a model: `handmale.anm`
+  `CHARACTERS/ANIMATIONS` are the ones `bodyparts.ini`'s `[Animations]` lists; the game opens every
+  one and finds a script by name across all of them, binding it to the whole character
+  (`Freelancer.exe` `0x4354e0` → `0x435100`), and the per-group `[PetalAnimations]` lists are never
+  read back. So the association is the load-order layer's, and per script rather than per model. Each
+  file covers a category and not a model: `handmale.anm`
   carries both hands, so 26 of its 54 scripts drive a right hand and 28 drive none of it.
-- **`Root height` places the character in a room, not the skeleton in the model.** On all 455 body
-  scripts and no facial or hand one; Librelancer applies it to the world object beside a floor height
-  a THN event sets. A renderer with no room applies nothing — see [ANIMATION.md](../modules/ANIMATION.md).
-- The eleven `UV_*` files on `Mesh0` of 104 heads slide eye and mouth patches across a sprite sheet
-  driven by a bone's translation. Skippable for a first renderer; the face will not blink.
+- **`Root height` stands the character's root above a floor.** On all 455 body scripts and no facial
+  or hand one. `deformable2.dll` rebuilds a script's base when it starts — upright, at the root's x and
+  z, at `Root height` plus a floor offset the caller sets (`0x65f41d0`) — and solves the height again
+  whenever the character is placed, discarding the caller's y (`0x65f4f00`). The floor is the room's,
+  set by THN's `START_FLR_HEIGHT_ANIM`; with no room it is 0, and a body script stands its root
+  `Root height` above the model's origin. See [ANIMATION.md](../modules/ANIMATION.md#root-height-elevates-the-character-not-the-skeleton).
+- **The eleven `UV_*` files on `Mesh0` of 104 heads move the eyes, by texture offset.** Only face
+  groups whose material is `deformable2.dll`'s `EyeMaterial` class — names matching `^eye*`
+  (`0x65fdfbb`) — take them, and only the first UV bone: each frame that bone's Z axis, in its parent's
+  frame, becomes a clamped texture offset for the whole group (`0x6600061`–`0x66001c0`). No vertex
+  moves, and nothing reaches a mouth. Skippable for a first renderer; the eyes will not look about. See
+  [DEFORMABLE.md § The UV bone](../modules/DEFORMABLE.md#the-uv-bone).
 
 ## 9. Particles
 
@@ -661,22 +776,27 @@ An effect is a tree of `NodeInstance` with two independent edge sets: `children`
 
 ### 9.1 What varies per particle, and what does not
 
-**No appearance parameter is randomized per particle.** Every visual property is a pure function of
-`(sparam, t)` — sparam being the engine-supplied blend control, `t` the normalized particle lifetime.
-Randomness enters only at spawn, through `CubeEmitter_Min/MaxSpread`, `SphereEmitter_Min/MaxRadius`,
-`ConeEmitter_Min/MaxSpread` and `Emitter_InitLifeSpan`, and lands in per-particle state rather than
-in the curves.
+**No appearance parameter is randomized per particle.** Every curve an appearance samples is a pure
+function of `(sparam, t)` — sparam being the engine-supplied blend control, `t` the particle's age
+over its lifespan — and every extent is then multiplied by `Appearance_LODCurve` at the host's LOD
+key. Randomness enters at spawn, in the heading and the point: the spread angles and azimuth, the
+radius between `Min`/`MaxRadius`, the point in a cube emitter's box. It enters once more in a field:
+`FxTurbulenceField` draws a fresh target per particle per frame. Every draw comes off one 256-level
+random source that every effect shares (`alchemy.dll` `0x623f1f0`, `byte / 255`, 0 and 1 included).
+`Emitter_InitLifeSpan` is not random: it is the emitter's curve sampled at its own time.
 
 | Scope                                   | Values                                                                               |
 | --------------------------------------- | ------------------------------------------------------------------------------------ |
 | Per appearance node — **the batch key** | `BasicApp_TexName`, `BasicApp_BlendInfo`, tri/quad, `FlipTexU`/`FlipTexV`, node type |
-| Per emitter instance                    | sparam                                                                               |
+| Per effect instance                     | sparam, the LOD key                                                                  |
 | Per particle                            | spawn position, velocity, spawn time, lifespan                                       |
 | Derived, `f(sparam, t)`                 | colour, alpha, size, aspect, rotation, atlas frame                                   |
 
-So a particle's entire visual history is fixed at spawn. One exception matters before designing a
-vertex format: with `BasicApp_UseCommonTexFrame` clear, each particle indexes the atlas from its own
-age, so the frame cannot be a draw-level uniform.
+So a particle's curves are fixed at spawn; what still moves is its velocity, which fields change
+every frame and which a rect, perp, beam and `MotionBlur` are oriented by, and — under an
+`FLDustField` — its age, which the field rewrites from its position (`0x6212c90`). One exception
+matters before designing a vertex format: with `BasicApp_UseCommonTexFrame` clear, each particle
+indexes the atlas from its own age, so the frame cannot be a draw-level uniform.
 
 ### 9.2 What actually draws
 
@@ -717,7 +837,9 @@ spawn: for a steady-state emitter the per-frame upload tends to zero instead of 
 particle count. The only option that changes the asymptotics rather than the constant.
 
 **D. Simulation on the GPU, via transform feedback.** Rejected on architectural rather than
-performance grounds. Emission is an integral of `Emitter_Frequency` rather than a sample, so the
+performance grounds. Emission is a running count — `Emitter_Frequency` sampled each frame times the
+time since the last emission, truncated (`alchemy.dll` `0x6245bf0`), so the game's count depends on
+its frame rate — rather than a sample, so the
 particle pool is the one stateful thing in an otherwise pure pipeline; keeping it on the CPU at a
 fixed step is what makes it a function of `(sparam, time)` again, which a timeline scrubber and a
 headless sweep both require.
@@ -728,14 +850,31 @@ is urgent — see §9.5.
 
 ### 9.4 Blend modes, and why sorting is mostly unnecessary
 
-`BasicApp_BlendInfo` is a `D3DBLEND` source/target pair. Only nine distinct pairs occur across 2,658
-retail properties, and 2,489 of them are `SourceAlpha`/`One` — plain additive.
+`BasicApp_BlendInfo` is a `D3DBLEND` source/target pair, handed straight to `D3DRS_SRCBLEND` and
+`D3DRS_DESTBLEND` (`alchemy.dll` `0x6217760`). Only nine distinct pairs occur across 2,658 retail
+properties, and 2,489 of them are `SourceAlpha`/`One` — plain additive.
 `SourceAlpha`/`InverseSourceAlpha` accounts for 161 more; the remaining seven pairs are one or two
 instances each.
 
-Additive is order-independent, so ~94% of particle draws need no depth sort: depth test on, depth
-write off, quads in any order. Only the ~6% remainder wants back-to-front, and sorting per-instance
-records is cheaper than sorting six-vertex spans.
+Additive is order-independent, so ~94% of particle draws cannot show their order. **The game sorts
+none of them by depth**, and the other ~6% are drawn in a fixed order that matching the game means
+keeping, not improving:
+
+- **Between effects**, by `[EffectType]` index, then newest first within a type: one list per type,
+  each new effect pushed on the front (`Freelancer.exe` `0x4fc920`), the lists walked in index order
+  (`0x4f7480`).
+- **Between the appearances of one effect**, a pre-order walk of the instance tree, every sibling
+  list ascending by class — see
+  [ALCHEMY.md](../modules/ALCHEMY.md#siblings-sort-by-class-and-the-draw-walks-them). An appearance
+  beside the control root draws before everything under it, whatever the file order.
+- **Within one appearance**, in emission order, oldest first; `FLBeamAppearance`'s chain newest
+  first.
+
+Before the Alchemy batch opens the game sets render flag `0x43`, `BATCH_PARTICLES`, through
+`IAlchemy +0x7c` (`0x4f7560`–`0x4f758c`). It defaults to 0 and no retail file sets it, so each
+appearance draws the moment the walk reaches it. Set, appearances would queue by class instead,
+still with no depth sort. A renderer that depth-sorts a non-additive cloud is wrong in a way that
+looks better.
 
 Merging batches *across* appearance nodes means making the texture stop being per-batch state, via an
 array texture or an atlas. At a median of 2 appearance nodes and 2 distinct textures per effect that
@@ -767,13 +906,20 @@ across most of the corpus.
 
 - **`FLBeamAppearance` (164)** chains particles into a strip, so it needs them in emission order. A
   pool that recycles slots by swapping the last entry into the freed one does not keep that order,
-  and the resulting strip crosses itself.
+  and the resulting strip crosses itself. Each particle costs five vertices and 24 indices
+  (`alchemy.dll` `0x6206a30`, `0x6206a70`): two per sheet per point, and a segment centre that
+  `BasicApp_QuadTexture` fans round at UV (0.5, 0.5) whatever the frame. Each gap between points
+  carries one whole copy of the frame, every other copy flipped in V by a toggle the appearance flips
+  on each birth.
 - **`FxParticleAppearance` (20)** spawns whole sub-effects per particle, named by
   `ParticleApp_LifeName`/`ParticleApp_DeathName`. The draw walk recurses rather than being flat.
-- **`FxMeshAppearance` (4)** draws real geometry per particle via `MeshApp_MeshName`, routing through
-  §3 and §6 instead. The one place in the format where classic mesh instancing applies, and the least
-  used. `FX/MISC/tlrtube.3db` is residue of this feature and crashes the retail game when a particle
-  spawns for it — see [RETAIL.md](RETAIL.md).
+- **`FxMeshAppearance` (4)** was meant to draw a mesh per particle, `FX\MISC\<MeshApp_MeshName>.3db`,
+  through §3 and §6 — the one place in the format where classic mesh instancing would apply, and the
+  least used. The game's mesh factory formats that path from an empty string rather than the name
+  (`Freelancer.exe` `0x4f6810`), the load fails, and `alchemy.dll` calls into the mesh it never got
+  (`0x6224ed9`, `0x622565d`), so **every** `FxMeshAppearance` crashes the retail game when it spawns a
+  particle. `FX/MISC/tlrtube.3db` is what retail's `TLRtube` was meant to load — see
+  [RETAIL.md](RETAIL.md).
 
 A fourth fits the geometry but not the parameter model: **`FLDustAppearance` (2)** samples its alpha
 at particle age like any appearance, then multiplies it by a term computed from the camera's speed,
@@ -781,9 +927,17 @@ and stretches each quad along the particle's motion across the view since the la
 dust that fades in as the camera moves. It declares no property `FxBasicAppearance` lacks, so the
 node type is the entire signal; retail `alchemy.dll` holds the arithmetic (`0x620fcb0`).
 
-`FxRectAppearance` (431) is a velocity-aligned stretched quad rather than a camera-facing one. It
-keeps the vertex count and the batch key, so it instances alongside the billboards under a different
-orientation rule.
+`FxRectAppearance` (431) is an axial billboard: long along the particle's velocity in space, turned
+about it to face the eye (`alchemy.dll` `0x6238a70`), so it foreshortens as the travel turns toward
+the view and is not drawn seen dead end-on. `FxPerpAppearance` (219) is a quad normal to the
+velocity (`0x6233330`). Both keep the vertex count and the batch key, so they instance alongside the
+billboards under a different orientation rule.
+
+**Where a routine builds its corners decides what the appearance's scale does.** A basic or dust
+sprite's centre goes through `camera · world` and its corners are added in view space (`0x6208640`),
+so a scaled appearance moves its sprites and never resizes them. Rect, perp and oriented build in
+the appearance's own frame, so its scale reaches the quad once. The beam's sheet axes already carry
+the frame and go through it again, so its width takes it twice.
 
 ### 9.7 Culling
 
@@ -793,6 +947,24 @@ A version 1.1 `Effect` carries `bounds`, a bounding sphere — `center` in the e
 effect's position with the `radius` of its `[EffectType]` in `FX/effect_types.ini`. A renderer can
 frame or cull on the stated sphere where it is non-zero, and must derive a bound from the emitters
 everywhere else — which is most of the time, and every explosion.
+
+The game's per-frame test (`Freelancer.exe` `0x4f86c0`) stops at its first failure:
+
+- the effect's priority below `1 − slider/100` on *Effect Detail* (`0x4f88ab`);
+- the sphere wholly behind the near plane;
+- its near edge, `depth − radius`, at or past `pbubble`'s two values interpolated by the same
+  slider, `pb0` at 0 and `pb1` at 100 (`0x4f8928`–`0x4f895a`);
+- while render flag `ALCHEMY_LOD` is on, the type's `radius` projected to
+  `s = (W/2) / tan(fovx/2) · radius / depth` pixels at or under its `[EffectLOD]` band's
+  `min_screen_size` (`0x42dcd0`, `0x42da2c`);
+- the four side planes.
+
+`depth` is along the rendering camera's view axis. The same `s` gives the LOD key both `LODCurve`s
+run on, `clamp((s − min_lod_screen_size) / (max_lod_screen_size − min_lod_screen_size), 0, 1)`; a
+type with no band keeps 1. A type not `EXIST_OFFSCREEN` is destroyed on the first frame the test
+fails (`0x4f78a2`). One not `UPDATE_OFFSCREEN` stops its clock while unseen and loses the unseen
+time (`0x4f8a20`). An owner letting go switches the emitters off and clamps the time left to at most
+1 s (`0x4f8680`–`0x4f86a0`).
 
 ## 10. Checklist
 
@@ -813,7 +985,8 @@ find:
    cancels along a chain that uses both, so it can hide, or frame the wrong suspect (§2).
 9. UV `v` flipped in some paths and not others — textures upside down only on the Targa half of a
    model (§7).
-10. `Two` ignored — one-sided cockpit glass and foliage (§6).
+10. `Two` ignored — one-sided foliage, back faces missing (§6). Retail cockpit glass is not a `Two`
+    type; its glass class draws inside then outside itself.
 11. Alchemy node names hashed case-folded — 2,691 of 5,505 instance references resolve to nothing, so
     roughly half of every effect is silently missing rather than visibly broken (§9).
 12. A particle container detected by its CRC instead of its `flags` — correct on all 1,213 retail
@@ -831,6 +1004,11 @@ find:
     and a renderer honouring the sweep disagrees with it (§5.3).
 18. Every channel of a script run to the script's duration — the short ones freeze while the long
     ones play, on 14 of retail's 186 multi-map scripts (§5.3).
+19. Blending decided by `OcOt` in the type — `DcDt` over a DXT3, DXT5 or 32-bit Targa map draws
+    opaque, and `DcDtOcOt` at `Oc = 1` over DXT1 blends instead of cutting at half alpha (§6).
+20. A slot's bits 4–7 ignored — every detail map samples UV0 and tiles at the wrong rate (§6).
+21. Particles sorted back to front — the game sorts nothing by depth and draws the order-dependent
+    ~6% in its tree order, so a sorted cloud looks better and disagrees with it (§9.4).
 
 ## Notes
 
@@ -914,21 +1092,21 @@ Three sweeps are this document's alone:
 
 ## TODO
 
-Three open questions reach the renderer. None blocks a correct-looking image — each is a place where
+Two open questions reach the renderer. None blocks a correct-looking image — each is a place where
 this document picks the reading that cannot go visibly wrong.
 
 | Question                                                          | Taken here as                                                              | Settled by                                                             |
 | ----------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Texture flag bits 4 and 6 — the wrap mode field (§6)              | ignored; bit 4 is probably "sample UV1", which would matter on detail maps | [MATERIAL.md § TODO](../modules/MATERIAL.md#todo)                      |
+| A slot asking for UV1 on a mesh with one coordinate set (§6)      | falls back to UV0                                                          | [MATERIAL.md § TODO](../modules/MATERIAL.md#todo)                      |
 | `Edge_angles` on two deformable models                            | ignored                                                                    | [DEFORMABLE.md § TODO](../modules/DEFORMABLE.md#todo)                  |
-| The four version-1.1 `Effect` floats (§9.7)                       | unused; no effect culling                                                  | [ALCHEMY.md § TODO](../modules/ALCHEMY.md#todo)                        |
 
 The joint composition order (§5.2) is **closed**: playing retail scripts under both orders answered
 it, the driven factor goes before the rest rotation, and `engbase.dll` builds it that way. So is the
 prismatic `offset`: the engine applies it (`0x6625730`).
 
-Bit 4 is the one with teeth: a detail map sampling the wrong coordinate set tiles at the wrong rate
-rather than vanishing, which is exactly the kind of error §10 is about.
+The texture flag word is **closed** too: `shading.dll` reads bits 4–7 as the slot's UV set
+(`0x6eb1512`), and §6 maps it. So are the four version-1.1 `Effect` floats: a bounding sphere
+`alchemy.dll` stores and writes back and nothing reads (§9.7).
 
 ## Related documents
 

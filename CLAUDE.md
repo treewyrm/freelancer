@@ -18,7 +18,7 @@ rules all live there rather than here.
 
 ## Entry points
 
-**544 exports across 23 entry points.** Each doc's `## API` section is resolved from `src/` with
+**555 exports across 23 entry points.** Each doc's `## API` section is resolved from `src/` with
 the TypeScript checker and checked by `src/api.test.ts` — a drifted table fails the suite, not just
 a reader.
 
@@ -35,7 +35,7 @@ a reader.
 | `./rigid`         | 24      | [RIGID.md](docs/modules/RIGID.md)            |
 | `./surface`       | 32      | [SURFACE.md](docs/modules/SURFACE.md)        |
 | `./texture`       | 41      | [TEXTURE.md](docs/modules/TEXTURE.md)        |
-| `./material`      | 14      | [MATERIAL.md](docs/modules/MATERIAL.md)      |
+| `./material`      | 25      | [MATERIAL.md](docs/modules/MATERIAL.md)      |
 | `./deformable`    | 22      | [DEFORMABLE.md](docs/modules/DEFORMABLE.md)  |
 | `./ini`           | 13      | [INI.md](docs/modules/INI.md)                |
 | `./ini/text`      | 4       | [INI.md](docs/modules/INI.md)                |

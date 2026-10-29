@@ -136,6 +136,19 @@ when `Sides > 6`, from the seventh material, and materials beyond the seventh ar
 `Scale` — the shell's size and the sphere's bounds — is read only when `M6`'s material type is
 `AtmosphereMaterial`, and is 1.0 otherwise (`0x6c2ae2a`–`0x6c2ae8a`).
 
+`Radius` is the only size the game draws: the instance copies it (`0x6c2b230`) and `SetRadius`
+(`0x6c2c320`) is never called, so `[Solar] solar_radius` never reaches the mesh. Physics is the other
+way round: a `.sph` solar collides as a ball of `solar_radius`, not of `Radius` (`common.dll`
+`CSolar::init_physics` `0x62b7b70`, `BuildIVP_Sphere` `0x62897d0`). A missing `Sides` reads as 0 and
+draws nothing (`0x6c2ab92`).
+
+**The level is chosen every frame** (`0x6c2b490`), with no hysteresis. `x = pixels · d / f` is the
+world size of the pixel tolerance at the centre's distance `d`, `f` being the camera's half width over
+`tan(fovx½)`. Then `θ = acos(1 − x / Radius)` and `level = trunc(2 · log2((π/2) / θ) + 0.5)`, clamped
+to `[3, max]` (`0x6c2c44a`–`0x6c2c49c`). The tolerance defaults to 1.5 pixels and the maximum to 9,
+and the game's detail setting overrides both (`Freelancer.exe` `0x5488a0`). A level has
+`N = 1 << trunc(level / 2)` cells a side (`0x6c2c690`).
+
 `Hardpoints` is a sibling of `Sphere`, not a child, exactly where `readRigid` looks for a `.3db`
 part's. So `readSphere` and `writeSphere` both work on the part directory rather than on `Sphere`;
 `writeSphere` returns the part directory the way `writeRigid` does. `writeCamera` returns its inner
@@ -202,11 +215,14 @@ Read out of `shading.dll`, which loads the entries and evaluates them.
   segment's velocities arrive and where the next key starts can differ — and the game jumps there.
 - **The scales are displacements from 1.** The matrix the game builds is `u' = (1 + uScale) · u +
   uOffset` and `v' = (1 + vScale) · v + vOffset`, scaling about UV `(0, 0)` — offset *after* scale.
-  It is applied to texture stage 0 as a two-coordinate texture transform.
+  It is applied to texture stage 0 as a two-coordinate texture transform (`D3DTTFF_COUNT2`), which
+  `rp8.dll` transposes into `D3DTS_TEXTURE0` (`0x6d0fdd2`), so a slot on UV1 is never animated.
 - **Time is a duration, and the sequence always loops.** Each frame adds `dt` to the time elapsed in
   the current segment; while that is strictly past the segment's duration it is subtracted and the
   next segment begins, wrapping to the first past the last (`0x6ec72a0`). An instance starts at zero
-  when its material is loaded, and every instance advances every frame.
+  when its material is loaded, and `Freelancer.exe` advances every instance by the frame's `dt`
+  (`0x41b2e0`, through the animation library's advance-all at `shading.dll` `0x6ec7430`); no scene
+  event starts or stops one.
 - **`MAFlags` is never read.** The loader stores it beside the count (`0x6ec6a60`), and no code in any
   retail binary that reaches the animation library reads it back.
 
@@ -248,13 +264,18 @@ marker name appears in it, and its material and texture libraries are ordinary o
 
 It is residue of `FxMeshAppearance`. `FX/MISC/gf_tlr_tube.ale` holds one, naming this model
 by `MeshApp_MeshName = TLRtube`, and `FX/MISC/misc_ale.ini` registers the effect as a `[VisEffect]`.
-The node type never worked: Freelancer crashes when a particle spawns for that appearance. The chain
-is broken at both ends — no `[Effect]` entry names the `gf_TLR_tube` `[VisEffect]`, and the only
-other retail `.ale` using the node type (`intro_volcanoplanet.ale`) names `[Asteroid]` nicknames
-from `SOLAR/asteroidarch.ini`, so the property takes an INI nickname rather than a mesh library
-name.
+The node type never worked, and the reason is read. The game's mesh factory (`IFxMeshFactory`,
+`Freelancer.exe` `0x4f6810`) formats `fx\misc\%s.3db` and loads it as an archetype, but from an empty
+local rather than `MeshApp_MeshName`. Whatever a node names, it asks for `fx\misc\(null).3db`; the
+load fails, the factory reports success with no mesh, and `alchemy.dll` calls into it at the first
+particle's birth (`0x6224ed9`), or at its first update without `MeshApp_UseParticleTransform`
+(`0x622565d`). The path pattern is the one statement of what the property was meant to hold: a file
+stem under `FX/MISC`. `TLRtube` is one. The three `beryl_asteroid*` of `intro_volcanoplanet.ale`
+match `[Asteroid]` nicknames in `SOLAR/asteroidarch.ini`, and no such `.3db` exists. No `[Effect]`
+entry names the `gf_TLR_tube` `[VisEffect]` either.
 
-It stays unread because there is no working in-game behaviour to validate a reader against.
+It stays unread because no build of the game loads it, so there is no in-game behaviour to validate a
+reader against.
 
 ## API
 
@@ -344,6 +365,7 @@ entries span a one-keyframe rock material and the 340-keyframe fountain alike, a
 ### `FX/MISC/tlrtube.3db`'s animated UV set
 
 `UV0_anim`, `UV0_anim_lookup`, `UV0_frame_count`, `UV0_fps` and `UV0_interpolate` occur in no other
-retail asset, and the layout is plain enough to guess at. It stays unread because
-`FxMeshAppearance`, the feature it belongs to, crashes Freelancer when a particle spawns for it.
-**Blocked rather than pending**: it needs the crash understood first, not an experiment designed.
+retail asset, and the layout is plain enough to guess at. It stays unread because no build of the
+game loads it: `FxMeshAppearance`'s mesh factory never reads the name it is handed
+(`Freelancer.exe` `0x4f6810`). **Blocked rather than pending**: the crash is understood, and an
+experiment needs a game patched to pass `MeshApp_MeshName` through before there is anything to see.

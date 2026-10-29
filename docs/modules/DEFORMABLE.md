@@ -153,6 +153,9 @@ A level the caller marks unskinned — one at or past the create parameters' ski
 an unsigned compare (`0x65f3b3a`), flagged at `0x65f2793` — draws every bone with the identity
 (`0x65f6cc6`): rigidly, at bind.
 
+How often a character is re-skinned is `dacom.ini`'s `[Deformable] DeformRate`, read as 1/N seconds
+(`0x65f1996`–`0x65f1b54`). Retail's `dacom.ini` has no such section, so every update re-skins.
+
 ### The UV bone
 
 Eleven further files appear on `Mesh0` of every head and nowhere else, always as the complete set:
@@ -181,19 +184,25 @@ from the group directories the same way.
 `Fractions` holds one float per `Mesh`, and the counts match in every model, so the fraction is
 carried on the `Level` rather than as a separate array.
 
-`deformable2.dll` loads up to `min(#Fractions, 8, what the caller asks)` levels, taking `Mesh`
-directories in the order it finds them rather than by the digit in their name (`0x65f39b4`–`0x65f3a2e`),
-and hands each level's fraction back to the caller (`0x65f3b7c`). It chooses nothing: the caller passes
-one level index per part on every update (`IDeformable +0x3c`, `0x65f3fd0`), and an index out of range
-hides the part.
+`deformable2.dll` loads up to `min(#Fractions, 8, what the caller asks)` levels — or level 0 alone
+under the part's flag `0x1`, or all but level 0 under `0x2` (`0x65f3aa5`, `0x65f3a94`) — taking
+`Mesh` directories in the order it finds them rather than by the digit in their name
+(`0x65f39b4`–`0x65f3a2e`), and hands each level's fraction back to the caller (`0x65f3b7c`). It
+chooses nothing: the caller passes one level index per part on every update (`IDeformable +0x3c`,
+`0x65f3fd0`), and an index out of range hides the part.
 
-The caller is `Freelancer.exe`, and the distance a fraction stands for is the
-`[DetailSwitchTable]` of the part's `bodyparts.ini` group ([SECTIONS.md](../refs/SECTIONS.md#detailswitchtable)):
+The caller is `Freelancer.exe`, and the distance a fraction stands for is the `[DetailSwitchTable]`
+of the part's `bodyparts.ini` group ([SECTIONS.md](../refs/SECTIONS.md#detailswitchtable)):
 `get_switch_distance(fraction × 100)` (`0x443dac`), interpolated linearly between the table's
-`switch = percent, distance` rows and clamped at both ends (`common.dll` `0x62fec00`). Every frame the
-camera's distance is scaled by `adjust_distance` — `tan(fov) / tan(fovx ÷ 2)` against the table's
-`fovx`, 40 by default (`common.dll` `0x62fecb0`, called at `0x445072`) — and **each part independently**
-takes the first level whose distance reaches it, or none (`0x444f90`–`0x445229`). The comm window pins
+`switch = percent, distance` rows and clamped at both ends (`common.dll` `0x62fec00`). Every frame
+the camera's distance is scaled by `adjust_distance` — `tan(fov) / tan(fovx ÷ 2)` against the
+table's `fovx`, 40 by default (`common.dll` `0x62fecb0`, called at `0x445072`) — and **each part
+independently** takes the first level whose distance reaches it, or none past
+`get_switch_distance(0)`, the table's far cutoff, written over the last level's own distance
+(`0x443dac`, `0x443de1`–`0x443df1`; `0x444f90`–`0x445229`). When `low_character_lod` is on —
+`DATA/SCRIPTS/rtcslider.ini` sets it below a slider value of 0.17 (`common.dll` `0x627a920`) — a
+part farther than its table's 100% distance takes the next level down, and at the last level the
+body stays there while a head or hand is not drawn (`0x4450b5`–`0x4450fe`). The comm window pins
 every part to level 0 (`0x4cc809`).
 
 ### Lod Bits
@@ -378,6 +387,23 @@ If nothing reads them they stay carried anyway — round-trip fidelity is the re
 distance up by the fraction's **value**, not its position — `get_switch_distance(fraction × 100)` — so
 the four-level models' `1, 0.8, 0.6, 0.2` take the same table rows as the six-level models' levels of
 those fractions; see [Level fractions](#level-fractions).)*
+
+### Which path passes which level parameters?
+
+`Freelancer.exe` creates characters on three paths: the cached builder for the comm window and
+character creation (`0x4c9a80`, create at `0x4ca41b`), the base-room and THN path (`0x444290`,
+`0x443d04`), and a shared deformable at `0x668948` that the base-room class uses when
+`CharacterProperties +0x1c` is 1 (`0x444451`, unread). Between them they pass 0 or 2 as load flags
+and −1, 2 or 3 as the skinned-level count. Which passes which is not yet followed, so neither is
+whether any game path skips level 0 or draws a head's coarse levels rigid. `low_character_lod` also
+switches the base-room builder's per-part load parameters from 0 and 2 to 2 and 3 (`0x443b86`),
+which is the same question. A reading problem, not an in-game one.
+
+### IK
+
+`start_aim` (`IDeformable +0x2c`, `0x65f5400`) and its update (`0x65fb540`) are mapped, not read:
+which joints THN's `START_IK` names, and how the target is fed. Longer chains solve damped least
+squares (`0x65fc000`).
 
 ## References
 

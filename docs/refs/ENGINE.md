@@ -58,6 +58,12 @@ Nothing here may be derived from position.
 `MOON`, `BLACKHOLE`, `ASTEROID`, `GUIDED`, `BULLET`, `MINE` and `LOOT` are named and never set by any
 retail archetype — they classify objects the engine creates rather than ones the data declares.
 
+**The nav map's mask is `0x2020bdff`** (`Freelancer.exe` `0x48e321`): every solar bit but `WAYPOINT`
+and `NON_TARGETABLE`, with `CAPITAL` and `ASTEROID`, so no other ship type gets an icon. A type of
+exactly `ASTEROID` is refused anyway (`0x4919c9`), and a `TRADELANE_RING` with both a `prev_ring` and
+a `next_ring` loses its type, so only a lane's two ends show. Only `PLANET` and `MOON` icons are
+turned, by their bearing from the system's origin (`0x4919e9`).
+
 ## The three tables next to it
 
 `0x18b810`–`0x18bc38` is one uninterrupted run of 133 entries: five separate enums, adjacent by link
@@ -131,12 +137,24 @@ The mixed casing in the table is another sign the compare folds case: the zone r
 an `[Object] ring = zone, ini` builds a planet ring on. Its `size` is outer radius, inner radius and
 full height. `MESH` is never used.
 
+**What `size` means per shape**, from the zone's geometric slots (`common.dll` vtable `0x63a5064`).
+A `SPHERE` reads only its first value, the radius. An `ELLIPSOID` holds three radii along local X,
+Y and Z. A `BOX` holds full edge lengths. A `CYLINDER` is a radius and a full height about local Y.
+A `RING` is an outer radius, an inner radius and a full height, also about local Y. `rotate = x, y,
+z` in degrees goes through `EulerMatrix` (`0x63041a0`): Rz·Ry·Rx for column vectors, X applied
+first, and a point is `R·local + pos`; objects use the same convention. **`MESH` is read and then
+rejected.** `mesh =` loads a model handle, but the bounding-radius slot (`0x6339080`) logs `PCI -
+zone type not supported!`, the containment slot answers false, and the segment test falls back to a
+sphere of radius 0.
+
 Beware the key: `shape` is set 6,270 times overall and only 5,769 of those are zones. The balance
 belongs to other sections — asteroid and nebula exclusion shapes, lens-flare shapes — where the value
 is a model or effect nickname.
 
 Two more zone keys bear on the shapes. `edge_fraction` is clamped to [0, 1] and **defaults to 0**
-(`common.dll` `0x633789a`), so a zone without it has a hard edge. **`sort` is read by nothing** —
+(`common.dll` `0x633789a`), so a zone without it has a hard edge. The inside fraction (slot 0,
+`0x633abb0`) is 0 outside, 1 deep inside and `(1 − s) / edge_fraction` across the rim, where `s` is
+a per-shape scaled distance that is 1 on the surface (`0x633a660`). **`sort` is read by nothing** —
 5,754 of the 5,769 zones set it, and neither the zone reader (`0x6337520`–`0x6337e09`) nor any other
 binary takes it as a key.
 
@@ -178,6 +196,30 @@ exclusion bits together. What the corpus adds is the extent — see [Corpus](#zo
 | `0x800`    | `CRYSTAL_OBJECTS`        |            |                          |
 | `0x1000`   | `MINE_DANGER_OBJECTS`    |            |                          |
 
+## Visit flags
+
+`visit` is another bitfield written as a number. **Systems, objects, zones and factions share one
+visit map**, keyed by the nickname's id (a faction by its reputation group's), held by the client
+(`Freelancer.exe` `0x673320`), merged by OR on the server (`server.dll` `0x6e3f2e0`) and saved as
+`[Player] visit = id, flags`. The bits mean different things per kind.
+
+A `[system]`'s `visit` is read for two bits only, and nothing changes it after load: `0x01` puts the
+system on the map from the start, and `0x80` keeps visiting from revealing it — entering the system
+or docking in it never marks it (`0x4c4840`, `0x4c4910`, both skipping on `visit & 0x81`). The other
+bits are copied into the player's map and never tested.
+
+| Bit    | `[Object]`                                                                                                        | `[zone]`                                     |
+| ------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `0x01` | known: navmap icon, real name, its connection drawn; a sun or lane ring is forced to 1 (`common.dll` `0x62b7aec`) | drawn on the navmap                          |
+| `0x02` | set by landing and by `knowledgemap.ini`, never read                                                              | —                                            |
+| `0x04` | a base: commodity prices known (`0x46f7b4`, `0x475100`)                                                           | mineable (`0x49c957`)                        |
+| `0x08` | a base: equipment dealer known; a lootable solar: looted, on the server only                                      | infocard pickable on the navmap (`0x4a1b50`) |
+| `0x10` | a base: ship dealer known; any other solar: found only within 7 km, and looted once                               | —                                            |
+| `0x20` | —                                                                                                                 | always set by the reader, never read         |
+| `0x80` | never found by flying near (`0x51cc00`)                                                                           | the same                                     |
+
+**`knowledgemap.ini` ignores `0x80`**: it reveals ten retail `visit = 128` holes and four zones.
+
 ## Two smaller tables
 
 **Good category** (`0x1896c0`): `Commodity` 0, `Equipment` 1, `ShipHull` 2, `Ship` 3. Retail authors
@@ -187,6 +229,35 @@ them lowercase.
 `StartDealer` 5, `FrontDesk` 6, `StartShipDealer` 7, `StartEquipDealer` 8, `MoveRight` 9, `MoveLeft`
 10, `VirtualRoom` 11, `Repair` 12. 6 and 7 are out of table order — `StartShipDealer` precedes
 `FrontDesk` in memory.
+
+## Effect types
+
+`Freelancer.exe` `0x612a68`: 48 records of 0x28 bytes, `{name, priority, generic_priority, lod band,
+radius, exist-offscreen byte, update-offscreen byte, run_time, fps, pbubble[2]}`. The index is the
+value an `[Effect] effect_type` stores, and [`[EffectType]`](SECTIONS.md#effecttype) overwrites a
+record by exact name (`0x4fd500`).
+
+`EFT_NONE` 0, `EFT_EXPLOSION_SMALL` 1, `EFT_EXPLOSION_MEDIUM` 2, `EFT_EXPLOSION_LARGE` 3,
+`EFT_EXPLOSION_DEBRIS` 4, `EFT_EXPLOSION_SHIP` 5, `EFT_EXPLOSION_MISSILE` 6, `EFT_EXPLOSION_MINE` 7,
+`EFT_MUZZLE_FLASH` 8, `EFT_MUZZLE_LARGE_FLASH` 9, `EFT_MISSILE_DRIVE` 10, `EFT_WEAPON_PROJ` 11,
+`EFT_WEAPON_LARGE_PROJ` 12, `EFT_WEAPON_IMPACT` 13, `EFT_WEAPON_LARGE_IMPACT` 14,
+`EFT_WEAPON_COUNTER_MEASURE` 15, `EFT_WEAPON_MINE` 16, `EFT_DAMAGE_HULL` 17,
+`EFT_DAMAGE_LARGE_SHIELD` 18, `EFT_DAMAGE_SHIELD` 19, `EFT_DAMAGE_CRUISE` 20, `EFT_DAMAGE_SMOKE` 21,
+`EFT_DAMAGE_LARGE_SMOKE` 22, `EFT_DEBRIS_TRAIL` 23, `EFT_ENGINE_CONTRAIL` 24, `EFT_ENGINE_TRAIL` 25,
+`EFT_ENGINE_LARGE_TRAIL` 26, `EFT_ENGINE_FIRE` 27, `EFT_ENGINE_LARGE_FIRE` 28,
+`EFT_ENGINE_THRUSTER` 29, `EFT_EQUIP_CLOAK` 30, `EFT_EQUIP_LARGE_CLOAK` 31, `EFT_EQUIP_ATTACHED` 32,
+`EFT_EQUIP_ATTACHED_LARGE` 33, `EFT_EQUIP_ATTACHED_INSANELY_LARGE` 34, `EFT_MISC_DUST` 35,
+`EFT_MOTION_DUST` 36, `EFT_JUMP_EFFECTS` 37, `EFT_JUMP_GATE_EFFECTS` 38, `EFT_LANE_ACTIVE` 39,
+`EFT_LANE_TUBE` 40, `EFT_LANE_SHIP` 41, `EFT_LANE_SHIP_TRAVEL` 42, `EFT_CUSTOM_EFFECTS` 43,
+`EFT_CODE_PROJ_EFFECT` 44, `EFT_TRACTORBEAM` 45, `EFT_FLASHLIGHT` 46, and `EFT_NUMTYPES` 47, which
+an unknown name maps to.
+
+The index is the draw order: types draw in index order, newest first, with no depth sort, and 44–46
+are drawn by the executable after the Alchemy batch (`0x4f7480`). The beam, camera-fade, tractor and
+flashlight classes force their type whatever the INI says (`0x4f961a`). LOD bands (`0x6131e8`):
+`EFT_LOD_NONE` 0, `EFT_LOD_TRAIL` 1, `EFT_LOD_WEAPON` 2, `EFT_LOD_SMALL` 3, `EFT_LOD_MEDIUM` 4,
+`EFT_LOD_LARGE` 5, `EFT_LOD_SMALL_DISTANT` 6; [`[EffectLOD]`](SECTIONS.md#effectlod) `type` uses
+`lod_type_*` names in the same order.
 
 ## `content.dll` — names without values
 
@@ -231,20 +302,23 @@ About a hundred `Act_*` and `Cnd_*` names at `.rdata:1139cc` — the action and 
 `Cnd_TLEntered` and the rest — alongside `MissionState` with `COMPLETE`/`INACTIVE`/`ACTIVE`, and
 `NNObjective`, `TriggerSave`, `repeatable`.
 
-### Story and battle enums
+### Story and random-mission enums
 
 `content.dll`'s only three `{ name, int }` tables:
 
 - **Story rank** (`.data:12d5d0`, 42): `base_0_rank` 0, then `mission_01a_loaded`,
-  `mission_01a_accepted`, `mission_01b_*`, `freetime_01_02` … through `mission_end` 41.
+  `mission_01a_accepted`, `mission_01b_*`, `freetime_01_02` … through `mission_end` 41. An unknown
+  name keeps the previous value; the stage is saved as `[StoryInfo] MissionNum`, and `[NewsItem]
+  rank`, `rumor` windows and `rank_diff` are written in these names.
 - **Formation and solar roles** (`.data:12d720`, 8): `big_solar_formation` 0 …
   `loot_group_formation` 3; `big_solar` 0, `defensive_solar` 1, `killable_neutral` 2,
   `background_solar` 3.
-- **NPC battle state** (`.data:12d778`, 44): three enums — a mission-progress set
-  (`IN_SPACE_IN_SYSTEM`, `GLOBAL_SUCCESS`, `GLOBAL_FAIL_COMBAT_RANGE`, …), a target set (`BASE`,
+- **Random-mission vocabulary** (`.data:12d778`, 44): three enums of `VignetteParams.ini`. The
+  first 17 are the events a `comm_sequence` line fires on (`NONE` 0, `IN_SPACE_IN_SYSTEM` 1 …
+  `GLOBAL_FAIL_OTHER` 16); the next 12 are its speakers and recipients (`NONE` 0, `BASE` 1,
   `BIG_SOLAR`, `BIG_SHIP`, `DEFENSIVE_SHIP`, `FRIENDLY_SHIP`, `PLAYER`, `ALL_PLAYERS`,
-  `PLAYERS_IN_RANGE`, …), and a format-string parameter set (`FSTRING_PARAM_NONE`, `OFFER_GROUP`,
-  `REWARD_MONEY`, `FACTION_HIT`, `TARGET_SYSTEM`, …).
+  `PLAYERS_IN_RANGE` … `PLAYERS_OUT_OF_SYSTEM` 11); the last 15 are the tokens an offer, objective,
+  failure or reward text substitutes (`FSTRING_PARAM_NONE` 0, `OFFER_GROUP` 1 … `TARGET_SYSTEM` 14).
 
 ### The export table names the reader
 
@@ -279,7 +353,7 @@ the pointer. This gives a **lower bound**, and — unlike method 1 — it says w
 key.
 
 The retail `Freelancer.exe` cannot be read this way — see
-[The executable is SecuROM-wrapped](#the-executable-is-securom-wrapped).
+[The executable is SafeDisc-wrapped](#the-executable-is-safedisc-wrapped).
 
 ### Value shapes
 
@@ -303,8 +377,7 @@ it come from a loop the scan does not follow, so its arity runs to 7 in retail.
 
 A shape is per name, and a name is occasionally per section. The genuine cases are different fields
 wearing one name: `[CollisionConsts] damage` takes a name and an amount where `[Zone] damage` takes a
-number, `[Zone] faction` is a weight where `content.dll`'s is a name and a weight, and
-`[MsnSolar] visit` is a string where every `common.dll` reader treats `visit` as an int.
+number, and `[MsnSolar] visit` is a string where every `common.dll` reader treats `visit` as an int.
 
 Full table in [SECTIONS.md](SECTIONS.md#declared-value-shapes).
 
@@ -352,9 +425,9 @@ Address-order segmentation needs function boundaries, and the export table is th
 them — fine in `common.dll`, useless in `content.dll`. **Every address a direct `call` targets is a
 function start**, and collecting those works in any binary regardless of what it exports.
 
-For 26 of the 35 matched-but-absent sections, "what are its properties?" has no answer, in two ways.
-Ten are **obsolete** — the header is matched only to emit `*** WARNING: [Cloud] is obsolete`
-(`RoomData.cpp:2046`) and then skipped. Fifteen are read **positionally** — their handler calls the
+For 24 of the 35 matched-but-absent sections, "what are its properties?" has no answer, in two ways.
+Twelve are **obsolete** — the header is matched only to emit `*** WARNING: [Cloud] is obsolete`
+(`RoomData.cpp:2046`) and then skipped. Twelve are read **positionally** — their handler calls the
 indexed `get_value_int(i)` / `get_value_string(i)` accessors and never `is_value`, eleven of them
 sharing one function in `content.dll` that makes 50 indexed calls and zero name comparisons.
 `[MsnShipSave]` accepts a sequence, not a set of named keys.
@@ -376,7 +449,7 @@ properties from the block after it.
 No mechanical rule separates the two — `Erelief_time` is a data byte plus a key, `spacedust` is a
 word containing `pacedust`. The 23 ambiguous names were classified by eye; 14 are keys, 9 are not.
 
-### The executable is SecuROM-wrapped
+### The executable is SafeDisc-wrapped
 
 The retail `Freelancer.exe`'s `.text` has entropy 7.98 and contains zero `push ebp; mov ebp, esp`
 prologues, against 6.46 and normal prologues in the DLLs, and it carries two extra sections named
@@ -498,6 +571,9 @@ pipeline emitted that the shipped engine never looks at.
 | `strength`                   | 86        | `[Explosion]`                              |
 | `fog_enabled`                | 59        | `[Fog]`                                    |
 
+`[EncounterParameters] filename` is the one exception: its value is read by position
+(`content.dll` `0x7064ae8`) although the name is never matched.
+
 A `[zone]` carries both `faction_weight` (a weighted faction list) and `faction` (per-encounter
 weights). Only the second is read. Likewise the engine matches `difficulty` and not
 `difficulty_level` — though not in a `[zone]`: no zone reader in any binary takes `difficulty`, so its
@@ -536,9 +612,12 @@ the declared shape and the recorded type are known:
 | Compatible under `INI_Reader`'s coercion | 176       | 36% |
 | **Incompatible**                         | **4**     | 1%  |
 
-Only four positions resist: `[Player] rank` and `location` are declared `int` and written as strings,
-and `ambient[1]` and `permutation[0]` are declared string and written as integers. Recorded, not
-explained.
+Only four positions resist, and two of them are one name read in two sections. `rank` and
+`location` are declared `int` by the save's `[Player]` reader (`server.dll` `0x6e3740a`,
+`0x6e373e2`), a level and a room id, while the strings recorded are `[NewsItem] rank`'s two
+story-stage names and `[CharacterEncounter] Location`'s base and room, which `content.dll` reads
+through a register. `ambient[1]` and `permutation[0]` are declared string and written as integers;
+those two are recorded, not explained.
 
 Arity agrees too — the highest index the code touches fits inside the observed value count for 401
 names and exceeds it for 7, all residual block overrun.
@@ -563,8 +642,8 @@ Function boundaries from call targets, not exports, lift `content.dll`'s address
 from 31% to 94%; within-function address order corroborates at 94% and the exported block-reader
 names at 88%. The archetype class chain is exact.
 
-Of the 35 matched-but-absent sections: 10 obsolete (9 in `RoomData.cpp`), 15 positional, 11 of those
-sharing one handler.
+Of the 35 matched-but-absent sections: 12 obsolete (9 in `RoomData.cpp`, 2 in `Cockpit.cpp`), 12
+positional, 11 of those sharing one handler.
 
 ## TODO
 
@@ -574,12 +653,11 @@ Pending observation in the running game.
   4 with nothing naming the low values, and no string reaches them. *Experiment*: find a code path
   that produces one — likelier by watching a debug build's `unknown OBJECT_TYPE` path than by editing
   data.
-- **Whether the `MESH` zone shape works.** Registered, never used by retail. *Experiment*: author a
-  zone with it and see whether it bounds anything. (`RING` is closed: retail uses it eight times,
-  for planet rings.)
 - **Whether `MOON`, `BLACKHOLE` and `ASTEROID` do anything as a `[Solar] type`.** Named, and no
   archetype sets them. `ASTEROID`'s bit sits far from the other solar bits, which suggests it is
-  assigned to objects the engine creates. Not evidence.
+  assigned to objects the engine creates. Not evidence. `MOON` is tested in one place: the
+  per-object light setup (`Freelancer.exe` `0x539b6c`) masks the object's type with `0x807`
+  (`MOON`, `PLANET`, `SUN`, `JUMP_HOLE`) and gives none of them runtime effect lights.
 - **Which of `attack_subtarget_order` and `attack_preference` takes which values.** Emission order
   puts one run of ten names beside both. *Experiment*: set an implausible value on each and watch
   which the engine rejects.
@@ -592,6 +670,8 @@ Pending observation in the running game.
   A reading problem rather than an in-game one. Partly answered: `[LightSource]`'s reader is
   `get_name_ptr` plus `stricmp`, and the asteroid field loader calls `is_header` and `is_value`
   through a register; [SECTIONS.md](SECTIONS.md#legend) carries the sections disassembly has traced.
+  `[PerfOptions]` is a third: `get_name_ptr` plus a case-sensitive compare (`Freelancer.exe`
+  `0x5b3b00`).
 
 ---
 
