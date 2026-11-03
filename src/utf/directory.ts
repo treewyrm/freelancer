@@ -251,7 +251,7 @@ export default class Directory {
       const accessTime = fromDOSTimestamp(view.readUint32())
       const modifyTime = fromDOSTimestamp(view.readUint32())
 
-      if (dataSizeUsed > dataSizeAllocated) throw new RangeError('')
+      if (dataSizeUsed > dataSizeAllocated) throw new RangeError('Used data size exceeds allocated')
       if (dataSizeUncompressed > dataSizeUsed) throw new Error('Compression unsupported')
 
       names.offset = nameOffset
@@ -266,6 +266,13 @@ export default class Directory {
       if (fileAttributes & FILE_ATTRIBUTE && parent) {
         const start = dataOffset + childOffset
         const end = start + dataSizeUsed
+
+        // Sliced from the backing buffer, so a view over part of one would otherwise read past its end.
+        if (end > view.byteLength)
+          throw new RangeError(
+            `Data of ${name} extends beyond the input: ${end} > ${view.byteLength}`,
+          )
+
         const buffer = view.buffer.slice(view.byteOffset + start, view.byteOffset + end)
 
         parent.children.push(new File(name, new Uint8Array(buffer)))

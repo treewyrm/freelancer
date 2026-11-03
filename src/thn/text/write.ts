@@ -34,7 +34,8 @@ const quote = (value: string): string => {
     else if (character === '\n') result += '\\n'
     else if (character === '\r') result += '\\r'
     else if (character === '\t') result += '\\t'
-    else if (code < 0x20 || code === 0x7f) result += `\\${code}`
+    // Three digits always: the reader takes up to three, so `\1` before a `2` would read as `\12`.
+    else if (code < 0x20 || code === 0x7f) result += `\\${String(code).padStart(3, '0')}`
     else result += character
   }
 

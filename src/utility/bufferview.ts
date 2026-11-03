@@ -383,8 +383,10 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
    * @param offset
    * @param target
    * @returns
+   * @throws {RangeError} The range runs outside this view. The backing buffer may be larger.
    */
   getBuffer(offset: number, target: ArrayBufferView): this {
+    this.#assertRange(offset, target.byteLength)
     const view = new Uint8Array(this.buffer, this.byteOffset + offset, target.byteLength)
     new Uint8Array(target.buffer, target.byteOffset, target.byteLength).set(view)
     return this
@@ -395,11 +397,19 @@ export default class BufferView<T extends ArrayBufferLike = ArrayBufferLike> ext
    * @param offset
    * @param source
    * @returns
+   * @throws {RangeError} The range runs outside this view. The backing buffer may be larger.
    */
   setBuffer(offset: number, source: ArrayBufferView): this {
+    this.#assertRange(offset, source.byteLength)
     const view = new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
     new Uint8Array(this.buffer, this.byteOffset + offset, source.byteLength).set(view)
     return this
+  }
+
+  /** Bounds are this view's, not its buffer's: the typed array constructor only checks the latter. */
+  #assertRange(offset: number, length: number): void {
+    if (!Number.isInteger(offset) || offset < 0 || offset + length > this.byteLength)
+      throw new RangeError(`Range ${offset}+${length} is outside the view of ${this.byteLength} bytes`)
   }
 
   /**

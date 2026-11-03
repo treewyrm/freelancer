@@ -168,8 +168,14 @@ describe('write', () => {
   it('escapes what Lua needs escaped', () => {
     assert.equal(
       write([{ name: 'x', value: value.string('a"b\\c\nd\0e') }]),
-      'x = "a\\"b\\\\c\\nd\\0e"\n',
+      'x = "a\\"b\\\\c\\nd\\000e"\n',
     )
+  })
+
+  it('pads numeric escapes so a following digit is not absorbed', () => {
+    const globals: Globals = [{ name: 'x', value: value.string('\x01' + '23\x7f9') }]
+    assert.equal(write(globals), 'x = "\\00123\\1279"\n')
+    assert.deepEqual(read(write(globals)), globals)
   })
 })
 

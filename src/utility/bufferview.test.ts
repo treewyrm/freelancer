@@ -315,6 +315,20 @@ describe('getBuffer / setBuffer', () => {
     view.getBuffer(0, new Uint8Array(1))
     assert.equal(view.offset, 2)
   })
+
+  it('bounds are the view\'s, not the backing buffer\'s', () => {
+    const backing = new Uint8Array([10, 20, 30, 40])
+    const view = new BufferView(backing.buffer, 1, 1)
+    assert.throws(() => view.getBuffer(0, new Uint8Array(3)), RangeError)
+    assert.throws(() => view.setBuffer(0, new Uint8Array([1, 2, 3])), RangeError)
+    assert.throws(() => view.getBuffer(1, new Uint8Array(1)), RangeError)
+    assert.throws(() => view.getBuffer(-1, new Uint8Array(1)), RangeError)
+    assert.deepEqual(Array.from(backing), [10, 20, 30, 40])
+
+    // The whole view is still fair game.
+    view.setBuffer(0, new Uint8Array([99]))
+    assert.deepEqual(Array.from(backing), [10, 99, 30, 40])
+  })
 })
 
 // ---------------------------------------------------------------------------

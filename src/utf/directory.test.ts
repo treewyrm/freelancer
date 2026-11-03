@@ -335,6 +335,22 @@ describe('Directory.read error handling', () => {
     view.writeUint32(0x00000000) // wrong version
     assert.throws(() => Directory.read(new Uint8Array(view.buffer)), RangeError)
   })
+
+  it('rejects a payload that runs past the input, whether or not the buffer is larger', () => {
+    const root = new Directory('\\')
+    root.children.push(new File('a', new Uint8Array([1, 2, 3])))
+    const bytes = root.write()
+
+    // The file data is last, so cutting the tail truncates it.
+    const padded = new Uint8Array(bytes.length + 8)
+    padded.set(bytes)
+    assert.throws(() => Directory.read(bytes.slice(0, -2)), RangeError)
+    assert.throws(() => Directory.read(padded.subarray(0, bytes.length - 2)), RangeError)
+    assert.deepEqual(
+      [...new Uint8Array(Directory.read(padded.subarray(0, bytes.length)).files[0]!.data.buffer)],
+      [1, 2, 3],
+    )
+  })
 })
 
 // ===========================================================================
